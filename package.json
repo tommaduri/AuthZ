@@ -1,0 +1,56 @@
+{
+  "name": "authz-engine",
+  "version": "0.1.0",
+  "description": "Aegis - Enterprise Policy-as-Code Authorization Engine",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@8.15.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
+    "test:coverage": "vitest run --coverage",
+    "lint": "turbo run lint",
+    "lint:fix": "eslint packages/*/src --ext .ts --fix",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "dev": "turbo run dev --filter=@authz-engine/server",
+    "server:start": "pnpm --filter @authz-engine/server start",
+    "server:dev": "pnpm --filter @authz-engine/server dev",
+    "policies:validate": "node scripts/validate-policies.js",
+    "policies:test": "node scripts/test-policies.js",
+    "format": "prettier --write \"packages/*/src/**/*.ts\"",
+    "format:check": "prettier --check \"packages/*/src/**/*.ts\"",
+    "prepare": "husky install || true",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.1",
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.54.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.1.0",
+    "turbo": "^1.11.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  }
+}

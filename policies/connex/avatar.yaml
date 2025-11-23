@@ -1,0 +1,101 @@
+# Avatar Connex - Avatar Resource Policy
+#
+# This policy governs access to avatar resources (digital twins).
+# Avatars are owned by influencers and can be viewed by fans.
+
+apiVersion: authz.engine/v1
+kind: ResourcePolicy
+metadata:
+  name: avatar-policy
+  description: Authorization policy for avatar resources
+  version: "1.0.0"
+  labels:
+    service: avatar-management-service
+    domain: content
+
+spec:
+  resource: avatar
+
+  rules:
+    # Anyone can view public avatars
+    - name: view-public-avatars
+      actions: [view, list]
+      effect: allow
+      roles: [user, fan, influencer, admin]
+      condition:
+        expression: resource.status == "active"
+
+    # Only the owner (influencer) can edit their avatar
+    - name: owner-edit
+      actions: [edit, update]
+      effect: allow
+      roles: [influencer]
+      condition:
+        expression: resource.ownerId == principal.id
+
+    # Only the owner can delete their avatar
+    - name: owner-delete
+      actions: [delete]
+      effect: allow
+      roles: [influencer]
+      condition:
+        expression: resource.ownerId == principal.id
+
+    # Only the owner can start/stop streaming
+    - name: owner-streaming-control
+      actions: [start_stream, stop_stream, configure_stream]
+      effect: allow
+      roles: [influencer]
+      condition:
+        expression: resource.ownerId == principal.id
+
+    # Admins can manage any avatar
+    - name: admin-manage
+      actions: ["*"]
+      effect: allow
+      roles: [admin, super_admin]
+
+    # Deny access to suspended avatars (except admins)
+    - name: deny-suspended
+      actions: [view, interact, stream]
+      effect: deny
+      condition:
+        expression: resource.status == "suspended" && !("admin" in principal.roles)
+
+    # Users can view public avatars (visibility-based)
+    - name: view-public-visibility
+      actions: [view]
+      effect: allow
+      roles: [user, fan, influencer]
+      condition:
+        expression: resource.visibility == "public"
+
+    # Users can view their own private avatars
+    - name: view-own-private-avatar
+      actions: [view]
+      effect: allow
+      roles: [user, fan, influencer]
+      condition:
+        expression: resource.visibility == "private" && resource.ownerId == principal.id
+
+    # Admin moderation actions
+    - name: admin-moderate
+      actions: [moderate, flag, unflag, hide, unhide, review]
+      effect: allow
+      roles: [admin, super_admin]
+
+    # Avatar publishing controls
+    - name: owner-publish
+      actions: [publish, unpublish]
+      effect: allow
+      roles: [influencer]
+      condition:
+        expression: resource.ownerId == principal.id
+
+    # Avatar transfer (admin only with permission)
+    - name: admin-transfer
+      actions: [transfer]
+      effect: allow
+      roles: [admin, super_admin]
+      condition:
+        expression: principal.attr.canTransferAssets == true

@@ -1,0 +1,48 @@
+{
+  "name": "@authz-engine/swarm",
+  "version": "0.1.0",
+  "description": "Swarm orchestration layer for AuthZ Engine - topology management, load balancing, agent pools",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "test": "vitest run",
+    "test:unit": "vitest run --dir tests",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@authz-engine/core": "workspace:*",
+    "@authz-engine/agents": "workspace:*",
+    "eventemitter3": "^5.0.1",
+    "pino": "^8.16.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "@authz-engine/core": "workspace:*",
+    "@authz-engine/agents": "workspace:*"
+  },
+  "keywords": ["authorization", "swarm", "topology", "load-balancer", "agent-pool", "orchestration"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/authz-engine.git",
+    "directory": "packages/swarm"
+  }
+}

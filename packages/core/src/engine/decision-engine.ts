@@ -1,0 +1,250 @@
+import { CelEvaluator, EvaluationContext } from '../cel/evaluator';
+import type {
+  CheckRequest,
+  CheckResponse,
+  ActionResult,
+  Principal,
+  Resource,
+  Effect,
+} from '../types';
+import type { ValidatedResourcePolicy, ValidatedDerivedRolesPolicy } from '../policy/schema';
+
+/**
+ * Decision Engine
+ *
+ * The core authorization decision engine that evaluates policies
+ * against requests and produces authorization decisions.
+ */
+export class DecisionEngine {
+  private celEvaluator: CelEvaluator;
+  private resourcePolicies: Map<string, ValidatedResourcePolicy[]>;
+  private derivedRolesPolicies: ValidatedDerivedRolesPolicy[];
+
+  constructor() {
+    this.celEvaluator = new CelEvaluator();
+    this.resourcePolicies = new Map();
+    this.derivedRolesPolicies = [];
+  }
+
+  /**
+   * Load resource policies
+   */
+  loadResourcePolicies(policies: ValidatedResourcePolicy[]): void {
+    for (const policy of policies) {
+      const resource = policy.spec.resource;
+      const existing = this.resourcePolicies.get(resource) || [];
+      existing.push(policy);
+      this.resourcePolicies.set(resource, existing);
+    }
+  }
+
+  /**
+   * Load derived roles policies
+   */
+  loadDerivedRolesPolicies(policies: ValidatedDerivedRolesPolicy[]): void {
+    this.derivedRolesPolicies.push(...policies);
+  }
+
+  /**
+   * Clear all loaded policies
+   */
+  clearPolicies(): void {
+    this.resourcePolicies.clear();
+    this.derivedRolesPolicies = [];
+  }
+
+  /**
+   * Check authorization for a request
+   */
+  check(request: CheckRequest): CheckResponse {
+    const startTime = Date.now();
+    const requestId = request.requestId || `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    const results: Record<string, ActionResult> = {};
+    const policiesEvaluated: string[] = [];
+
+    // Compute derived roles for this principal
+    const derivedRoles = this.computeDerivedRoles(request.principal, request.resource, request.auxData);
+
+    // Get policies for this resource
+    const policies = this.resourcePolicies.get(request.resource.kind) || [];
+
+    // Evaluate each action
+    for (const action of request.actions) {
+      const result = this.evaluateAction(
+        action,
+        request.principal,
+        request.resource,
+        derivedRoles,
+        policies,
+        request.auxData,
+      );
+
+      results[action] = result;
+
+      if (result.policy && !policiesEvaluated.includes(result.policy)) {
+        policiesEvaluated.push(result.policy);
+      }
+    }
+
+    return {
+      requestId,
+      results,
+      meta: {
+        evaluationDurationMs: Date.now() - startTime,
+        policiesEvaluated,
+      },
+    };
+  }
+
+  /**
+   * Compute derived roles for a principal
+   */
+  private computeDerivedRoles(
+    principal: Principal,
+    resource: Resource,
+    auxData?: Record<string, unknown>,
+  ): string[] {
+    const derivedRoles: string[] = [];
+
+    for (const policy of this.derivedRolesPolicies) {
+      for (const definition of policy.spec.definitions) {
+        // Check if principal has required parent roles
+        const hasParentRole = definition.parentRoles.length === 0 ||
+          definition.parentRoles.some(role => principal.roles.includes(role));
+
+        if (!hasParentRole) {
+          continue;
+        }
+
+        // Evaluate condition
+        const context: EvaluationContext = {
+          principal,
+          resource,
+          auxData,
+        };
+
+        const matches = this.celEvaluator.evaluateBoolean(
+          definition.condition.expression,
+          context,
+        );
+
+        if (matches) {
+          derivedRoles.push(definition.name);
+        }
+      }
+    }
+
+    return derivedRoles;
+  }
+
+  /**
+   * Evaluate a single action against policies
+   */
+  private evaluateAction(
+    action: string,
+    principal: Principal,
+    resource: Resource,
+    derivedRoles: string[],
+    policies: ValidatedResourcePolicy[],
+    auxData?: Record<string, unknown>,
+  ): ActionResult {
+    const allRoles = [...principal.roles, ...derivedRoles];
+
+    // Default deny if no policies match
+    let finalEffect: Effect = 'deny';
+    let matchedPolicy = 'default-deny';
+    let matchedRule: string | undefined;
+
+    for (const policy of policies) {
+      for (const rule of policy.spec.rules) {
+        // Check if action matches
+        if (!rule.actions.includes(action) && !rule.actions.includes('*')) {
+          continue;
+        }
+
+        // Check if roles match (if specified)
+        if (rule.roles && rule.roles.length > 0) {
+          const hasRole = rule.roles.some(role => allRoles.includes(role));
+          if (!hasRole) {
+            continue;
+          }
+        }
+
+        // Check if derived roles match (if specified)
+        if (rule.derivedRoles && rule.derivedRoles.length > 0) {
+          const hasDerivedRole = rule.derivedRoles.some(role => derivedRoles.includes(role));
+          if (!hasDerivedRole) {
+            continue;
+          }
+        }
+
+        // Evaluate condition (if present)
+        if (rule.condition) {
+          const context: EvaluationContext = {
+            principal,
+            resource,
+            auxData,
+          };
+
+          const conditionMet = this.celEvaluator.evaluateBoolean(
+            rule.condition.expression,
+            context,
+          );
+
+          if (!conditionMet) {
+            continue;
+          }
+        }
+
+        // Rule matched!
+        // Apply effect based on rule order and effect type
+        // DENY takes precedence over ALLOW (deny-overrides combining algorithm)
+        if (rule.effect === 'deny') {
+          return {
+            effect: 'deny',
+            policy: policy.metadata.name,
+            meta: {
+              matchedRule: rule.name,
+              effectiveDerivedRoles: derivedRoles,
+            },
+          };
+        }
+
+        // Record ALLOW but continue checking for DENY rules
+        if (rule.effect === 'allow') {
+          finalEffect = 'allow';
+          matchedPolicy = policy.metadata.name;
+          matchedRule = rule.name;
+        }
+      }
+    }
+
+    return {
+      effect: finalEffect,
+      policy: matchedPolicy,
+      meta: {
+        matchedRule,
+        effectiveDerivedRoles: derivedRoles,
+      },
+    };
+  }
+
+  /**
+   * Get statistics about loaded policies
+   */
+  getStats(): {
+    resourcePolicies: number;
+    derivedRolesPolicies: number;
+    resources: string[];
+  } {
+    return {
+      resourcePolicies: Array.from(this.resourcePolicies.values()).flat().length,
+      derivedRolesPolicies: this.derivedRolesPolicies.length,
+      resources: Array.from(this.resourcePolicies.keys()),
+    };
+  }
+}
+
+// Default engine instance
+export const decisionEngine = new DecisionEngine();

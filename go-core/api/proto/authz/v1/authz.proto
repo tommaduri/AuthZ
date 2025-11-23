@@ -1,0 +1,217 @@
+syntax = "proto3";
+
+package authz.v1;
+
+option go_package = "github.com/authz-engine/go-core/api/proto/authz/v1;authzv1";
+
+import "google/protobuf/struct.proto";
+
+// AuthzService provides high-performance authorization checking
+service AuthzService {
+  // Check performs a single authorization check
+  rpc Check(CheckRequest) returns (CheckResponse);
+
+  // CheckBatch performs multiple authorization checks in parallel
+  rpc CheckBatch(CheckBatchRequest) returns (CheckBatchResponse);
+
+  // CheckStream provides bidirectional streaming for high-throughput scenarios
+  rpc CheckStream(stream CheckRequest) returns (stream CheckResponse);
+
+  // LoadPolicies loads policies from a source
+  rpc LoadPolicies(LoadPoliciesRequest) returns (LoadPoliciesResponse);
+
+  // ReloadPolicies triggers a policy reload
+  rpc ReloadPolicies(ReloadPoliciesRequest) returns (ReloadPoliciesResponse);
+}
+
+// CheckRequest represents an authorization check request
+message CheckRequest {
+  // Unique request identifier
+  string request_id = 1;
+
+  // The principal (user/service) requesting access
+  Principal principal = 2;
+
+  // The resource being accessed
+  Resource resource = 3;
+
+  // Actions being requested (e.g., "read", "write", "delete")
+  repeated string actions = 4;
+
+  // Additional context for policy evaluation
+  google.protobuf.Struct context = 5;
+
+  // Include detailed metadata in response
+  bool include_metadata = 6;
+}
+
+// Principal represents the entity requesting access
+message Principal {
+  // Unique identifier (e.g., user ID, service account)
+  string id = 1;
+
+  // Roles assigned to the principal
+  repeated string roles = 2;
+
+  // Additional attributes for ABAC
+  google.protobuf.Struct attributes = 3;
+}
+
+// Resource represents the resource being accessed
+message Resource {
+  // Resource type/kind (e.g., "document", "avatar", "payout")
+  string kind = 1;
+
+  // Unique resource identifier
+  string id = 2;
+
+  // Resource attributes for ABAC
+  google.protobuf.Struct attributes = 3;
+}
+
+// CheckResponse contains the authorization decision
+message CheckResponse {
+  // Echoed request ID
+  string request_id = 1;
+
+  // Results per action
+  map<string, ActionResult> results = 2;
+
+  // Evaluation metadata (if requested)
+  ResponseMetadata metadata = 3;
+}
+
+// ActionResult contains the decision for a single action
+message ActionResult {
+  // The authorization effect
+  Effect effect = 1;
+
+  // Name of the policy that matched
+  string policy = 2;
+
+  // Name of the rule within the policy
+  string rule = 3;
+
+  // Whether a matching rule was found
+  bool matched = 4;
+
+  // Additional metadata about the decision
+  map<string, string> meta = 5;
+}
+
+// Effect represents the authorization decision
+enum Effect {
+  EFFECT_UNSPECIFIED = 0;
+  EFFECT_ALLOW = 1;
+  EFFECT_DENY = 2;
+}
+
+// ResponseMetadata contains evaluation details
+message ResponseMetadata {
+  // Time taken to evaluate (microseconds)
+  double evaluation_duration_us = 1;
+
+  // Number of policies evaluated
+  int32 policies_evaluated = 2;
+
+  // Names of policies that matched
+  repeated string matched_policies = 3;
+
+  // Cache hit or miss
+  bool cache_hit = 4;
+}
+
+// CheckBatchRequest contains multiple check requests
+message CheckBatchRequest {
+  repeated CheckRequest requests = 1;
+}
+
+// CheckBatchResponse contains multiple check responses
+message CheckBatchResponse {
+  repeated CheckResponse responses = 1;
+
+  // Total batch processing time (microseconds)
+  double total_duration_us = 2;
+}
+
+// LoadPoliciesRequest for loading policies
+message LoadPoliciesRequest {
+  // Policy source (file path, URL, or inline)
+  string source = 1;
+
+  // Source type
+  SourceType source_type = 2;
+
+  // Inline policy content (if source_type is INLINE)
+  repeated Policy policies = 3;
+}
+
+enum SourceType {
+  SOURCE_TYPE_UNSPECIFIED = 0;
+  SOURCE_TYPE_FILE = 1;
+  SOURCE_TYPE_URL = 2;
+  SOURCE_TYPE_INLINE = 3;
+}
+
+// Policy represents an authorization policy
+message Policy {
+  // API version
+  string api_version = 1;
+
+  // Policy name
+  string name = 2;
+
+  // Resource kind this policy applies to
+  string resource_kind = 3;
+
+  // Policy rules
+  repeated Rule rules = 4;
+}
+
+// Rule represents a single authorization rule
+message Rule {
+  // Rule name
+  string name = 1;
+
+  // Actions this rule applies to
+  repeated string actions = 2;
+
+  // Effect if rule matches
+  Effect effect = 3;
+
+  // CEL condition (optional)
+  string condition = 4;
+
+  // Roles that can match this rule
+  repeated string roles = 5;
+
+  // Derived roles references
+  repeated string derived_roles = 6;
+}
+
+// LoadPoliciesResponse
+message LoadPoliciesResponse {
+  // Number of policies loaded
+  int32 policies_loaded = 1;
+
+  // Any validation errors
+  repeated string errors = 2;
+}
+
+// ReloadPoliciesRequest triggers policy reload
+message ReloadPoliciesRequest {
+  // Force reload even if no changes detected
+  bool force = 1;
+}
+
+// ReloadPoliciesResponse
+message ReloadPoliciesResponse {
+  // Whether reload was successful
+  bool success = 1;
+
+  // Number of policies after reload
+  int32 policy_count = 2;
+
+  // Reload duration (milliseconds)
+  double reload_duration_ms = 3;
+}

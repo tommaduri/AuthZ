@@ -1,0 +1,133 @@
+# Content Resource Policy for Avatar Connex
+# Manages authorization for content created by influencers
+apiVersion: authz.engine/v1
+kind: ResourcePolicy
+metadata:
+  name: content-policy
+  description: Authorization rules for content resources in Avatar Connex
+spec:
+  resource: content
+  version: "1.0"
+  importDerivedRoles:
+    - connex-derived-roles
+  rules:
+    # View public content - anyone can view public content
+    - name: view-public-content
+      description: Allow anyone to view public content
+      actions: [view, list]
+      effect: allow
+      roles: [user, subscriber, influencer, admin]
+      condition:
+        expression: "resource.visibility == 'public' && resource.status == 'published'"
+
+    # View premium content - only active subscribers
+    - name: view-premium-content
+      description: Allow active subscribers to view premium content
+      actions: [view]
+      effect: allow
+      derivedRoles: [active_subscriber]
+      condition:
+        expression: "resource.contentType == 'premium' && resource.status == 'published'"
+
+    # View exclusive content - premium subscribers only
+    - name: view-exclusive-content
+      description: Allow premium subscribers to view exclusive content
+      actions: [view]
+      effect: allow
+      derivedRoles: [premium_subscriber]
+      condition:
+        expression: "resource.contentType == 'exclusive' && resource.status == 'published'"
+
+    # Content creator viewing own content (including drafts)
+    - name: view-own-content
+      description: Allow content creators to view their own content including drafts
+      actions: [view, list]
+      effect: allow
+      derivedRoles: [content_creator]
+
+    # Create content - influencers only
+    - name: create-content
+      description: Allow influencers to create content
+      actions: [create]
+      effect: allow
+      roles: [influencer]
+      condition:
+        expression: "principal.attr.accountStatus == 'active' && principal.attr.contentCreationEnabled == true"
+
+    # Edit own content - content creator only
+    - name: edit-own-content
+      description: Allow content creators to edit their own content
+      actions: [edit, update]
+      effect: allow
+      derivedRoles: [content_creator]
+      condition:
+        expression: "resource.status != 'archived'"
+
+    # Delete own content - content creator only
+    - name: delete-own-content
+      description: Allow content creators to delete their own content
+      actions: [delete]
+      effect: allow
+      derivedRoles: [content_creator]
+
+    # Publish content - content creator can publish
+    - name: publish-own-content
+      description: Allow content creators to publish their content
+      actions: [publish]
+      effect: allow
+      derivedRoles: [content_creator]
+      condition:
+        expression: "resource.status == 'draft' && resource.moderationStatus != 'flagged'"
+
+    # Unpublish content - content creator can unpublish
+    - name: unpublish-own-content
+      description: Allow content creators to unpublish their content
+      actions: [unpublish]
+      effect: allow
+      derivedRoles: [content_creator]
+      condition:
+        expression: "resource.status == 'published'"
+
+    # Admin view all content
+    - name: admin-view-all-content
+      description: Allow admins to view all content for moderation
+      actions: [view, list]
+      effect: allow
+      roles: [admin]
+
+    # Admin moderate content
+    - name: admin-moderate-content
+      description: Allow admins to moderate any content
+      actions: [moderate, flag, unflag, hide, unhide, review, approve, reject]
+      effect: allow
+      roles: [admin]
+
+    # Admin delete content
+    - name: admin-delete-content
+      description: Allow admins to delete content that violates policies
+      actions: [delete]
+      effect: allow
+      roles: [admin]
+      condition:
+        expression: "resource.moderationStatus == 'flagged' || principal.attr.canDeleteAnyContent == true"
+
+    # Content scheduling - creator can schedule
+    - name: schedule-own-content
+      description: Allow content creators to schedule content publication
+      actions: [schedule, unschedule]
+      effect: allow
+      derivedRoles: [content_creator]
+
+    # Content analytics - creator can view their own analytics
+    - name: view-own-content-analytics
+      description: Allow content creators to view analytics for their content
+      actions: [view_analytics]
+      effect: allow
+      derivedRoles: [content_creator]
+
+    # Admin analytics - admins can view all analytics
+    - name: admin-view-all-analytics
+      description: Allow admins to view analytics for all content
+      actions: [view_analytics, export_analytics]
+      effect: allow
+      roles: [admin]

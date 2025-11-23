@@ -1,0 +1,44 @@
+{
+  "name": "@authz-engine/memory",
+  "version": "0.1.0",
+  "description": "Distributed memory system for AuthZ Engine - Vector store, Cache, Event store, CRDT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "test": "vitest run",
+    "test:unit": "vitest run --dir tests",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@authz-engine/core": "workspace:*",
+    "eventemitter3": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "@authz-engine/core": "workspace:*"
+  },
+  "keywords": ["authorization", "memory", "vector-store", "crdt", "event-sourcing", "cache"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/authz-engine.git",
+    "directory": "packages/memory"
+  }
+}

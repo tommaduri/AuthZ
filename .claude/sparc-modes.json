@@ -1,0 +1,104 @@
+{
+  "modes": {
+    "spec-pseudocode": {
+      "name": "Specification & Pseudocode",
+      "description": "Requirements analysis and algorithm design",
+      "phases": ["specification", "pseudocode"],
+      "agents": ["researcher", "planner"]
+    },
+    "architect": {
+      "name": "Architecture Design",
+      "description": "System architecture and component design",
+      "phases": ["architecture"],
+      "agents": ["system-architect", "code-analyzer"]
+    },
+    "dev": {
+      "name": "Development Mode",
+      "description": "Full TDD development cycle",
+      "phases": ["specification", "pseudocode", "architecture", "refinement", "completion"],
+      "agents": ["coder", "tester", "reviewer"]
+    },
+    "tdd": {
+      "name": "Test-Driven Development",
+      "description": "Red-green-refactor TDD cycle",
+      "phases": ["refinement"],
+      "agents": ["tester", "coder"]
+    },
+    "api": {
+      "name": "API Development",
+      "description": "REST/GraphQL API implementation",
+      "phases": ["specification", "architecture", "completion"],
+      "agents": ["backend-dev", "api-docs", "tester"]
+    },
+    "ui": {
+      "name": "UI Development",
+      "description": "Frontend/UI component development",
+      "phases": ["specification", "architecture", "completion"],
+      "agents": ["coder", "reviewer"]
+    },
+    "test": {
+      "name": "Testing Mode",
+      "description": "Comprehensive test development",
+      "phases": ["refinement"],
+      "agents": ["tester", "reviewer"]
+    },
+    "refactor": {
+      "name": "Refactoring Mode",
+      "description": "Code refactoring and optimization",
+      "phases": ["refinement", "completion"],
+      "agents": ["code-analyzer", "coder", "reviewer"]
+    },
+    "review": {
+      "name": "Code Review",
+      "description": "Code review and quality assessment",
+      "phases": ["completion"],
+      "agents": ["reviewer", "code-analyzer"]
+    },
+    "docs": {
+      "name": "Documentation",
+      "description": "API and technical documentation",
+      "phases": ["completion"],
+      "agents": ["api-docs", "researcher"]
+    },
+    "security": {
+      "name": "Security Analysis",
+      "description": "Security review and hardening",
+      "phases": ["refinement", "completion"],
+      "agents": ["reviewer", "code-analyzer"]
+    },
+    "performance": {
+      "name": "Performance Analysis",
+      "description": "Performance optimization and benchmarking",
+      "phases": ["refinement"],
+      "agents": ["perf-analyzer", "code-analyzer"]
+    },
+    "integration": {
+      "name": "Integration Mode",
+      "description": "System integration and E2E testing",
+      "phases": ["completion"],
+      "agents": ["tester", "coder", "reviewer"]
+    }
+  },
+  "phases": {
+    "specification": {
+      "name": "Specification",
+      "description": "Define requirements, constraints, and success criteria"
+    },
+    "pseudocode": {
+      "name": "Pseudocode",
+      "description": "Design algorithms and logic flow"
+    },
+    "architecture": {
+      "name": "Architecture",
+      "description": "Design system structure and component relationships"
+    },
+    "refinement": {
+      "name": "Refinement",
+      "description": "Iterative improvement through TDD"
+    },
+    "completion": {
+      "name": "Completion",
+      "description": "Final integration, documentation, and review"
+    }
+  }
+}
