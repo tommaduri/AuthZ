@@ -1,7 +1,7 @@
 {
   "name": "@authz-engine/grpc-client",
-  "version": "0.1.0",
-  "description": "TypeScript gRPC client for the AuthZ Engine Go core",
+  "version": "0.2.0",
+  "description": "Enhanced TypeScript gRPC client for the AuthZ Engine Go core with streaming, pooling, and observability",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,12 +9,33 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./streaming": {
+      "types": "./dist/streaming.d.ts",
+      "import": "./dist/streaming.js"
+    },
+    "./sse-client": {
+      "types": "./dist/sse-client.d.ts",
+      "import": "./dist/sse-client.js"
+    },
+    "./connection-pool": {
+      "types": "./dist/connection-pool.d.ts",
+      "import": "./dist/connection-pool.js"
+    },
+    "./observability": {
+      "types": "./dist/observability.d.ts",
+      "import": "./dist/observability.js"
+    },
+    "./health-monitor": {
+      "types": "./dist/health-monitor.d.ts",
+      "import": "./dist/health-monitor.js"
     }
   },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit"
   },
@@ -25,15 +46,29 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "@vitest/coverage-v8": "^1.2.0",
     "typescript": "^5.3.3",
     "vitest": "^1.2.0",
     "eslint": "^8.56.0"
+  },
+  "peerDependencies": {
+    "eventsource": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "eventsource": {
+      "optional": true
+    }
   },
   "keywords": [
     "authorization",
     "grpc",
     "policy",
-    "authz"
+    "authz",
+    "streaming",
+    "opentelemetry",
+    "connection-pool",
+    "health-check",
+    "sse"
   ],
   "license": "MIT"
 }

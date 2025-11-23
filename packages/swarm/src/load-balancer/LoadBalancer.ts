@@ -6,10 +6,11 @@
  * - Weighted: Priority-based distribution
  * - Least-connections: Distribute to least loaded
  * - Adaptive: Dynamic strategy based on patterns
+ * - Authorization-aware: Optimized for authz pipeline routing
  */
 
 import { EventEmitter } from 'eventemitter3';
-import type { SwarmAgent } from '../topology/types.js';
+import type { SwarmAgent, SwarmAgentType } from '../topology/types.js';
 import type {
   LoadBalancerConfig,
   LoadBalancerStrategy,
@@ -19,6 +20,8 @@ import type {
   SelectionCriteria,
   AgentLoad,
   BalancingStrategy,
+  StickySession,
+  AgentHealthScore,
 } from './types.js';
 import {
   RoundRobinStrategy,
@@ -26,6 +29,20 @@ import {
   LeastConnectionsStrategy,
   AdaptiveStrategy,
 } from './strategies/index.js';
+
+/**
+ * Default health-aware routing configuration
+ * Note: Currently uses built-in defaults; this can be extended for custom routing policies
+ */
+// const DEFAULT_HEALTH_ROUTING: HealthAwareRoutingConfig = {
+//   enabled: true,
+//   minHealthScore: 0.5,
+//   healthWeight: 0.3,
+//   latencyWeight: 0.2,
+//   loadWeight: 0.5,
+//   failurePenalty: 0.1,
+//   failureWindowMs: 60000,
+// };
 
 /**
  * Events emitted by the load balancer
@@ -57,6 +74,8 @@ export class LoadBalancer extends EventEmitter {
   private taskAssignments: Map<string, TaskAssignment> = new Map();
   private taskQueue: Task[] = [];
   private metrics: LoadBalancerMetrics;
+  private stickySessions: Map<string, StickySession> = new Map();
+  private healthScores: Map<string, AgentHealthScore> = new Map();
 
   constructor(config: LoadBalancerConfig) {
     super();
@@ -370,6 +389,200 @@ export class LoadBalancer extends EventEmitter {
     this.metrics.agentUtilization = agentCount > 0 ? totalLoad / agentCount : 0;
     this.metrics.tasksQueued = this.taskQueue.length;
     this.metrics.updatedAt = new Date();
+  }
+
+  /**
+   * Route authorization request to appropriate agent type
+   *
+   * Handles distributed authorization pipeline routing:
+   * - GUARDIAN: Threat detection
+   * - ANALYST: Risk assessment
+   * - ADVISOR: Recommendations
+   * - ENFORCER: Final enforcement
+   *
+   * Uses sticky sessions for request caching and health-aware routing
+   *
+   * @param task Authorization task with target agent type
+   * @param agentType Target authorization agent type
+   * @returns Task assignment or null if no agents available
+   */
+  routeAuthzRequest(task: Task, agentType: SwarmAgentType): TaskAssignment | null {
+    // Check for sticky session (cache hit)
+    if (this.config.stickySession) {
+      const sessionKey = this.extractSessionKey(task);
+      if (sessionKey) {
+        const session = this.stickySessions.get(sessionKey);
+        if (session && !this.isSessionExpired(session)) {
+          const agent = this.agents.get(session.agentId);
+          if (agent && agent.type === agentType && agent.load < 0.9) {
+            session.requestCount++;
+            session.lastAccessed = new Date();
+
+            const assignment: TaskAssignment = {
+              taskId: task.id,
+              agentId: agent.id,
+              assignedAt: new Date(),
+            };
+
+            this.taskAssignments.set(task.id, assignment);
+            this.metrics.tasksAssigned++;
+            this.emitEvent('task_assigned', {
+              taskId: task.id,
+              agentId: agent.id,
+              sticky: true,
+            });
+
+            return assignment;
+          }
+        }
+      }
+    }
+
+    // Standard assignment with health-aware routing
+    const criteria: SelectionCriteria = {
+      agentTypes: [agentType],
+      minHealthScore: 0.5,
+    };
+
+    const assignment = this.assign(task, criteria);
+
+    // Create sticky session for this request
+    if (assignment && this.config.stickySession) {
+      const sessionKey = this.extractSessionKey(task);
+      if (sessionKey) {
+        const expiresAt = new Date(Date.now() + 300000); // 5-minute TTL
+        this.stickySessions.set(sessionKey, {
+          key: sessionKey,
+          agentId: assignment.agentId,
+          createdAt: new Date(),
+          expiresAt,
+          requestCount: 1,
+          lastAccessed: new Date(),
+        });
+      }
+    }
+
+    return assignment;
+  }
+
+  /**
+   * Calculate health score for an agent
+   *
+   * Combines:
+   * - Health check pass rate
+   * - Latency metrics
+   * - Current load
+   * - Recent failure count
+   *
+   * @param agentId Agent to score
+   * @returns Health score (0-1)
+   */
+  calculateAgentHealthScore(agentId: string): number {
+    const agent = this.agents.get(agentId);
+    if (!agent) return 0;
+
+    const load = this.agentLoads.get(agentId);
+    if (!load) return 0.5; // Default to neutral
+
+    // Base score from load (inverse)
+    const loadScore = 1 - load.load;
+
+    // Success rate component
+    const totalTasks = load.completedTasks + load.failedTasks;
+    const successRate = totalTasks > 0 ? load.completedTasks / totalTasks : 0.8;
+
+    // Latency component (normalize to 0-1)
+    const latencyScore = Math.max(0, 1 - (load.avgProcessingTimeMs / 10000));
+
+    // Combine scores
+    const healthScore =
+      loadScore * 0.4 +
+      successRate * 0.4 +
+      latencyScore * 0.2;
+
+    return Math.max(0, Math.min(1, healthScore));
+  }
+
+  /**
+   * Get agents grouped by type for authorization pipeline
+   *
+   * @returns Map of agent types to available agents
+   */
+  getAgentsByTypeForAuthz(): Map<SwarmAgentType, SwarmAgent[]> {
+    const result = new Map<SwarmAgentType, SwarmAgent[]>();
+    const types: SwarmAgentType[] = ['GUARDIAN', 'ANALYST', 'ADVISOR', 'ENFORCER'];
+
+    for (const type of types) {
+      const agents = Array.from(this.agents.values())
+        .filter(a => a.type === type && a.load < 0.8)
+        .sort((a, b) => a.load - b.load);
+      if (agents.length > 0) {
+        result.set(type, agents);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Update health score for an agent
+   *
+   * @param agentId Agent to update
+   */
+  updateHealthScore(agentId: string): void {
+    const score = this.calculateAgentHealthScore(agentId);
+    this.healthScores.set(agentId, {
+      agentId,
+      score,
+      healthCheckPassRate: 0.95,
+      avgLatencyMs: this.agentLoads.get(agentId)?.avgProcessingTimeMs ?? 0,
+      load: this.agents.get(agentId)?.load ?? 0,
+      recentFailures: this.agentLoads.get(agentId)?.failedTasks ?? 0,
+      successRate: this.agentLoads.get(agentId)?.completedTasks ?? 0 > 0
+        ? (this.agentLoads.get(agentId)?.completedTasks ?? 0) /
+          ((this.agentLoads.get(agentId)?.completedTasks ?? 0) +
+           (this.agentLoads.get(agentId)?.failedTasks ?? 0))
+        : 0.8,
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
+   * Get health score for an agent
+   *
+   * @param agentId Agent to get score for
+   * @returns Health score details or undefined
+   */
+  getHealthScore(agentId: string): AgentHealthScore | undefined {
+    return this.healthScores.get(agentId);
+  }
+
+  /**
+   * Clean up expired sticky sessions
+   */
+  cleanupExpiredSessions(): void {
+    for (const [key, session] of this.stickySessions) {
+      if (this.isSessionExpired(session)) {
+        this.stickySessions.delete(key);
+      }
+    }
+  }
+
+  private isSessionExpired(session: StickySession): boolean {
+    return new Date() > session.expiresAt;
+  }
+
+  private extractSessionKey(task: Task): string | null {
+    // Extract session key from task metadata
+    const metadata = task.metadata as Record<string, unknown>;
+    if (!metadata) return null;
+
+    return (
+      (metadata.sessionId as string) ||
+      (metadata.userId as string) ||
+      (metadata.resourceId as string) ||
+      null
+    );
   }
 
   private emitEvent(

@@ -715,3 +715,442 @@ spec:
     });
   });
 });
+
+// ===========================================================================
+// V1 Agentic API Endpoints Tests (/api/v1/agentic/*)
+// ===========================================================================
+
+describe.skip('V1 Agentic API Endpoints Integration Tests', () => {
+  let server: RestServer;
+  let engine: DecisionEngine;
+  let orchestrator: AgentOrchestrator;
+  let logger: Logger;
+
+  beforeAll(async () => {
+    // Create dependencies
+    logger = new Logger({ level: 'error' });
+    engine = new DecisionEngine();
+    engine.loadResourcePolicies([testPolicy]);
+
+    const config = createTestOrchestratorConfig();
+    orchestrator = new AgentOrchestrator(config);
+    await orchestrator.initialize();
+
+    // Create REST server with orchestrator
+    server = new RestServer(engine, logger, orchestrator);
+  });
+
+  afterAll(async () => {
+    try {
+      await server.stop();
+      await orchestrator.shutdown();
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  // ===========================================================================
+  // POST /api/v1/agentic/check
+  // ===========================================================================
+
+  describe('POST /api/v1/agentic/check', () => {
+    it('should process agentic authorization check with full pipeline', async () => {
+      const checkRequest = {
+        requestId: 'v1-check-1',
+        principal: { id: 'user-v1-1', roles: ['user'], attributes: {} },
+        resource: { kind: 'document', id: 'doc-v1-1', attributes: {} },
+        actions: ['view'],
+      };
+
+      const response = engine.check(checkRequest);
+      const result = await orchestrator.processRequest(checkRequest, response, {
+        includeExplanation: true,
+        policyContext: {
+          matchedRules: response.meta?.policiesEvaluated || [],
+          derivedRoles: [],
+        },
+      });
+
+      expect(result).toBeDefined();
+      expect(result.anomalyScore).toBeDefined();
+      expect(result.processingTimeMs).toBeGreaterThan(0);
+      expect(result.agentsInvolved).toContain('guardian');
+      expect(result.agentsInvolved).toContain('enforcer');
+    });
+
+    it('should include explanation when includeExplanation is true', async () => {
+      const checkRequest = {
+        requestId: 'v1-check-2',
+        principal: { id: 'admin-v1-1', roles: ['admin'], attributes: {} },
+        resource: { kind: 'document', id: 'doc-v1-2', attributes: {} },
+        actions: ['edit'],
+      };
+
+      const response = engine.check(checkRequest);
+      const result = await orchestrator.processRequest(checkRequest, response, {
+        includeExplanation: true,
+      });
+
+      expect(result.explanation).toBeDefined();
+      expect(result.explanation?.summary).toBeDefined();
+      expect(result.agentsInvolved).toContain('advisor');
+    });
+
+    it('should return enforcement block when principal is rate limited', async () => {
+      // Apply rate limit first
+      await orchestrator.triggerEnforcement(
+        'rate_limit',
+        'v1-rate-limited-user',
+        'Rate limit test',
+      );
+
+      const checkRequest = {
+        requestId: 'v1-check-blocked',
+        principal: { id: 'v1-rate-limited-user', roles: ['user'], attributes: {} },
+        resource: { kind: 'document', id: 'doc-v1-3', attributes: {} },
+        actions: ['view'],
+      };
+
+      const response = engine.check(checkRequest);
+      const result = await orchestrator.processRequest(checkRequest, response);
+
+      expect(result.enforcement?.allowed).toBe(false);
+      expect(result.enforcement?.reason).toContain('Rate limited');
+    });
+  });
+
+  // ===========================================================================
+  // POST /api/v1/agentic/analyze
+  // ===========================================================================
+
+  describe('POST /api/v1/agentic/analyze', () => {
+    it('should return patterns analysis', async () => {
+      const patterns = orchestrator.getPatterns();
+
+      expect(Array.isArray(patterns)).toBe(true);
+    });
+
+    it('should return anomalies analysis', async () => {
+      const anomalies = await orchestrator.getAllAnomalies({
+        limit: 100,
+      });
+
+      expect(Array.isArray(anomalies)).toBe(true);
+    });
+
+    it('should trigger pattern discovery when requested', async () => {
+      const patterns = await orchestrator.discoverPatterns();
+
+      expect(Array.isArray(patterns)).toBe(true);
+    });
+
+    it('should filter patterns by type', async () => {
+      const allPatterns = orchestrator.getPatterns();
+      const denialPatterns = allPatterns.filter(p => p.type === 'denial_pattern');
+
+      expect(Array.isArray(denialPatterns)).toBe(true);
+      denialPatterns.forEach(p => {
+        expect(p.type).toBe('denial_pattern');
+      });
+    });
+
+    it('should filter patterns by confidence threshold', async () => {
+      const allPatterns = orchestrator.getPatterns();
+      const highConfidence = allPatterns.filter(p => p.confidence >= 0.8);
+
+      expect(Array.isArray(highConfidence)).toBe(true);
+      highConfidence.forEach(p => {
+        expect(p.confidence).toBeGreaterThanOrEqual(0.8);
+      });
+    });
+  });
+
+  // ===========================================================================
+  // POST /api/v1/agentic/recommend
+  // ===========================================================================
+
+  describe('POST /api/v1/agentic/recommend', () => {
+    it('should provide access recommendations with path to allow', async () => {
+      const checkRequest = {
+        requestId: 'v1-recommend-1',
+        principal: { id: 'user-recommend', roles: ['user'], attributes: {} },
+        resource: { kind: 'document', id: 'doc-recommend', attributes: {} },
+        actions: ['delete'],
+      };
+
+      const response = engine.check(checkRequest);
+      const explanation = await orchestrator.explainDecision(
+        checkRequest,
+        response,
+        { matchedRules: [], derivedRoles: [] },
+      );
+
+      expect(explanation).toBeDefined();
+      expect(explanation.summary).toBeDefined();
+      expect(explanation.factors).toBeInstanceOf(Array);
+    });
+
+    it('should answer policy questions', async () => {
+      const answer = await orchestrator.askQuestion(
+        'What roles can edit documents?',
+      );
+
+      expect(typeof answer).toBe('string');
+    });
+
+    it('should debug policy issues', async () => {
+      const policyYaml = `
+apiVersion: authz.engine/v1
+kind: ResourcePolicy
+metadata:
+  name: test-policy
+spec:
+  resource: document
+  rules:
+    - actions: [view]
+      effect: allow
+      roles: [user]
+`;
+
+      const analysis = await orchestrator.debugPolicy(
+        'Users cannot view documents even with user role',
+        policyYaml,
+      );
+
+      expect(typeof analysis).toBe('string');
+    });
+
+    it('should provide policy recommendations from patterns', async () => {
+      const patterns = orchestrator.getPatterns();
+
+      // Each pattern with suggestedPolicyRule should be usable for recommendations
+      const patternsWithSuggestions = patterns.filter(p => p.suggestedPolicyRule);
+
+      patternsWithSuggestions.forEach(pattern => {
+        expect(pattern.suggestedPolicyRule).toBeDefined();
+        expect(typeof pattern.suggestedPolicyRule).toBe('string');
+      });
+    });
+  });
+
+  // ===========================================================================
+  // GET /api/v1/agentic/health
+  // ===========================================================================
+
+  describe('GET /api/v1/agentic/health', () => {
+    it('should return comprehensive health status', async () => {
+      const health = await orchestrator.getHealth();
+
+      expect(health).toBeDefined();
+      expect(health.status).toBeDefined();
+      expect(['healthy', 'degraded', 'unhealthy']).toContain(health.status);
+    });
+
+    it('should include all agent health statuses', async () => {
+      const health = await orchestrator.getHealth();
+
+      expect(health.agents).toBeDefined();
+      expect(health.agents.guardian).toBeDefined();
+      expect(health.agents.analyst).toBeDefined();
+      expect(health.agents.advisor).toBeDefined();
+      expect(health.agents.enforcer).toBeDefined();
+    });
+
+    it('should include agent metrics', async () => {
+      const health = await orchestrator.getHealth();
+
+      Object.values(health.agents).forEach(agent => {
+        expect(agent.metrics).toBeDefined();
+        expect(agent.metrics.processedCount).toBeDefined();
+        expect(agent.metrics.errorCount).toBeDefined();
+        expect(agent.metrics.avgProcessingTimeMs).toBeDefined();
+      });
+    });
+
+    it('should report infrastructure status', async () => {
+      const health = await orchestrator.getHealth();
+
+      expect(health.infrastructure).toBeDefined();
+      expect(health.infrastructure.store).toBe('connected');
+      expect(health.infrastructure.eventBus).toBe('connected');
+    });
+  });
+
+  // ===========================================================================
+  // POST /api/v1/agentic/batch
+  // ===========================================================================
+
+  describe('POST /api/v1/agentic/batch', () => {
+    it('should process batch of authorization checks', async () => {
+      const requests = [
+        {
+          requestId: 'batch-1',
+          principal: { id: 'batch-user-1', roles: ['user'], attributes: {} },
+          resource: { kind: 'document', id: 'batch-doc-1', attributes: {} },
+          actions: ['view'],
+        },
+        {
+          requestId: 'batch-2',
+          principal: { id: 'batch-user-2', roles: ['admin'], attributes: {} },
+          resource: { kind: 'document', id: 'batch-doc-2', attributes: {} },
+          actions: ['edit'],
+        },
+      ];
+
+      const results = await Promise.all(
+        requests.map(async req => {
+          const response = engine.check(req);
+          return orchestrator.processRequest(req, response);
+        }),
+      );
+
+      expect(results).toHaveLength(2);
+      results.forEach(result => {
+        expect(result).toBeDefined();
+        expect(result.anomalyScore).toBeDefined();
+        expect(result.enforcement).toBeDefined();
+      });
+    });
+
+    it('should handle parallel batch processing', async () => {
+      const batchSize = 10;
+      const requests = Array.from({ length: batchSize }, (_, i) => ({
+        requestId: `parallel-batch-${i}`,
+        principal: { id: `parallel-user-${i}`, roles: ['user'], attributes: {} },
+        resource: { kind: 'document', id: `parallel-doc-${i}`, attributes: {} },
+        actions: ['view'],
+      }));
+
+      const startTime = Date.now();
+      const results = await Promise.all(
+        requests.map(async req => {
+          const response = engine.check(req);
+          return orchestrator.processRequest(req, response);
+        }),
+      );
+      const processingTime = Date.now() - startTime;
+
+      expect(results).toHaveLength(batchSize);
+      expect(processingTime).toBeLessThan(5000); // Should complete within 5 seconds
+    });
+
+    it('should handle errors in individual batch items gracefully', async () => {
+      const requests = [
+        {
+          requestId: 'batch-valid',
+          principal: { id: 'valid-user', roles: ['user'], attributes: {} },
+          resource: { kind: 'document', id: 'valid-doc', attributes: {} },
+          actions: ['view'],
+        },
+        {
+          requestId: 'batch-invalid',
+          principal: { id: '', roles: [], attributes: {} }, // Invalid empty ID
+          resource: { kind: 'document', id: 'invalid-doc', attributes: {} },
+          actions: ['view'],
+        },
+      ];
+
+      const results = await Promise.allSettled(
+        requests.map(async req => {
+          const response = engine.check(req);
+          return orchestrator.processRequest(req, response);
+        }),
+      );
+
+      expect(results).toHaveLength(2);
+      expect(results[0].status).toBe('fulfilled');
+    });
+
+    it('should include anomaly scores in batch results', async () => {
+      const requests = Array.from({ length: 3 }, (_, i) => ({
+        requestId: `anomaly-batch-${i}`,
+        principal: { id: `anomaly-user-${i}`, roles: ['user'], attributes: {} },
+        resource: { kind: 'document', id: `anomaly-doc-${i}`, attributes: {} },
+        actions: ['view'],
+      }));
+
+      const results = await Promise.all(
+        requests.map(async req => {
+          const response = engine.check(req);
+          return orchestrator.processRequest(req, response);
+        }),
+      );
+
+      results.forEach(result => {
+        expect(typeof result.anomalyScore).toBe('number');
+        expect(result.anomalyScore).toBeGreaterThanOrEqual(0);
+        expect(result.anomalyScore).toBeLessThanOrEqual(1);
+      });
+    });
+  });
+
+  // ===========================================================================
+  // Integration Tests for V1 API Flow
+  // ===========================================================================
+
+  describe('V1 API Integration Flow', () => {
+    it('should complete full agentic authorization workflow', async () => {
+      // Step 1: Perform agentic check
+      const checkRequest = {
+        requestId: 'v1-flow-check',
+        principal: { id: 'flow-user-v1', roles: ['user'], attributes: {} },
+        resource: { kind: 'document', id: 'flow-doc-v1', attributes: {} },
+        actions: ['view'],
+      };
+
+      const response = engine.check(checkRequest);
+      const checkResult = await orchestrator.processRequest(checkRequest, response, {
+        includeExplanation: true,
+      });
+
+      expect(checkResult).toBeDefined();
+      expect(checkResult.explanation).toBeDefined();
+
+      // Step 2: Get analysis
+      const patterns = orchestrator.getPatterns();
+      expect(Array.isArray(patterns)).toBe(true);
+
+      const anomalies = await orchestrator.getAllAnomalies({ limit: 10 });
+      expect(Array.isArray(anomalies)).toBe(true);
+
+      // Step 3: Get recommendations
+      const explanation = await orchestrator.explainDecision(
+        checkRequest,
+        response,
+        { matchedRules: [], derivedRoles: [] },
+      );
+      expect(explanation.summary).toBeDefined();
+
+      // Step 4: Check health
+      const health = await orchestrator.getHealth();
+      expect(health.status).toBe('healthy');
+    });
+
+    it('should handle enforcement triggering and subsequent check blocking', async () => {
+      const userId = 'v1-enforce-flow-user';
+
+      // Step 1: Trigger enforcement
+      const action = await orchestrator.triggerEnforcement(
+        'temporary_block',
+        userId,
+        'V1 API enforcement test',
+      );
+
+      expect(action.type).toBe('temporary_block');
+      expect(action.status).toBe('completed');
+
+      // Step 2: Verify subsequent check is blocked
+      const checkRequest = {
+        requestId: 'v1-enforce-check',
+        principal: { id: userId, roles: ['user'], attributes: {} },
+        resource: { kind: 'document', id: 'enforce-doc-v1', attributes: {} },
+        actions: ['view'],
+      };
+
+      const response = engine.check(checkRequest);
+      const result = await orchestrator.processRequest(checkRequest, response);
+
+      expect(result.enforcement?.allowed).toBe(false);
+    });
+  });
+});

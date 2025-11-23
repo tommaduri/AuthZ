@@ -329,3 +329,460 @@ export interface AuthzFactor {
   impact: 'positive' | 'negative' | 'neutral';
   weight: number;
 }
+
+// ============================================
+// NEW AGENTIC PIPELINE DECORATORS
+// ============================================
+
+export const AGENTIC_CHECK_KEY = 'authz:agentic_check';
+export const REQUIRE_ANALYSIS_KEY = 'authz:require_analysis';
+export const WITH_RECOMMENDATIONS_KEY = 'authz:with_recommendations';
+export const RATE_LIMITED_KEY = 'authz:rate_limited';
+export const THREAT_PROTECTED_KEY = 'authz:threat_protected';
+
+/**
+ * Full agentic pipeline check options
+ */
+export interface AgenticCheckOptions {
+  /** Resource type */
+  resource: string;
+  /** Action to check */
+  action: string;
+  /** Include ANALYST analysis */
+  includeAnalysis?: boolean;
+  /** Include ADVISOR recommendations */
+  includeRecommendations?: boolean;
+  /** Enable GUARDIAN threat detection */
+  enableThreatDetection?: boolean;
+  /** Enable ENFORCER rate limiting */
+  enableRateLimiting?: boolean;
+  /** Custom context for agents */
+  context?: Record<string, unknown>;
+  /** Priority level for processing */
+  priority?: 'low' | 'medium' | 'high' | 'critical';
+}
+
+/**
+ * Analysis options for ANALYST agent
+ */
+export interface RequireAnalysisOptions {
+  /** Minimum confidence score required (0-1) */
+  minConfidence?: number;
+  /** Include pattern matching */
+  includePatterns?: boolean;
+  /** Include historical analysis */
+  includeHistory?: boolean;
+  /** Custom analysis context */
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Recommendation options for ADVISOR agent
+ */
+export interface WithRecommendationsOptions {
+  /** Include policy suggestions */
+  includePolicySuggestions?: boolean;
+  /** Include path to allow (if denied) */
+  includePathToAllow?: boolean;
+  /** Max number of recommendations */
+  maxRecommendations?: number;
+  /** Enable natural language explanations */
+  enableNaturalLanguage?: boolean;
+}
+
+/**
+ * Rate limiting options for ENFORCER agent
+ */
+export interface RateLimitedOptions {
+  /** Max requests per window */
+  maxRequests: number;
+  /** Window size in seconds */
+  windowSeconds: number;
+  /** Custom key extractor (e.g., 'user.id', 'ip') */
+  keyBy?: 'principal' | 'ip' | 'resource' | string;
+  /** Action on limit exceeded */
+  onLimitExceeded?: 'block' | 'throttle' | 'warn';
+  /** Skip rate limiting for certain roles */
+  skipForRoles?: string[];
+}
+
+/**
+ * Threat protection options for GUARDIAN agent
+ */
+export interface ThreatProtectedOptions {
+  /** Anomaly score threshold (0-1) */
+  anomalyThreshold?: number;
+  /** Types of threats to check */
+  threatTypes?: Array<
+    | 'unusual_access_time'
+    | 'unusual_resource_access'
+    | 'permission_escalation'
+    | 'velocity_spike'
+    | 'geographic_anomaly'
+    | 'pattern_deviation'
+  >;
+  /** Action on threat detected */
+  onThreatDetected?: 'block' | 'alert' | 'log' | 'require_mfa';
+  /** Require additional verification above threshold */
+  requireVerificationAbove?: number;
+}
+
+/**
+ * Metadata stored by agentic decorators
+ */
+export interface AgenticDecoratorMetadata {
+  agenticCheck?: AgenticCheckOptions & { enabled: true };
+  requireAnalysis?: RequireAnalysisOptions & { enabled: true };
+  withRecommendations?: WithRecommendationsOptions & { enabled: true };
+  rateLimited?: RateLimitedOptions & { enabled: true };
+  threatProtected?: ThreatProtectedOptions & { enabled: true };
+}
+
+/**
+ * @AgenticCheck decorator
+ *
+ * Full agentic pipeline authorization check.
+ * Runs request through all 4 agents:
+ * - GUARDIAN: Threat detection
+ * - ANALYST: Pattern analysis
+ * - ADVISOR: Recommendations
+ * - ENFORCER: Rate limiting and enforcement
+ *
+ * @example
+ * ```typescript
+ * @AgenticCheck({
+ *   resource: 'payment',
+ *   action: 'create',
+ *   enableThreatDetection: true,
+ *   includeRecommendations: true,
+ * })
+ * @Post('payments')
+ * async createPayment() { ... }
+ * ```
+ */
+export function AgenticCheck(options: AgenticCheckOptions) {
+  return applyDecorators(
+    SetMetadata(AGENTIC_CHECK_KEY, {
+      ...options,
+      enabled: true,
+      includeAnalysis: options.includeAnalysis ?? true,
+      includeRecommendations: options.includeRecommendations ?? false,
+      enableThreatDetection: options.enableThreatDetection ?? true,
+      enableRateLimiting: options.enableRateLimiting ?? false,
+      priority: options.priority ?? 'medium',
+    }),
+    SetMetadata(AUTHZ_METADATA_KEY, {
+      resource: options.resource,
+      action: options.action,
+    }),
+    UseGuards(AuthzGuard),
+  );
+}
+
+/**
+ * @RequireAnalysis decorator
+ *
+ * Require ANALYST agent analysis before authorization decision.
+ * Use when you need pattern matching and historical context.
+ *
+ * @example
+ * ```typescript
+ * @RequireAnalysis({ minConfidence: 0.8, includePatterns: true })
+ * @Authorize({ resource: 'report', action: 'generate' })
+ * @Post('reports')
+ * async generateReport() { ... }
+ * ```
+ */
+export function RequireAnalysis(options: RequireAnalysisOptions = {}) {
+  return applyDecorators(
+    SetMetadata(REQUIRE_ANALYSIS_KEY, {
+      enabled: true,
+      minConfidence: options.minConfidence ?? 0.7,
+      includePatterns: options.includePatterns ?? true,
+      includeHistory: options.includeHistory ?? true,
+      context: options.context ?? {},
+    }),
+  );
+}
+
+/**
+ * @WithRecommendations decorator
+ *
+ * Include ADVISOR agent recommendations in the response.
+ * Provides actionable suggestions and explanations.
+ *
+ * @example
+ * ```typescript
+ * @WithRecommendations({ includePolicySuggestions: true })
+ * @Authorize({ resource: 'config', action: 'update' })
+ * @Put('config')
+ * async updateConfig(@Recommendations() recs: string[]) { ... }
+ * ```
+ */
+export function WithRecommendations(options: WithRecommendationsOptions = {}) {
+  return applyDecorators(
+    SetMetadata(WITH_RECOMMENDATIONS_KEY, {
+      enabled: true,
+      includePolicySuggestions: options.includePolicySuggestions ?? false,
+      includePathToAllow: options.includePathToAllow ?? true,
+      maxRecommendations: options.maxRecommendations ?? 5,
+      enableNaturalLanguage: options.enableNaturalLanguage ?? true,
+    }),
+  );
+}
+
+/**
+ * @RateLimited decorator
+ *
+ * Apply ENFORCER rate limiting to the endpoint.
+ * Protects against abuse and ensures fair usage.
+ *
+ * @example
+ * ```typescript
+ * @RateLimited({ maxRequests: 100, windowSeconds: 60, keyBy: 'principal' })
+ * @Authorize({ resource: 'api', action: 'call' })
+ * @Post('api/data')
+ * async getData() { ... }
+ * ```
+ */
+export function RateLimited(options: RateLimitedOptions) {
+  return applyDecorators(
+    SetMetadata(RATE_LIMITED_KEY, {
+      enabled: true,
+      maxRequests: options.maxRequests,
+      windowSeconds: options.windowSeconds,
+      keyBy: options.keyBy ?? 'principal',
+      onLimitExceeded: options.onLimitExceeded ?? 'block',
+      skipForRoles: options.skipForRoles ?? [],
+    }),
+  );
+}
+
+/**
+ * @ThreatProtected decorator
+ *
+ * Enable GUARDIAN threat detection for the endpoint.
+ * Detects and responds to anomalous access patterns.
+ *
+ * @example
+ * ```typescript
+ * @ThreatProtected({
+ *   anomalyThreshold: 0.7,
+ *   threatTypes: ['permission_escalation', 'velocity_spike'],
+ *   onThreatDetected: 'block',
+ * })
+ * @Authorize({ resource: 'admin', action: 'access' })
+ * @Get('admin/dashboard')
+ * async adminDashboard() { ... }
+ * ```
+ */
+export function ThreatProtected(options: ThreatProtectedOptions = {}) {
+  return applyDecorators(
+    SetMetadata(THREAT_PROTECTED_KEY, {
+      enabled: true,
+      anomalyThreshold: options.anomalyThreshold ?? 0.8,
+      threatTypes: options.threatTypes ?? [
+        'permission_escalation',
+        'velocity_spike',
+        'unusual_resource_access',
+      ],
+      onThreatDetected: options.onThreatDetected ?? 'block',
+      requireVerificationAbove: options.requireVerificationAbove,
+    }),
+  );
+}
+
+// ============================================
+// NEW PARAMETER DECORATORS
+// ============================================
+
+/**
+ * @Recommendations parameter decorator
+ *
+ * Extracts ADVISOR recommendations from the request context.
+ * Use with @WithRecommendations.
+ *
+ * @example
+ * ```typescript
+ * @WithRecommendations()
+ * @Authorize({ resource: 'policy', action: 'create' })
+ * @Post('policies')
+ * async createPolicy(@Recommendations() recommendations: string[]) {
+ *   // recommendations contains actionable suggestions
+ * }
+ * ```
+ */
+export const Recommendations = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): string[] | undefined => {
+    const request = ctx.switchToHttp().getRequest();
+    return request.authzRecommendations;
+  },
+);
+
+/**
+ * @AnalysisResult parameter decorator
+ *
+ * Extracts ANALYST analysis from the request context.
+ * Use with @RequireAnalysis.
+ *
+ * @example
+ * ```typescript
+ * @RequireAnalysis()
+ * @Authorize({ resource: 'data', action: 'export' })
+ * @Post('export')
+ * async exportData(@AnalysisResult() analysis: AnalysisData) {
+ *   // analysis contains patterns and historical context
+ * }
+ * ```
+ */
+export const AnalysisResult = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): AnalysisData | undefined => {
+    const request = ctx.switchToHttp().getRequest();
+    return request.authzAnalysis;
+  },
+);
+
+/**
+ * @ThreatInfo parameter decorator
+ *
+ * Extracts GUARDIAN threat information from the request context.
+ * Use with @ThreatProtected.
+ *
+ * @example
+ * ```typescript
+ * @ThreatProtected()
+ * @Authorize({ resource: 'secure', action: 'access' })
+ * @Get('secure')
+ * async secureEndpoint(@ThreatInfo() threat: ThreatData) {
+ *   if (threat.anomalyScore > 0.5) {
+ *     // Log suspicious activity
+ *   }
+ * }
+ * ```
+ */
+export const ThreatInfo = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): ThreatData | undefined => {
+    const request = ctx.switchToHttp().getRequest();
+    return request.authzThreatInfo;
+  },
+);
+
+/**
+ * @RateLimitInfo parameter decorator
+ *
+ * Extracts ENFORCER rate limit information from the request context.
+ * Use with @RateLimited.
+ *
+ * @example
+ * ```typescript
+ * @RateLimited({ maxRequests: 100, windowSeconds: 60 })
+ * @Authorize({ resource: 'api', action: 'call' })
+ * @Post('api')
+ * async apiCall(@RateLimitInfo() rateLimit: RateLimitData) {
+ *   // rateLimit contains remaining requests and reset time
+ * }
+ * ```
+ */
+export const RateLimitInfo = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): RateLimitData | undefined => {
+    const request = ctx.switchToHttp().getRequest();
+    return request.authzRateLimitInfo;
+  },
+);
+
+/**
+ * @AgenticResult parameter decorator
+ *
+ * Extracts the full agentic processing result from the request context.
+ * Use with @AgenticCheck for complete pipeline results.
+ *
+ * @example
+ * ```typescript
+ * @AgenticCheck({ resource: 'payment', action: 'create' })
+ * @Post('payments')
+ * async createPayment(@AgenticResult() result: AgenticProcessingResult) {
+ *   console.log(`Processed by: ${result.agentsInvolved.join(', ')}`);
+ * }
+ * ```
+ */
+export const AgenticResult = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): AgenticProcessingResult | undefined => {
+    const request = ctx.switchToHttp().getRequest();
+    return request.authzAgenticResult;
+  },
+);
+
+// ============================================
+// SUPPORTING TYPES
+// ============================================
+
+/**
+ * Analysis data from ANALYST agent
+ */
+export interface AnalysisData {
+  confidence: number;
+  patterns: Array<{
+    id: string;
+    name: string;
+    confidence: number;
+    description: string;
+  }>;
+  historicalContext: {
+    similarDecisions: number;
+    avgConfidence: number;
+    commonOutcomes: string[];
+  };
+  riskAssessment: {
+    level: 'low' | 'medium' | 'high';
+    factors: string[];
+  };
+}
+
+/**
+ * Threat data from GUARDIAN agent
+ */
+export interface ThreatData {
+  anomalyScore: number;
+  isAnomalous: boolean;
+  detectedThreats: Array<{
+    type: string;
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    description: string;
+  }>;
+  riskFactors: Array<{
+    factor: string;
+    score: number;
+  }>;
+  baseline: {
+    avgRequestsPerHour: number;
+    deviation: number;
+  };
+}
+
+/**
+ * Rate limit data from ENFORCER agent
+ */
+export interface RateLimitData {
+  remaining: number;
+  limit: number;
+  resetAt: Date;
+  isLimited: boolean;
+  currentUsage: number;
+}
+
+/**
+ * Full agentic processing result
+ */
+export interface AgenticProcessingResult {
+  allowed: boolean;
+  decision: 'allow' | 'deny';
+  confidence: number;
+  explanation?: string;
+  anomalyScore?: number;
+  recommendations?: string[];
+  analysis?: AnalysisData;
+  threatInfo?: ThreatData;
+  rateLimitInfo?: RateLimitData;
+  agentsInvolved: string[];
+  processingTimeMs: number;
+}

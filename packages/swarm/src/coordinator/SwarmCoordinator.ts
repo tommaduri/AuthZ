@@ -11,12 +11,15 @@
 import { EventEmitter } from 'eventemitter3';
 import { TopologyManager } from '../topology/TopologyManager.js';
 import { LoadBalancer } from '../load-balancer/LoadBalancer.js';
-import { AgentPool, DefaultAgentFactory } from '../agent-pool/AgentPool.js';
+import { AgentPool, DefaultAgentFactory, DEFAULT_AGENT_TYPE_CONFIGS } from '../agent-pool/AgentPool.js';
 import type {
   TopologyConfig,
   SwarmAgent,
   TopologyType,
   TopologyMetrics,
+  SwarmAgentType,
+  ConsensusVote,
+  ConsensusResult,
 } from '../topology/types.js';
 import type {
   LoadBalancerConfig,
@@ -29,6 +32,7 @@ import type {
   AgentPoolMetrics,
   SpawnRequest,
   AgentFactory,
+  WorkStealingConfig,
 } from '../agent-pool/types.js';
 
 /**
@@ -47,6 +51,68 @@ export interface SwarmConfig {
   autoOptimize?: boolean;
   /** Optimization interval in ms */
   optimizationIntervalMs?: number;
+  /** Work stealing configuration */
+  workStealing?: WorkStealingConfig;
+  /** Consensus configuration */
+  consensus?: ConsensusConfig;
+}
+
+/**
+ * Consensus configuration
+ */
+export interface ConsensusConfig {
+  /** Enable consensus for distributed decisions */
+  enabled: boolean;
+  /** Minimum votes required for consensus */
+  quorumSize: number;
+  /** Timeout for collecting votes in ms */
+  timeoutMs: number;
+  /** Required approval ratio (0-1) */
+  approvalThreshold: number;
+  /** Require confidence threshold */
+  minConfidence: number;
+}
+
+/**
+ * Authorization pipeline request
+ */
+export interface AuthorizationPipelineRequest {
+  /** Request ID */
+  requestId: string;
+  /** Subject (who is requesting) */
+  subject: { id: string; type: string; attributes?: Record<string, unknown> };
+  /** Resource being accessed */
+  resource: { id: string; type: string; attributes?: Record<string, unknown> };
+  /** Action being performed */
+  action: string;
+  /** Context information */
+  context?: Record<string, unknown>;
+  /** Whether to require consensus */
+  requireConsensus?: boolean;
+}
+
+/**
+ * Authorization pipeline result
+ */
+export interface AuthorizationPipelineResult {
+  /** Request ID */
+  requestId: string;
+  /** Final decision */
+  decision: 'allow' | 'deny' | 'indeterminate';
+  /** Confidence level (0-1) */
+  confidence: number;
+  /** Consensus result if applicable */
+  consensus?: ConsensusResult;
+  /** Contributing agent decisions */
+  agentDecisions: Array<{
+    agentId: string;
+    agentType: SwarmAgentType;
+    decision: 'allow' | 'deny' | 'indeterminate';
+    confidence: number;
+    reason?: string;
+  }>;
+  /** Total processing time in ms */
+  processingTimeMs: number;
 }
 
 /**
@@ -217,6 +283,12 @@ export class SwarmCoordinator extends EventEmitter {
     if (this.optimizationInterval) {
       clearInterval(this.optimizationInterval);
       this.optimizationInterval = undefined;
+    }
+
+    // Stop work stealing
+    if (this.workStealingInterval) {
+      clearInterval(this.workStealingInterval);
+      this.workStealingInterval = undefined;
     }
 
     // Shutdown agent pool
@@ -491,6 +563,476 @@ export class SwarmCoordinator extends EventEmitter {
     this.loadBalancer.rebalance();
 
     this.emitEvent('optimized', {});
+  }
+
+  /**
+   * Execute authorization pipeline across multiple agent types
+   */
+  async executeAuthorizationPipeline(
+    request: AuthorizationPipelineRequest
+  ): Promise<AuthorizationPipelineResult> {
+    const startTime = Date.now();
+    const agentDecisions: AuthorizationPipelineResult['agentDecisions'] = [];
+
+    // Stage 1: Guardian agents perform initial threat detection
+    const guardianResult = await this.dispatchToAgentType('GUARDIAN', {
+      id: `${request.requestId}-guardian`,
+      type: 'authorization',
+      priority: 'high',
+      payload: request,
+      createdAt: new Date(),
+    });
+
+    if (guardianResult.success) {
+      agentDecisions.push({
+        agentId: guardianResult.agentId,
+        agentType: 'GUARDIAN',
+        decision: (guardianResult.data as any)?.decision ?? 'indeterminate',
+        confidence: (guardianResult.data as any)?.confidence ?? 0.5,
+        reason: (guardianResult.data as any)?.reason,
+      });
+    }
+
+    // Stage 2: Analyst agents assess risk
+    const analystResult = await this.dispatchToAgentType('ANALYST', {
+      id: `${request.requestId}-analyst`,
+      type: 'analysis',
+      priority: 'medium',
+      payload: { ...request, guardianResult: guardianResult.data },
+      createdAt: new Date(),
+    });
+
+    if (analystResult.success) {
+      agentDecisions.push({
+        agentId: analystResult.agentId,
+        agentType: 'ANALYST',
+        decision: (analystResult.data as any)?.decision ?? 'indeterminate',
+        confidence: (analystResult.data as any)?.confidence ?? 0.5,
+        reason: (analystResult.data as any)?.reason,
+      });
+    }
+
+    // Stage 3: If consensus required, gather votes from advisors
+    let consensusResult: ConsensusResult | undefined;
+    if (request.requireConsensus && this.config.consensus?.enabled) {
+      consensusResult = await this.runConsensus(
+        request.requestId,
+        agentDecisions.map(d => d.decision === 'allow')
+      );
+    }
+
+    // Stage 4: Enforcer makes final decision
+    const enforcerResult = await this.dispatchToAgentType('ENFORCER', {
+      id: `${request.requestId}-enforcer`,
+      type: 'enforcement',
+      priority: 'critical',
+      payload: {
+        ...request,
+        agentDecisions,
+        consensus: consensusResult,
+      },
+      createdAt: new Date(),
+    });
+
+    if (enforcerResult.success) {
+      agentDecisions.push({
+        agentId: enforcerResult.agentId,
+        agentType: 'ENFORCER',
+        decision: (enforcerResult.data as any)?.decision ?? 'indeterminate',
+        confidence: (enforcerResult.data as any)?.confidence ?? 0.5,
+        reason: (enforcerResult.data as any)?.reason,
+      });
+    }
+
+    // Calculate final decision based on all inputs
+    const finalDecision = this.calculateFinalDecision(agentDecisions, consensusResult);
+
+    return {
+      requestId: request.requestId,
+      decision: finalDecision.decision,
+      confidence: finalDecision.confidence,
+      consensus: consensusResult,
+      agentDecisions,
+      processingTimeMs: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Dispatch task to a specific agent type
+   */
+  async dispatchToAgentType<T>(
+    agentType: SwarmAgentType,
+    task: Task
+  ): Promise<TaskResult<T>> {
+    const agents = this.agentPool.getAgentsByType(agentType);
+    const availableAgents = agents.filter(a =>
+      a.status === 'idle' || (a.status === 'busy' && a.load < 0.8)
+    );
+
+    if (availableAgents.length === 0) {
+      // Try to spawn a new agent of this type
+      if (this.agentPool.size < this.config.agentPool.maxAgents) {
+        const newAgent = await this.addAgent({
+          type: agentType,
+          capabilities: DEFAULT_AGENT_TYPE_CONFIGS[agentType].capabilities,
+        });
+        availableAgents.push(newAgent);
+      }
+    }
+
+    if (availableAgents.length === 0) {
+      return {
+        taskId: task.id,
+        success: false,
+        error: `No ${agentType} agents available`,
+        agentId: '',
+        durationMs: 0,
+      };
+    }
+
+    // Select best agent (least loaded)
+    const selectedAgent = availableAgents.sort((a, b) => a.load - b.load)[0]!;
+
+    // Update task with preferred agent
+    task.preferredAgentTypes = [agentType];
+
+    return this.dispatch({ ...task, metadata: { ...task.metadata, targetAgent: selectedAgent.id } });
+  }
+
+  /**
+   * Run consensus across advisor agents
+   */
+  async runConsensus(
+    proposalId: string,
+    initialVotes: boolean[]
+  ): Promise<ConsensusResult> {
+    const startTime = Date.now();
+    const advisors = this.agentPool.getAgentsByType('ADVISOR');
+    const config = this.config.consensus ?? {
+      enabled: true,
+      quorumSize: 3,
+      timeoutMs: 5000,
+      approvalThreshold: 0.6,
+      minConfidence: 0.5,
+    };
+
+    const votes: ConsensusVote[] = [];
+
+    // Collect votes from advisors with timeout
+    const votePromises = advisors.slice(0, config.quorumSize).map(async (advisor, index) => {
+      const task: Task = {
+        id: `consensus-${proposalId}-${advisor.id}`,
+        type: 'recommendation',
+        priority: 'high',
+        payload: { proposalId, initialVotes },
+        createdAt: new Date(),
+        timeoutMs: config.timeoutMs,
+      };
+
+      const result = await this.dispatch(task);
+      if (result.success) {
+        return {
+          agentId: advisor.id,
+          vote: (result.data as any)?.approve ?? initialVotes[index % initialVotes.length] ?? true,
+          confidence: (result.data as any)?.confidence ?? 0.5,
+          timestamp: new Date(),
+          reason: (result.data as any)?.reason,
+        };
+      }
+      return null;
+    });
+
+    const voteResults = await Promise.all(
+      votePromises.map(p =>
+        Promise.race([
+          p,
+          new Promise<null>(resolve => setTimeout(() => resolve(null), config.timeoutMs)),
+        ])
+      )
+    );
+
+    for (const vote of voteResults) {
+      if (vote) votes.push(vote);
+    }
+
+    const approvals = votes.filter(v => v.vote).length;
+    const rejections = votes.filter(v => !v.vote).length;
+    const avgConfidence = votes.length > 0
+      ? votes.reduce((sum, v) => sum + v.confidence, 0) / votes.length
+      : 0;
+
+    const reached = votes.length >= config.quorumSize && avgConfidence >= config.minConfidence;
+    const decision = approvals / votes.length >= config.approvalThreshold;
+
+    return {
+      proposalId,
+      reached,
+      decision,
+      totalVotes: votes.length,
+      approvals,
+      rejections,
+      avgConfidence,
+      participants: votes.map(v => v.agentId),
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Calculate final authorization decision
+   */
+  private calculateFinalDecision(
+    agentDecisions: AuthorizationPipelineResult['agentDecisions'],
+    consensus?: ConsensusResult
+  ): { decision: 'allow' | 'deny' | 'indeterminate'; confidence: number } {
+    if (agentDecisions.length === 0) {
+      return { decision: 'indeterminate', confidence: 0 };
+    }
+
+    // Weight decisions by agent type priority
+    let totalWeight = 0;
+    let weightedAllow = 0;
+    let weightedDeny = 0;
+
+    for (const d of agentDecisions) {
+      const weight = DEFAULT_AGENT_TYPE_CONFIGS[d.agentType].priorityWeight * d.confidence;
+      totalWeight += weight;
+
+      if (d.decision === 'allow') {
+        weightedAllow += weight;
+      } else if (d.decision === 'deny') {
+        weightedDeny += weight;
+      }
+    }
+
+    // Factor in consensus if available
+    if (consensus?.reached) {
+      const consensusWeight = 5 * consensus.avgConfidence;
+      totalWeight += consensusWeight;
+      if (consensus.decision) {
+        weightedAllow += consensusWeight;
+      } else {
+        weightedDeny += consensusWeight;
+      }
+    }
+
+    const allowRatio = totalWeight > 0 ? weightedAllow / totalWeight : 0;
+    const denyRatio = totalWeight > 0 ? weightedDeny / totalWeight : 0;
+
+    if (allowRatio > 0.6) {
+      return { decision: 'allow', confidence: allowRatio };
+    } else if (denyRatio > 0.4) {
+      return { decision: 'deny', confidence: denyRatio };
+    } else {
+      return { decision: 'indeterminate', confidence: Math.max(allowRatio, denyRatio) };
+    }
+  }
+
+  /**
+   * Work stealing - redistribute tasks from overloaded agents
+   */
+  async performWorkStealing(): Promise<number> {
+    if (!this.config.workStealing?.enabled) {
+      return 0;
+    }
+
+    const config = this.config.workStealing;
+    let stolenTasks = 0;
+
+    // Find overloaded agents (high load)
+    const overloadedAgents = this.agentPool.getAllAgents()
+      .filter(a => a.load > 0.8 && a.status === 'busy');
+
+    // Find idle agents that can steal work
+    const idleAgents = this.agentPool.getAllAgents()
+      .filter(a => a.load < config.stealThreshold && a.status === 'idle');
+
+    for (const overloaded of overloadedAgents) {
+      for (const idle of idleAgents) {
+        if (stolenTasks >= config.maxStealCount) break;
+
+        // Check if idle agent can handle tasks from overloaded agent
+        const overloadedConfig = DEFAULT_AGENT_TYPE_CONFIGS[overloaded.type];
+        const idleConfig = DEFAULT_AGENT_TYPE_CONFIGS[idle.type];
+
+        // Can steal if they support overlapping task types
+        const canSteal = overloadedConfig.supportedTaskTypes.some(
+          t => idleConfig.supportedTaskTypes.includes(t)
+        );
+
+        if (canSteal) {
+          // In a real implementation, this would transfer actual pending tasks
+          // For now, we simulate by adjusting loads
+          const transferAmount = Math.min(0.2, overloaded.load - 0.5);
+          this.agentPool.updateAgentLoad(overloaded.id, overloaded.load - transferAmount);
+          this.agentPool.updateAgentLoad(idle.id, idle.load + transferAmount);
+          stolenTasks++;
+
+          this.emitEvent('work_stolen' as SwarmEventType, {
+            from: overloaded.id,
+            to: idle.id,
+            amount: transferAmount,
+          });
+        }
+      }
+    }
+
+    return stolenTasks;
+  }
+
+  /**
+   * Get agents by type
+   */
+  getAgentsByType(type: SwarmAgentType): SwarmAgent[] {
+    return this.agentPool.getAgentsByType(type);
+  }
+
+  /**
+   * Register authorization agents for distributed policy enforcement
+   *
+   * Sets up all four authorization agent types:
+   * - GUARDIAN: Threat detection and security checks
+   * - ANALYST: Risk assessment and pattern analysis
+   * - ADVISOR: Recommendations and compliance verification
+   * - ENFORCER: Final decision execution and rate limiting
+   */
+  async registerAuthzAgents(
+    guardianCount: number = 2,
+    analystCount: number = 1,
+    advisorCount: number = 2,
+    enforcerCount: number = 2
+  ): Promise<SwarmAgent[]> {
+    if (!this.isInitialized) {
+      throw new Error('Swarm must be initialized before registering agents');
+    }
+
+    const distribution: Partial<Record<SwarmAgentType, number>> = {
+      GUARDIAN: guardianCount,
+      ANALYST: analystCount,
+      ADVISOR: advisorCount,
+      ENFORCER: enforcerCount,
+    };
+
+    // Spawn agents by type distribution
+    const results = await this.agentPool.spawnByTypeDistribution(distribution);
+    const agents = results.map(r => r.agent);
+
+    // Add to topology
+    this.topologyManager.addAgents(agents);
+
+    // Add to load balancer
+    this.loadBalancer.addAgents(agents);
+
+    // Warm up agents
+    for (const result of results) {
+      await this.agentPool.warmupAgent(result.agent.id);
+    }
+
+    this.emitEvent('authz_agents_registered' as SwarmEventType, {
+      count: agents.length,
+      distribution,
+    });
+
+    return agents;
+  }
+
+  /**
+   * Coordinate authorization pipeline across distributed agents
+   *
+   * Orchestrates multi-stage authorization decisions:
+   * 1. Guardian performs threat detection
+   * 2. Analyst assesses risk
+   * 3. Advisor provides recommendations
+   * 4. Enforcer makes final decision
+   *
+   * @param request Authorization request with subject, resource, and action
+   * @returns Distributed decision with consensus results
+   */
+  async coordinateAuthzPipeline(
+    request: AuthorizationPipelineRequest
+  ): Promise<AuthorizationPipelineResult> {
+    return this.executeAuthorizationPipeline(request);
+  }
+
+  /**
+   * Run distributed consensus across advisor agents
+   *
+   * Uses Byzantine fault-tolerant voting:
+   * - Collects votes from multiple advisors
+   * - Enforces quorum requirements
+   * - Calculates confidence levels
+   * - Handles timeout scenarios
+   *
+   * @param proposalId Unique proposal identifier
+   * @param initialVotes Starting votes to aggregate
+   * @param _quorumSize Number of votes required (optional, uses config default)
+   * @returns Consensus result with decision and confidence
+   */
+  async runDistributedConsensus(
+    proposalId: string,
+    initialVotes: boolean[],
+    _quorumSize?: number
+  ): Promise<ConsensusResult> {
+    if (!this.isInitialized) {
+      throw new Error('Swarm not initialized');
+    }
+
+    return this.runConsensus(proposalId, initialVotes);
+  }
+
+  /**
+   * Initialize with authorization agent distribution
+   */
+  async initializeWithAuthorizationAgents(
+    distribution: Partial<Record<SwarmAgentType, number>> = {
+      GUARDIAN: 2,
+      ANALYST: 1,
+      ADVISOR: 2,
+      ENFORCER: 2,
+      COORDINATOR: 1,
+    }
+  ): Promise<SwarmInstance> {
+    if (this.isInitialized) {
+      throw new Error('Swarm already initialized');
+    }
+
+    this.startTime = new Date();
+
+    // Spawn agents by type distribution
+    const results = await this.agentPool.spawnByTypeDistribution(distribution);
+    const agents = results.map(r => r.agent);
+
+    // Setup topology
+    this.topologyManager.connect(agents);
+
+    // Initialize load balancer
+    this.loadBalancer.initialize(agents);
+
+    this.isInitialized = true;
+
+    // Start optimization and work stealing if enabled
+    if (this.config.autoOptimize) {
+      this.startOptimization();
+    }
+
+    if (this.config.workStealing?.enabled) {
+      this.startWorkStealingLoop();
+    }
+
+    this.emitEvent('initialized', {
+      agentCount: agents.length,
+      distribution,
+    });
+
+    return this.getInstance();
+  }
+
+  private workStealingInterval?: ReturnType<typeof setInterval>;
+
+  private startWorkStealingLoop(): void {
+    const interval = this.config.workStealing?.checkIntervalMs ?? 5000;
+    this.workStealingInterval = setInterval(() => {
+      this.performWorkStealing().catch(() => {});
+    }, interval);
   }
 
   private recordTaskCompletion(

@@ -16,6 +16,28 @@ export type TopologyType = 'mesh' | 'hierarchical' | 'ring' | 'star' | 'adaptive
 export type SwarmAgentType = 'GUARDIAN' | 'ANALYST' | 'ADVISOR' | 'ENFORCER' | 'COORDINATOR';
 
 /**
+ * Agent role capabilities mapping
+ */
+export const AGENT_CAPABILITIES: Record<SwarmAgentType, string[]> = {
+  GUARDIAN: ['threat-detection', 'policy-enforcement', 'access-control', 'audit-logging'],
+  ANALYST: ['pattern-analysis', 'risk-assessment', 'anomaly-detection', 'reporting'],
+  ADVISOR: ['policy-recommendation', 'optimization', 'compliance-check', 'guidance'],
+  ENFORCER: ['decision-execution', 'rate-limiting', 'blocking', 'session-management'],
+  COORDINATOR: ['orchestration', 'load-balancing', 'failover', 'consensus'],
+};
+
+/**
+ * Agent priority weights for load balancing
+ */
+export const AGENT_PRIORITY_WEIGHTS: Record<SwarmAgentType, number> = {
+  GUARDIAN: 10,    // Highest priority - security critical
+  ENFORCER: 8,     // High priority - execution path
+  ANALYST: 5,      // Medium priority - analysis
+  ADVISOR: 3,      // Lower priority - recommendations
+  COORDINATOR: 10, // High priority - orchestration
+};
+
+/**
  * Agent operational states
  */
 export type AgentStatus = 'idle' | 'busy' | 'unhealthy' | 'draining' | 'dead';
@@ -229,3 +251,82 @@ export interface Topology {
  * Factory function type for creating topologies
  */
 export type TopologyFactory = (config: TopologyConfig) => Topology;
+
+/**
+ * Failure detection configuration
+ */
+export interface FailureDetectionConfig {
+  /** Heartbeat timeout in ms before considering agent failed */
+  heartbeatTimeoutMs: number;
+  /** Number of consecutive failures before marking as dead */
+  failureThreshold: number;
+  /** Interval for checking agent health */
+  checkIntervalMs: number;
+  /** Enable automatic recovery attempts */
+  autoRecovery: boolean;
+  /** Maximum recovery attempts before giving up */
+  maxRecoveryAttempts: number;
+}
+
+/**
+ * Recovery action types
+ */
+export type RecoveryAction = 'restart' | 'replace' | 'redistribute' | 'ignore';
+
+/**
+ * Failure event details
+ */
+export interface FailureEvent {
+  /** Failed agent ID */
+  agentId: string;
+  /** Type of failure */
+  failureType: 'timeout' | 'crash' | 'network' | 'overload';
+  /** Timestamp of failure */
+  timestamp: Date;
+  /** Recovery action taken */
+  recoveryAction: RecoveryAction;
+  /** Whether recovery was successful */
+  recovered: boolean;
+  /** Additional details */
+  details?: Record<string, unknown>;
+}
+
+/**
+ * Consensus vote result
+ */
+export interface ConsensusVote {
+  /** Voter agent ID */
+  agentId: string;
+  /** Vote value (true = approve, false = reject) */
+  vote: boolean;
+  /** Confidence level (0-1) */
+  confidence: number;
+  /** Timestamp of vote */
+  timestamp: Date;
+  /** Optional reasoning */
+  reason?: string;
+}
+
+/**
+ * Consensus result
+ */
+export interface ConsensusResult {
+  /** Proposal ID */
+  proposalId: string;
+  /** Whether consensus was reached */
+  reached: boolean;
+  /** Final decision */
+  decision: boolean;
+  /** Total votes */
+  totalVotes: number;
+  /** Approval votes */
+  approvals: number;
+  /** Rejection votes */
+  rejections: number;
+  /** Average confidence */
+  avgConfidence: number;
+  /** Participating agents */
+  participants: string[];
+  /** Duration to reach consensus in ms */
+  durationMs: number;
+}

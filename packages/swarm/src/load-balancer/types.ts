@@ -195,3 +195,63 @@ export interface LoadBalancerStrategy {
    */
   recordCompletion(agentId: string, taskId: string, success: boolean): void;
 }
+
+/**
+ * Sticky session entry
+ */
+export interface StickySession {
+  /** Session key (e.g., user ID, tenant ID) */
+  key: string;
+  /** Assigned agent ID */
+  agentId: string;
+  /** Created timestamp */
+  createdAt: Date;
+  /** Expires at */
+  expiresAt: Date;
+  /** Request count */
+  requestCount: number;
+  /** Last accessed */
+  lastAccessed: Date;
+}
+
+/**
+ * Health-aware routing configuration
+ */
+export interface HealthAwareRoutingConfig {
+  /** Enable health-aware routing */
+  enabled: boolean;
+  /** Minimum health score to be considered (0-1) */
+  minHealthScore: number;
+  /** Weight for health score in routing decisions */
+  healthWeight: number;
+  /** Weight for latency in routing decisions */
+  latencyWeight: number;
+  /** Weight for load in routing decisions */
+  loadWeight: number;
+  /** Penalize recent failures */
+  failurePenalty: number;
+  /** Time window for failure tracking in ms */
+  failureWindowMs: number;
+}
+
+/**
+ * Agent health score details
+ */
+export interface AgentHealthScore {
+  /** Agent ID */
+  agentId: string;
+  /** Overall health score (0-1) */
+  score: number;
+  /** Health check pass rate */
+  healthCheckPassRate: number;
+  /** Average latency in ms */
+  avgLatencyMs: number;
+  /** Current load (0-1) */
+  load: number;
+  /** Recent failure count */
+  recentFailures: number;
+  /** Success rate */
+  successRate: number;
+  /** Last updated */
+  updatedAt: Date;
+}

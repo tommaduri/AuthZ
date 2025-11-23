@@ -32,6 +32,11 @@
     },
     "clean": {
       "cache": false
+    },
+    "bench": {
+      "dependsOn": ["build"],
+      "outputs": [],
+      "cache": false
     }
   }
 }

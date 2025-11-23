@@ -12,4 +12,7 @@ export {
   type SwarmEvent,
   type TaskResult,
   type TaskExecutor,
+  type ConsensusConfig,
+  type AuthorizationPipelineRequest,
+  type AuthorizationPipelineResult,
 } from './SwarmCoordinator.js';

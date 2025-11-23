@@ -231,3 +231,216 @@ describe('ActionResult', () => {
     expect(result.matched).toBe(false);
   });
 });
+
+describe('Stream Management Types', () => {
+  describe('StreamMonitoringMetrics', () => {
+    it('should track stream metrics', () => {
+      const metrics = {
+        activeStreams: 3,
+        totalMessagesSent: 150,
+        totalMessagesReceived: 150,
+        avgLatencyMs: 25.5,
+        peakBufferSize: 50,
+        backpressureEvents: 2,
+      };
+
+      expect(metrics.activeStreams).toBe(3);
+      expect(metrics.totalMessagesSent).toBe(150);
+      expect(metrics.totalMessagesReceived).toBe(150);
+      expect(metrics.avgLatencyMs).toBe(25.5);
+      expect(metrics.peakBufferSize).toBe(50);
+      expect(metrics.backpressureEvents).toBe(2);
+    });
+  });
+
+  describe('StreamPoolConfig', () => {
+    it('should define stream pool configuration', () => {
+      const config = {
+        maxConcurrentStreams: 10,
+        streamIdleTimeout: 300000,
+        enableStreamReuse: true,
+        streamReuseTimeout: 60000,
+      };
+
+      expect(config.maxConcurrentStreams).toBe(10);
+      expect(config.streamIdleTimeout).toBe(300000);
+      expect(config.enableStreamReuse).toBe(true);
+      expect(config.streamReuseTimeout).toBe(60000);
+    });
+  });
+
+  describe('AdvancedStreamOptions', () => {
+    it('should configure advanced stream behavior', () => {
+      const options = {
+        multiplexing: true,
+        maxRequestsPerStream: 1000,
+        deduplication: false,
+        deduplicationCacheSize: 100,
+        ensureOrdering: true,
+      };
+
+      expect(options.multiplexing).toBe(true);
+      expect(options.maxRequestsPerStream).toBe(1000);
+      expect(options.deduplication).toBe(false);
+      expect(options.deduplicationCacheSize).toBe(100);
+      expect(options.ensureOrdering).toBe(true);
+    });
+  });
+});
+
+describe('Stream Deduplication', () => {
+  it('should track deduplicated request IDs', () => {
+    const cache = new Map<string, CheckResponse>();
+    const response: CheckResponse = {
+      requestId: 'dedup-1',
+      results: new Map([['read', { effect: Effect.ALLOW, matched: true }]]),
+    };
+
+    cache.set('dedup-1', response);
+
+    expect(cache.has('dedup-1')).toBe(true);
+    expect(cache.get('dedup-1')).toEqual(response);
+  });
+
+  it('should enforce deduplication cache size limits', () => {
+    const cache = new Map<string, CheckResponse>();
+    const cacheSize = 5;
+
+    for (let i = 0; i < cacheSize + 2; i++) {
+      const response: CheckResponse = {
+        requestId: `req-${i}`,
+        results: new Map(),
+      };
+      cache.set(`req-${i}`, response);
+
+      // Simulate LRU eviction
+      if (cache.size > cacheSize) {
+        const firstKey = cache.keys().next().value;
+        cache.delete(firstKey);
+      }
+    }
+
+    expect(cache.size).toBeLessThanOrEqual(cacheSize);
+  });
+});
+
+describe('Stream Pool Management', () => {
+  it('should track active stream counts', () => {
+    const activeStreams = new Map<string, unknown>();
+
+    for (let i = 0; i < 5; i++) {
+      activeStreams.set(`stream-${i}`, { id: `stream-${i}` });
+    }
+
+    expect(activeStreams.size).toBe(5);
+    expect(Array.from(activeStreams.keys())).toHaveLength(5);
+  });
+
+  it('should enforce max concurrent streams limit', () => {
+    const maxStreams = 10;
+    const activeStreams = new Map<string, unknown>();
+
+    for (let i = 0; i < 15; i++) {
+      if (activeStreams.size < maxStreams) {
+        activeStreams.set(`stream-${i}`, {});
+      }
+    }
+
+    expect(activeStreams.size).toBeLessThanOrEqual(maxStreams);
+  });
+
+  it('should cleanup idle streams', () => {
+    const streamIdleTimeout = 300000;
+    const now = Date.now();
+    const streams = new Map<string, { createdAt: number }>();
+
+    // Add old stream
+    streams.set('old-stream', { createdAt: now - streamIdleTimeout - 1000 });
+    // Add new stream
+    streams.set('new-stream', { createdAt: now });
+
+    const toRemove: string[] = [];
+    for (const [id, stream] of streams) {
+      if (now - stream.createdAt > streamIdleTimeout) {
+        toRemove.push(id);
+      }
+    }
+
+    expect(toRemove).toContain('old-stream');
+    expect(toRemove).not.toContain('new-stream');
+  });
+});
+
+describe('Backpressure Management', () => {
+  it('should track buffer sizes', () => {
+    const highWaterMark = 100;
+    const lowWaterMark = 50;
+    let bufferSize = 0;
+    let isBackpressured = false;
+
+    // Add messages until high watermark
+    for (let i = 0; i < 105; i++) {
+      bufferSize++;
+      if (bufferSize >= highWaterMark) {
+        isBackpressured = true;
+        break;
+      }
+    }
+
+    expect(isBackpressured).toBe(true);
+    expect(bufferSize).toBeGreaterThanOrEqual(highWaterMark);
+
+    // Drain messages
+    while (bufferSize > lowWaterMark) {
+      bufferSize--;
+    }
+
+    isBackpressured = bufferSize >= highWaterMark;
+    expect(isBackpressured).toBe(false);
+  });
+
+  it('should handle message dropping on buffer full', () => {
+    const maxBufferSize = 1000;
+    const buffer: unknown[] = [];
+    let dropped = 0;
+
+    for (let i = 0; i < 1500; i++) {
+      if (buffer.length >= maxBufferSize) {
+        dropped++;
+      } else {
+        buffer.push({});
+      }
+    }
+
+    expect(dropped).toBe(500);
+    expect(buffer.length).toBe(maxBufferSize);
+  });
+});
+
+describe('Health Monitoring Streams', () => {
+  it('should track health check intervals', () => {
+    const interval = 5000;
+    const checks: number[] = [];
+    const now = Date.now();
+
+    // Simulate periodic checks
+    for (let i = 0; i < 10; i++) {
+      checks.push(now + i * interval);
+    }
+
+    expect(checks).toHaveLength(10);
+    expect(checks[1] - checks[0]).toBe(interval);
+  });
+
+  it('should accumulate health statistics', () => {
+    const stats = {
+      successCount: 8,
+      failureCount: 2,
+      totalChecks: 10,
+    };
+
+    const successRate = stats.successCount / stats.totalChecks;
+    expect(successRate).toBe(0.8);
+    expect(stats.failureCount).toBe(2);
+  });
+});

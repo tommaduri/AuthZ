@@ -19,7 +19,10 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "bench": "vitest bench benchmarks/",
+    "bench:pipeline": "vitest bench benchmarks/agent-pipeline.bench.ts",
+    "bench:throughput": "vitest bench benchmarks/throughput.bench.ts"
   },
   "dependencies": {
     "@authz-engine/core": "workspace:*",

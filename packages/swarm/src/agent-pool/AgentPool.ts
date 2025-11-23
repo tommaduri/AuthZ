@@ -6,10 +6,12 @@
  * - Health monitoring
  * - Auto-scaling based on load
  * - Agent affinity and capability matching
+ * - Authorization agent coordination
  */
 
 import { EventEmitter } from 'eventemitter3';
 import type { SwarmAgent, SwarmAgentType, AgentStatus } from '../topology/types.js';
+import { AGENT_CAPABILITIES, AGENT_PRIORITY_WEIGHTS } from '../topology/types.js';
 import type {
   AgentPoolConfig,
   SpawnRequest,
@@ -19,7 +21,70 @@ import type {
   AgentPoolEvent,
   AgentPoolEventType,
   AgentFactory,
+  AgentLifecycleState,
+  AgentLifecycleEvent,
+  AgentTypeConfig,
+  ScalingRule,
 } from './types.js';
+
+/**
+ * Authorization Agent Type enumeration
+ *
+ * Defines the four core authorization agent types for distributed
+ * policy enforcement and consensus-based authorization decisions
+ */
+export enum AuthzAgentType {
+  GUARDIAN = 'GUARDIAN',
+  ANALYST = 'ANALYST',
+  ADVISOR = 'ADVISOR',
+  ENFORCER = 'ENFORCER',
+}
+
+/**
+ * Default configurations for each agent type
+ */
+export const DEFAULT_AGENT_TYPE_CONFIGS: Record<SwarmAgentType, AgentTypeConfig> = {
+  GUARDIAN: {
+    capabilities: AGENT_CAPABILITIES.GUARDIAN,
+    priorityWeight: AGENT_PRIORITY_WEIGHTS.GUARDIAN,
+    maxConcurrentTasks: 10,
+    warmupTimeMs: 500,
+    cooldownTimeMs: 1000,
+    supportedTaskTypes: ['authorization', 'threat-detection', 'policy-check'],
+  },
+  ANALYST: {
+    capabilities: AGENT_CAPABILITIES.ANALYST,
+    priorityWeight: AGENT_PRIORITY_WEIGHTS.ANALYST,
+    maxConcurrentTasks: 5,
+    warmupTimeMs: 1000,
+    cooldownTimeMs: 500,
+    supportedTaskTypes: ['analysis', 'risk-assessment', 'pattern-detection'],
+  },
+  ADVISOR: {
+    capabilities: AGENT_CAPABILITIES.ADVISOR,
+    priorityWeight: AGENT_PRIORITY_WEIGHTS.ADVISOR,
+    maxConcurrentTasks: 8,
+    warmupTimeMs: 200,
+    cooldownTimeMs: 300,
+    supportedTaskTypes: ['recommendation', 'optimization', 'compliance'],
+  },
+  ENFORCER: {
+    capabilities: AGENT_CAPABILITIES.ENFORCER,
+    priorityWeight: AGENT_PRIORITY_WEIGHTS.ENFORCER,
+    maxConcurrentTasks: 15,
+    warmupTimeMs: 100,
+    cooldownTimeMs: 500,
+    supportedTaskTypes: ['enforcement', 'rate-limit', 'block', 'allow'],
+  },
+  COORDINATOR: {
+    capabilities: AGENT_CAPABILITIES.COORDINATOR,
+    priorityWeight: AGENT_PRIORITY_WEIGHTS.COORDINATOR,
+    maxConcurrentTasks: 20,
+    warmupTimeMs: 1000,
+    cooldownTimeMs: 2000,
+    supportedTaskTypes: ['orchestration', 'consensus', 'failover'],
+  },
+};
 
 /**
  * Default agent factory that creates in-memory agents
@@ -73,6 +138,9 @@ export class DefaultAgentFactory implements AgentFactory {
 export class AgentPool extends EventEmitter {
   private agents: Map<string, SwarmAgent> = new Map();
   private healthStatus: Map<string, HealthCheckResult> = new Map();
+  private lifecycleStates: Map<string, AgentLifecycleState> = new Map();
+  private agentTaskCounts: Map<string, number> = new Map();
+  private scalingRules: Map<SwarmAgentType, ScalingRule> = new Map();
   private config: AgentPoolConfig;
   private factory: AgentFactory;
   private metrics: AgentPoolMetrics;
@@ -85,6 +153,38 @@ export class AgentPool extends EventEmitter {
     this.config = config;
     this.factory = factory ?? new DefaultAgentFactory();
     this.metrics = this.initializeMetrics();
+    this.initializeDefaultScalingRules();
+  }
+
+  /**
+   * Initialize default scaling rules for each agent type
+   */
+  private initializeDefaultScalingRules(): void {
+    const types: SwarmAgentType[] = ['GUARDIAN', 'ANALYST', 'ADVISOR', 'ENFORCER', 'COORDINATOR'];
+    for (const type of types) {
+      this.scalingRules.set(type, {
+        agentType: type,
+        minInstances: 1,
+        maxInstances: Math.ceil(this.config.maxAgents / types.length),
+        scaleUpLoadThreshold: 0.8,
+        scaleDownLoadThreshold: 0.2,
+        scaleUpQueueDepth: 10,
+      });
+    }
+  }
+
+  /**
+   * Set scaling rule for a specific agent type
+   */
+  setScalingRule(rule: ScalingRule): void {
+    this.scalingRules.set(rule.agentType, rule);
+  }
+
+  /**
+   * Get scaling rule for an agent type
+   */
+  getScalingRule(type: SwarmAgentType): ScalingRule | undefined {
+    return this.scalingRules.get(type);
   }
 
   private initializeMetrics(): AgentPoolMetrics {
@@ -242,6 +342,63 @@ export class AgentPool extends EventEmitter {
   }
 
   /**
+   * Get a single healthy agent by type with round-robin selection
+   *
+   * Prioritizes:
+   * 1. Healthy agents
+   * 2. Idle over busy
+   * 3. Lower load
+   *
+   * @param type Agent type to retrieve
+   * @returns Single agent of requested type, or undefined if none available
+   */
+  getAgentByType(type: SwarmAgentType): SwarmAgent | undefined {
+    const candidates = this.getAgentsByType(type)
+      .filter(a => {
+        const health = this.healthStatus.get(a.id);
+        return a.status !== 'dead' && a.status !== 'draining' &&
+               (!health || health.healthy);
+      })
+      .sort((a, b) => {
+        // Prefer idle over busy
+        if (a.status !== b.status) {
+          return a.status === 'idle' ? -1 : 1;
+        }
+        // Then by load (ascending - prefer lower load)
+        return a.load - b.load;
+      });
+
+    return candidates[0];
+  }
+
+  /**
+   * Get health status for all agents of a specific type
+   *
+   * @param type Agent type to check
+   * @returns Array of health check results for agents of this type
+   */
+  getHealthStatusByType(type: SwarmAgentType): HealthCheckResult[] {
+    const agents = this.getAgentsByType(type);
+    return agents
+      .map(a => this.healthStatus.get(a.id))
+      .filter((h): h is HealthCheckResult => h !== undefined);
+  }
+
+  /**
+   * Get healthy agent count by type
+   *
+   * @param type Agent type to count
+   * @returns Number of healthy agents of this type
+   */
+  getHealthyAgentCountByType(type: SwarmAgentType): number {
+    return this.getAgentsByType(type).filter(a => {
+      const health = this.healthStatus.get(a.id);
+      return a.status !== 'dead' && a.status !== 'draining' &&
+             (!health || health.healthy);
+    }).length;
+  }
+
+  /**
    * Get agents by status
    */
   getAgentsByStatus(status: AgentStatus): SwarmAgent[] {
@@ -321,6 +478,233 @@ export class AgentPool extends EventEmitter {
    */
   getHealthStatus(agentId: string): HealthCheckResult | undefined {
     return this.healthStatus.get(agentId);
+  }
+
+  /**
+   * Get lifecycle state for an agent
+   */
+  getLifecycleState(agentId: string): AgentLifecycleState | undefined {
+    return this.lifecycleStates.get(agentId);
+  }
+
+  /**
+   * Transition agent to a new lifecycle state
+   */
+  transitionLifecycle(agentId: string, newState: AgentLifecycleState, reason?: string): void {
+    const previousState = this.lifecycleStates.get(agentId) ?? 'initializing';
+    this.lifecycleStates.set(agentId, newState);
+
+    const event: AgentLifecycleEvent = {
+      agentId,
+      previousState,
+      newState,
+      timestamp: new Date(),
+      reason,
+    };
+
+    this.emit('lifecycleEvent', event);
+    this.emitEvent('agent_lifecycle_changed' as AgentPoolEventType, {
+      agentId,
+      previousState,
+      newState,
+      reason,
+    });
+  }
+
+  /**
+   * Get agents by lifecycle state
+   */
+  getAgentsByLifecycle(state: AgentLifecycleState): SwarmAgent[] {
+    return this.getAllAgents().filter(
+      agent => this.lifecycleStates.get(agent.id) === state
+    );
+  }
+
+  /**
+   * Warm up an agent (prepare for active use)
+   */
+  async warmupAgent(agentId: string): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!agent) return;
+
+    this.transitionLifecycle(agentId, 'warming_up', 'Starting warmup');
+
+    const config = DEFAULT_AGENT_TYPE_CONFIGS[agent.type];
+    await new Promise(resolve => setTimeout(resolve, config.warmupTimeMs));
+
+    this.transitionLifecycle(agentId, 'ready', 'Warmup complete');
+  }
+
+  /**
+   * Cool down an agent before recycling
+   */
+  async cooldownAgent(agentId: string): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!agent) return;
+
+    this.transitionLifecycle(agentId, 'cooling_down', 'Starting cooldown');
+
+    const config = DEFAULT_AGENT_TYPE_CONFIGS[agent.type];
+
+    // Wait for active tasks to complete or timeout
+    const taskCount = this.agentTaskCounts.get(agentId) ?? 0;
+    if (taskCount > 0) {
+      await new Promise(resolve => setTimeout(resolve, config.cooldownTimeMs));
+    }
+
+    this.transitionLifecycle(agentId, 'draining', 'Ready for recycling');
+  }
+
+  /**
+   * Increment task count for an agent
+   */
+  incrementTaskCount(agentId: string): number {
+    const current = this.agentTaskCounts.get(agentId) ?? 0;
+    const newCount = current + 1;
+    this.agentTaskCounts.set(agentId, newCount);
+
+    // Update lifecycle to active if it was ready
+    if (this.lifecycleStates.get(agentId) === 'ready') {
+      this.transitionLifecycle(agentId, 'active', 'Task assigned');
+    }
+
+    return newCount;
+  }
+
+  /**
+   * Decrement task count for an agent
+   */
+  decrementTaskCount(agentId: string): number {
+    const current = this.agentTaskCounts.get(agentId) ?? 0;
+    const newCount = Math.max(0, current - 1);
+    this.agentTaskCounts.set(agentId, newCount);
+
+    // Transition back to ready if no more tasks
+    if (newCount === 0 && this.lifecycleStates.get(agentId) === 'active') {
+      this.transitionLifecycle(agentId, 'ready', 'All tasks complete');
+    }
+
+    return newCount;
+  }
+
+  /**
+   * Get task count for an agent
+   */
+  getTaskCount(agentId: string): number {
+    return this.agentTaskCounts.get(agentId) ?? 0;
+  }
+
+  /**
+   * Check if agent can accept more tasks
+   */
+  canAcceptTask(agentId: string): boolean {
+    const agent = this.agents.get(agentId);
+    if (!agent) return false;
+
+    const lifecycle = this.lifecycleStates.get(agentId);
+    if (lifecycle !== 'ready' && lifecycle !== 'active') return false;
+
+    const config = DEFAULT_AGENT_TYPE_CONFIGS[agent.type];
+    const currentTasks = this.agentTaskCounts.get(agentId) ?? 0;
+
+    return currentTasks < config.maxConcurrentTasks;
+  }
+
+  /**
+   * Spawn agents by type distribution
+   */
+  async spawnByTypeDistribution(
+    distribution: Partial<Record<SwarmAgentType, number>>
+  ): Promise<SpawnResult[]> {
+    const results: SpawnResult[] = [];
+
+    for (const [type, count] of Object.entries(distribution)) {
+      const agentType = type as SwarmAgentType;
+      const config = DEFAULT_AGENT_TYPE_CONFIGS[agentType];
+
+      for (let i = 0; i < (count ?? 0); i++) {
+        if (this.agents.size >= this.config.maxAgents) break;
+
+        const result = await this.spawn({
+          type: agentType,
+          capabilities: config.capabilities,
+          priority: config.priorityWeight,
+        });
+
+        // Warm up the agent
+        await this.warmupAgent(result.agent.id);
+        results.push(result);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Get available capacity by agent type
+   */
+  getCapacityByType(): Record<SwarmAgentType, { current: number; available: number; max: number }> {
+    const capacity: Record<SwarmAgentType, { current: number; available: number; max: number }> = {
+      GUARDIAN: { current: 0, available: 0, max: 0 },
+      ANALYST: { current: 0, available: 0, max: 0 },
+      ADVISOR: { current: 0, available: 0, max: 0 },
+      ENFORCER: { current: 0, available: 0, max: 0 },
+      COORDINATOR: { current: 0, available: 0, max: 0 },
+    };
+
+    for (const agent of this.agents.values()) {
+      const config = DEFAULT_AGENT_TYPE_CONFIGS[agent.type];
+      const taskCount = this.agentTaskCounts.get(agent.id) ?? 0;
+
+      capacity[agent.type].current++;
+      capacity[agent.type].max += config.maxConcurrentTasks;
+      capacity[agent.type].available += config.maxConcurrentTasks - taskCount;
+    }
+
+    return capacity;
+  }
+
+  /**
+   * Apply type-based auto-scaling
+   */
+  async checkTypeBasedScaling(): Promise<void> {
+    const capacity = this.getCapacityByType();
+
+    for (const [type, rule] of this.scalingRules) {
+      const typeCapacity = capacity[type];
+      const utilization = typeCapacity.max > 0
+        ? 1 - (typeCapacity.available / typeCapacity.max)
+        : 0;
+
+      // Scale up if needed
+      if (utilization > rule.scaleUpLoadThreshold && typeCapacity.current < rule.maxInstances) {
+        await this.spawn({
+          type,
+          capabilities: DEFAULT_AGENT_TYPE_CONFIGS[type].capabilities,
+        });
+      }
+
+      // Scale down if needed
+      if (utilization < rule.scaleDownLoadThreshold && typeCapacity.current > rule.minInstances) {
+        const candidates = this.getAgentsByType(type)
+          .filter(a => this.canRecycle(a.id))
+          .sort((a, b) => (this.agentTaskCounts.get(a.id) ?? 0) - (this.agentTaskCounts.get(b.id) ?? 0));
+
+        if (candidates[0]) {
+          await this.cooldownAgent(candidates[0].id);
+          await this.recycle(candidates[0].id);
+        }
+      }
+    }
+  }
+
+  /**
+   * Check if agent can be recycled
+   */
+  private canRecycle(agentId: string): boolean {
+    const lifecycle = this.lifecycleStates.get(agentId);
+    const taskCount = this.agentTaskCounts.get(agentId) ?? 0;
+    return taskCount === 0 && lifecycle !== 'draining' && lifecycle !== 'terminated';
   }
 
   /**

@@ -19,7 +19,10 @@
     "test:unit": "vitest run --dir tests/unit",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "bench": "vitest bench benchmarks/",
+    "bench:cel": "vitest bench benchmarks/cel-evaluator.bench.ts",
+    "bench:engine": "vitest bench benchmarks/decision-engine.bench.ts"
   },
   "dependencies": {
     "cel-js": "^0.4.0",

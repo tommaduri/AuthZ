@@ -171,3 +171,90 @@ export interface AgentFactory {
    */
   healthCheck(agentId: string): Promise<HealthCheckResult>;
 }
+
+/**
+ * Agent lifecycle state
+ */
+export type AgentLifecycleState =
+  | 'initializing'
+  | 'ready'
+  | 'warming_up'
+  | 'active'
+  | 'cooling_down'
+  | 'draining'
+  | 'terminated';
+
+/**
+ * Agent lifecycle event
+ */
+export interface AgentLifecycleEvent {
+  agentId: string;
+  previousState: AgentLifecycleState;
+  newState: AgentLifecycleState;
+  timestamp: Date;
+  reason?: string;
+}
+
+/**
+ * Agent type-specific configuration
+ */
+export interface AgentTypeConfig {
+  /** Default capabilities for this agent type */
+  capabilities: string[];
+  /** Priority weight for load balancing */
+  priorityWeight: number;
+  /** Maximum concurrent tasks */
+  maxConcurrentTasks: number;
+  /** Warmup time in ms */
+  warmupTimeMs: number;
+  /** Cooldown time before recycling in ms */
+  cooldownTimeMs: number;
+  /** Task types this agent can handle */
+  supportedTaskTypes: string[];
+}
+
+/**
+ * Dynamic scaling rule
+ */
+export interface ScalingRule {
+  /** Agent type this rule applies to */
+  agentType: SwarmAgentType;
+  /** Minimum instances of this type */
+  minInstances: number;
+  /** Maximum instances of this type */
+  maxInstances: number;
+  /** Load threshold to trigger scale up */
+  scaleUpLoadThreshold: number;
+  /** Load threshold to trigger scale down */
+  scaleDownLoadThreshold: number;
+  /** Queue depth to trigger scale up */
+  scaleUpQueueDepth: number;
+}
+
+/**
+ * Work stealing configuration
+ */
+export interface WorkStealingConfig {
+  /** Enable work stealing */
+  enabled: boolean;
+  /** Load threshold below which agent can steal work */
+  stealThreshold: number;
+  /** Maximum tasks to steal at once */
+  maxStealCount: number;
+  /** Interval to check for stealing opportunities */
+  checkIntervalMs: number;
+}
+
+/**
+ * Sticky session configuration
+ */
+export interface StickySessionConfig {
+  /** Enable sticky sessions */
+  enabled: boolean;
+  /** Session affinity key extractor */
+  affinityKey: 'user' | 'resource' | 'tenant' | 'custom';
+  /** TTL for session affinity in ms */
+  affinityTtlMs: number;
+  /** Maximum sessions per agent */
+  maxSessionsPerAgent: number;
+}

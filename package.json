@@ -29,7 +29,12 @@
     "prepare": "husky install || true",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "pnpm build && changeset publish"
+    "release": "pnpm build && changeset publish",
+    "bench": "turbo run bench",
+    "bench:all": "npx tsx scripts/run-benchmarks.ts",
+    "bench:report": "npx tsx scripts/run-benchmarks.ts --output coverage/benchmark-report.json --verbose",
+    "bench:core": "pnpm --filter @authz-engine/core bench",
+    "bench:agents": "pnpm --filter @authz-engine/agents bench"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
