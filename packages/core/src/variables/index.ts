@@ -7,7 +7,7 @@
 export type {
   ExportVariables,
   ExportConstants,
-  PolicyVariables,
+  ExportPolicyVariables,
   CompiledVariableContext,
 } from './types';
 
@@ -35,5 +35,5 @@ export {
   DuplicateExportError,
   UnknownExportError,
   ValidationError,
-  CircularDependencyError,
+  VariableCircularDependencyError,
 } from './errors';

@@ -43,11 +43,12 @@ export class ValidationError extends VariableError {
 }
 
 /**
- * Error thrown when circular dependency is detected
+ * Error thrown when circular dependency is detected in variable exports
+ * Note: Renamed to avoid conflict with derived-roles/types.ts
  */
-export class CircularDependencyError extends VariableError {
+export class VariableCircularDependencyError extends VariableError {
   constructor(cycle: string[]) {
-    super(`Circular dependency detected: ${cycle.join(' -> ')}`);
-    this.name = 'CircularDependencyError';
+    super(`Circular dependency detected in variable exports: ${cycle.join(' -> ')}`);
+    this.name = 'VariableCircularDependencyError';
   }
 }

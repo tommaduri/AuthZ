@@ -3,7 +3,7 @@
  * Handles import resolution, local overrides, and precedence rules
  */
 
-import type { PolicyVariables, CompiledVariableContext } from './types';
+import type { ExportPolicyVariables, CompiledVariableContext } from './types';
 import { ExportRegistry } from './registry';
 import { ExpressionCache } from './cache';
 import { UnknownExportError } from './errors';
@@ -32,7 +32,7 @@ export class VariableResolver {
    * @returns Compiled variable context
    * @throws {UnknownExportError} if import references unknown export
    */
-  resolve(policyVariables: PolicyVariables): CompiledVariableContext {
+  resolve(policyVariables: ExportPolicyVariables): CompiledVariableContext {
     const variables = new Map<string, string>();
     const constants = new Map<string, unknown>();
     const imports: string[] = [];
