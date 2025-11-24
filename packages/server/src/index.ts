@@ -1,6 +1,7 @@
 import { DecisionEngine } from '@authz-engine/core';
 import { GrpcServer } from './grpc/server';
 import { RestServer } from './rest/server';
+import { WebSocketServer } from './websocket';
 import { PolicyLoader } from './policy/loader';
 import { Logger } from './utils/logger';
 import {
@@ -24,6 +25,8 @@ async function main(): Promise<void> {
     policyDir: process.env.POLICY_DIR || './policies',
     restPort: parseInt(process.env.REST_PORT || '3592', 10),
     grpcPort: parseInt(process.env.GRPC_PORT || '3593', 10),
+    wsPort: parseInt(process.env.WS_PORT || '3594', 10),
+    wsEnabled: process.env.WS_ENABLED !== 'false',
     watchPolicies: process.env.WATCH_POLICIES !== 'false',
     agenticEnabled: process.env.AGENTIC_ENABLED !== 'false',
     // Agent-specific config
@@ -118,9 +121,35 @@ async function main(): Promise<void> {
   const grpcServer = new GrpcServer(engine, logger, orchestrator);
   await grpcServer.start(config.grpcPort);
 
+  // Start WebSocket server (if enabled)
+  let wsServer: WebSocketServer | undefined;
+  if (config.wsEnabled) {
+    wsServer = new WebSocketServer(engine, logger, orchestrator, {
+      port: config.wsPort,
+      path: '/ws',
+      requireAuth: false,
+      heartbeatInterval: 30000,
+      clientTimeout: 60000,
+    });
+    await wsServer.start(config.wsPort);
+
+    // Connect policy loader to WebSocket for real-time updates
+    policyLoader.onPolicyChange((event) => {
+      wsServer?.notifyPolicyUpdate(
+        event.type,
+        event.policyName,
+        event.resourceKind,
+        event.summary,
+      );
+    });
+  }
+
   logger.info('AuthZ Engine Server started');
   logger.info(`  REST API: http://localhost:${config.restPort}`);
   logger.info(`  gRPC:     localhost:${config.grpcPort}`);
+  if (wsServer) {
+    logger.info(`  WebSocket: ws://localhost:${config.wsPort}/ws`);
+  }
   logger.info(`  Health:   http://localhost:${config.restPort}/health`);
   if (orchestrator) {
     logger.info(`  Agentic:  http://localhost:${config.restPort}/v1/agents/health`);
@@ -133,6 +162,10 @@ async function main(): Promise<void> {
     if (orchestrator) {
       logger.info('Shutting down AgentOrchestrator...');
       await orchestrator.shutdown();
+    }
+    if (wsServer) {
+      logger.info('Shutting down WebSocket server...');
+      await wsServer.stop();
     }
     await restServer.stop();
     await grpcServer.stop();
@@ -155,4 +188,13 @@ export { GrpcServer } from './grpc/server';
 export { RestServer } from './rest/server';
 export { PolicyLoader } from './policy/loader';
 export { Logger } from './utils/logger';
+export { WebSocketServer, WebSocketHandlers } from './websocket';
+export type {
+  WebSocketServerConfig,
+  WebSocketMessage,
+  ClientConnection,
+  Subscription,
+  SubscriptionOptions,
+  ConnectionStats,
+} from './websocket';
 export type { AgentOrchestrator, OrchestratorConfig } from '@authz-engine/agents';

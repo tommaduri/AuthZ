@@ -7,6 +7,21 @@ import { DecisionEngine, PolicyParser, ValidatedResourcePolicy, ValidatedDerived
 import { Logger } from '../utils/logger';
 
 /**
+ * Policy change event
+ */
+export interface PolicyChangeEvent {
+  type: 'added' | 'modified' | 'removed';
+  policyName: string;
+  resourceKind?: string;
+  summary: string;
+}
+
+/**
+ * Policy change callback type
+ */
+export type PolicyChangeCallback = (event: PolicyChangeEvent) => void;
+
+/**
  * Policy Loader
  *
  * Loads policies from the filesystem and optionally watches for changes.
@@ -17,12 +32,33 @@ export class PolicyLoader {
   private logger: Logger;
   private watcher?: chokidar.FSWatcher;
   private policyDir: string;
+  private changeCallbacks: PolicyChangeCallback[] = [];
 
   constructor(engine: DecisionEngine, logger: Logger, policyDir: string) {
     this.engine = engine;
     this.parser = new PolicyParser();
     this.logger = logger;
     this.policyDir = policyDir;
+  }
+
+  /**
+   * Register a callback for policy change events
+   */
+  onPolicyChange(callback: PolicyChangeCallback): void {
+    this.changeCallbacks.push(callback);
+  }
+
+  /**
+   * Notify all registered callbacks of a policy change
+   */
+  private notifyPolicyChange(event: PolicyChangeEvent): void {
+    for (const callback of this.changeCallbacks) {
+      try {
+        callback(event);
+      } catch (error) {
+        this.logger.error('Error in policy change callback', error);
+      }
+    }
   }
 
   /**
@@ -121,13 +157,59 @@ export class PolicyLoader {
       return;
     }
 
-    this.logger.info(`Policy ${event}: ${path.basename(filePath)}`);
+    const fileName = path.basename(filePath);
+    this.logger.info(`Policy ${event}: ${fileName}`);
+
+    // Determine event type for notification
+    let eventType: 'added' | 'modified' | 'removed';
+    switch (event) {
+      case 'add':
+        eventType = 'added';
+        break;
+      case 'change':
+        eventType = 'modified';
+        break;
+      case 'unlink':
+        eventType = 'removed';
+        break;
+      default:
+        eventType = 'modified';
+    }
+
+    // Try to extract policy info for the notification
+    let policyName = fileName;
+    let resourceKind: string | undefined;
+
+    if (event !== 'unlink') {
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const parsed = filePath.endsWith('.json')
+          ? JSON.parse(content)
+          : parseYaml(content);
+        if (parsed?.metadata?.name) {
+          policyName = parsed.metadata.name;
+        }
+        if (parsed?.spec?.resource) {
+          resourceKind = parsed.spec.resource;
+        }
+      } catch {
+        // Ignore parse errors, use filename
+      }
+    }
 
     // Reload all policies (simple but effective)
     // For production, could implement incremental updates
     try {
       await this.loadAll();
       this.logger.info('Policies reloaded successfully');
+
+      // Notify callbacks
+      this.notifyPolicyChange({
+        type: eventType,
+        policyName,
+        resourceKind,
+        summary: `Policy ${policyName} was ${eventType}`,
+      });
     } catch (error) {
       this.logger.error('Failed to reload policies', error);
     }

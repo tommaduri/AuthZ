@@ -15,3 +15,9 @@ export * from './telemetry';
 
 // Audit logging
 export * from './audit';
+
+// Rate limiting
+export * from './rate-limiting';
+
+// Quota management
+export * from './quota';
