@@ -76,10 +76,12 @@ type CheckRequest struct {
 
 // CacheKey generates a cache key for this request
 func (r *CheckRequest) CacheKey() string {
-	key := fmt.Sprintf("%s:%s:%s:%s",
+	key := fmt.Sprintf("%s:%s:%s:%s:%s:%s",
 		r.Principal.ID,
+		r.Principal.Scope,
 		r.Resource.Kind,
 		r.Resource.ID,
+		r.Resource.Scope,
 		strings.Join(r.Actions, ","),
 	)
 	hash := sha256.Sum256([]byte(key))

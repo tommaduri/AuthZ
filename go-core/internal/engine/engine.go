@@ -256,11 +256,17 @@ func (e *Engine) findPoliciesWithScope(requestScope, resourceKind string, action
 		ScopedPolicyMatched: false,
 	}
 
-	// If no scope, use global policies
+	// If no scope, use ONLY global policies (filter out scoped policies)
 	if requestScope == "" {
-		policies := e.store.FindPolicies(resourceKind, actions)
+		allPolicies := e.store.FindPolicies(resourceKind, actions)
+		globalPolicies := make([]*types.Policy, 0, len(allPolicies))
+		for _, p := range allPolicies {
+			if p.Scope == "" {
+				globalPolicies = append(globalPolicies, p)
+			}
+		}
 		scopeResult.MatchedScope = "(global)"
-		return policies, scopeResult
+		return globalPolicies, scopeResult
 	}
 
 	// Build scope chain (most to least specific)
@@ -284,10 +290,16 @@ func (e *Engine) findPoliciesWithScope(requestScope, resourceKind string, action
 		}
 	}
 
-	// Fall back to global policies
-	policies := e.store.FindPolicies(resourceKind, actions)
+	// Fall back to ONLY global policies (filter out scoped policies)
+	allPolicies := e.store.FindPolicies(resourceKind, actions)
+	globalPolicies := make([]*types.Policy, 0, len(allPolicies))
+	for _, p := range allPolicies {
+		if p.Scope == "" {
+			globalPolicies = append(globalPolicies, p)
+		}
+	}
 	scopeResult.MatchedScope = "(global)"
-	return policies, scopeResult
+	return globalPolicies, scopeResult
 }
 
 // defaultResponse creates a response when no policies match (backwards compatibility)
