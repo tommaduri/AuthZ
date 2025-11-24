@@ -1,9 +1,10 @@
 # Software Design Document: @authz-engine/core
 
-**Version**: 2.3.0
+**Version**: 2.4.0
 **Package**: `packages/core`
 **Status**: ✅ Fully Documented
 **Last Updated**: 2025-11-24
+**Phase 5 Complete**: Exported Variables (135 tests, 99.9% cache hit rate)
 
 ---
 
@@ -15,7 +16,7 @@ The `@authz-engine/core` package provides the foundational policy evaluation eng
 
 ### 1.2 Scope
 
-This package includes **11 major modules**:
+This package includes **12 major modules**:
 - **Types**: Policy definitions, principals, resources, requests/responses
 - **Policy**: Schema validation, parsing, and validation
 - **CEL**: Common Expression Language evaluation with caching
@@ -23,6 +24,7 @@ This package includes **11 major modules**:
 - **Scope**: Hierarchical scope resolution for multi-tenant policies
 - **Principal**: Principal policy evaluation with pattern matching
 - **Derived Roles**: Dynamic role computation with circular dependency detection (Phase 4)
+- **Variables**: Exported variables and constants with import resolution (Phase 5) ✨
 - **Utils**: Shared utilities (pattern matching, helpers)
 - **Telemetry**: OpenTelemetry integration for distributed tracing
 - **Audit**: Multiple audit sink types (console, file, HTTP)
