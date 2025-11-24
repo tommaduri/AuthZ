@@ -93,7 +93,7 @@ func NewRedisCache(config *RedisConfig) (*RedisCache, error) {
 			DB:           config.DB,
 			PoolSize:     config.PoolSize,
 			PoolTimeout:  config.PoolTimeout,
-			IdleTimeout:  config.IdleTimeout,
+			// IdleTimeout removed in redis v9.5.0+ (use ConnMaxIdleTime instead if needed)
 			ReadTimeout:  config.ReadTimeout,
 			WriteTimeout: config.WriteTimeout,
 			DialTimeout:  config.DialTimeout,
@@ -198,8 +198,8 @@ func (c *RedisCache) Stats() Stats {
 	}
 
 	// Get size info from Redis
-	info := c.client.Info(c.ctx, "memory").Val()
-	// Parse memory info if needed, for now return estimate
+	_ = c.client.Info(c.ctx, "memory").Val() // Reserved for future memory parsing
+	// Use DBSize for now
 	size := 0
 	if dbSize, err := c.client.DBSize(c.ctx).Result(); err == nil {
 		size = int(dbSize)

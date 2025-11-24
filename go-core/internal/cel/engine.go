@@ -69,19 +69,27 @@ func NewEngine() (*Engine, error) {
 				),
 			),
 		),
-		cel.Functions(
-			&cel.Decl{
-				Name: "hasRole",
-				Impl: &hasRoleImpl{},
-			},
-			&cel.Decl{
-				Name: "isOwner",
-				Impl: &isOwnerImpl{},
-			},
-			&cel.Decl{
-				Name: "inList",
-				Impl: &inListImpl{},
-			},
+		// Bind custom function implementations
+		cel.Function("hasRole",
+			cel.Overload("hasRole_map_string",
+				[]*cel.Type{cel.MapType(cel.StringType, cel.DynType), cel.StringType},
+				cel.BoolType,
+				cel.BinaryBinding(hasRoleBinding),
+			),
+		),
+		cel.Function("isOwner",
+			cel.Overload("isOwner_map_map",
+				[]*cel.Type{cel.MapType(cel.StringType, cel.DynType), cel.MapType(cel.StringType, cel.DynType)},
+				cel.BoolType,
+				cel.BinaryBinding(isOwnerBinding),
+			),
+		),
+		cel.Function("inList",
+			cel.Overload("inList_string_list",
+				[]*cel.Type{cel.StringType, cel.ListType(cel.StringType)},
+				cel.BoolType,
+				cel.BinaryBinding(inListBinding),
+			),
 		),
 	)
 	if err != nil {
@@ -153,21 +161,16 @@ func (e *Engine) ClearCache() {
 	e.programs = sync.Map{}
 }
 
-// Custom function implementations
+// Custom function binding implementations for cel-go v0.20+
 
-type hasRoleImpl struct{}
-
-func (h *hasRoleImpl) Impl(args ...ref.Val) ref.Val {
-	if len(args) != 2 {
-		return types.NewErr("hasRole requires 2 arguments")
-	}
-
-	principalMap, ok := args[0].Value().(map[string]interface{})
+// hasRoleBinding checks if a principal has a specific role
+func hasRoleBinding(lhs, rhs ref.Val) ref.Val {
+	principalMap, ok := lhs.Value().(map[string]interface{})
 	if !ok {
 		return types.False
 	}
 
-	role, ok := args[1].Value().(string)
+	role, ok := rhs.Value().(string)
 	if !ok {
 		return types.False
 	}
@@ -193,19 +196,14 @@ func (h *hasRoleImpl) Impl(args ...ref.Val) ref.Val {
 	return types.False
 }
 
-type isOwnerImpl struct{}
-
-func (o *isOwnerImpl) Impl(args ...ref.Val) ref.Val {
-	if len(args) != 2 {
-		return types.NewErr("isOwner requires 2 arguments")
-	}
-
-	principalMap, ok := args[0].Value().(map[string]interface{})
+// isOwnerBinding checks if a principal owns a resource
+func isOwnerBinding(lhs, rhs ref.Val) ref.Val {
+	principalMap, ok := lhs.Value().(map[string]interface{})
 	if !ok {
 		return types.False
 	}
 
-	resourceMap, ok := args[1].Value().(map[string]interface{})
+	resourceMap, ok := rhs.Value().(map[string]interface{})
 	if !ok {
 		return types.False
 	}
@@ -229,22 +227,17 @@ func (o *isOwnerImpl) Impl(args ...ref.Val) ref.Val {
 	return types.False
 }
 
-type inListImpl struct{}
-
-func (i *inListImpl) Impl(args ...ref.Val) ref.Val {
-	if len(args) != 2 {
-		return types.NewErr("inList requires 2 arguments")
-	}
-
-	value, ok := args[0].Value().(string)
+// inListBinding checks if a value is in a list
+func inListBinding(lhs, rhs ref.Val) ref.Val {
+	value, ok := lhs.Value().(string)
 	if !ok {
 		return types.False
 	}
 
-	list, ok := args[1].Value().([]interface{})
+	list, ok := rhs.Value().([]interface{})
 	if !ok {
 		// Try string slice
-		if strList, ok := args[1].Value().([]string); ok {
+		if strList, ok := rhs.Value().([]string); ok {
 			for _, item := range strList {
 				if item == value {
 					return types.True
