@@ -1,11 +1,11 @@
 # Derived Roles - Software Design Document
 
 **Module**: `@authz-engine/core`
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Status**: Specification
 **Author**: AuthZ Engine Team
 **Created**: 2024-11-23
-**Last Updated**: 2024-11-23
+**Last Updated**: 2025-11-24
 **Reviewers**: TBD
 
 ---
@@ -210,7 +210,105 @@ Derived roles bridge the gap between static RBAC and dynamic ABAC/ReBAC:
    └─────────────────────────────────────────────┘
 ```
 
-### 3.4 Circular Dependency Detection
+### 3.4 Wildcard Parent Roles (Cerbos Parity)
+
+#### 3.4.1 Overview
+
+The `parentRoles` field supports a wildcard value (`*`) that matches **any role**. This enables derived roles that apply to all authenticated users regardless of their base roles.
+
+#### 3.4.2 Syntax
+
+```yaml
+# Wildcard matches any role
+- name: document_viewer
+  parentRoles: ["*"]
+  condition:
+    match:
+      expr: R.attr.visibility == "public"
+
+# Mixed: specific roles OR wildcard
+- name: team_member
+  parentRoles: ["user", "guest", "*"]  # "*" makes others redundant
+  condition:
+    match:
+      expr: P.id in R.attr.teamMembers
+```
+
+#### 3.4.3 Use Cases
+
+| Pattern | Use Case | Example |
+|---------|----------|---------|
+| `["*"]` | Universal access conditions | Public document viewing |
+| `["user"]` | Standard authenticated users | Document ownership |
+| `["admin", "super_admin"]` | Multiple specific roles | Elevated privileges |
+| `["*"]` + condition | Attribute-based universal | Same organization access |
+
+#### 3.4.4 Implementation
+
+```typescript
+// From resolveDerivedRoles (line 385-387)
+const hasParentRole = definition.parentRoles.some(
+  parent => baseRoles.has(parent) || parent === '*'
+);
+
+// Optimized Set-based lookup (line 870)
+function matchesParentRole(
+  definition: CompiledDerivedRole,
+  principalRoles: Set<string>
+): boolean {
+  // Wildcard matches any principal
+  if (definition.parentRolesSet.has('*')) {
+    return true;
+  }
+  // Check for specific role match
+  for (const role of principalRoles) {
+    if (definition.parentRolesSet.has(role)) {
+      return true;
+    }
+  }
+  return false;
+}
+```
+
+#### 3.4.5 Examples
+
+```yaml
+# Public document access - any authenticated user
+- name: public_viewer
+  parentRoles: ["*"]
+  condition:
+    match:
+      expr: R.attr.isPublic == true
+
+# Organization member - any role in same org
+- name: org_member
+  parentRoles: ["*"]
+  condition:
+    match:
+      expr: P.attr.orgId == R.attr.orgId
+
+# Emergency access - any admin-level role
+- name: emergency_accessor
+  parentRoles: ["admin", "super_admin", "ops"]
+  condition:
+    match:
+      all:
+        of:
+          - expr: request.auxData.emergency == true
+          - expr: now().getHours() < 6 || now().getHours() > 22
+```
+
+#### 3.4.6 Security Considerations
+
+| Risk | Mitigation |
+|------|------------|
+| Overly permissive wildcards | Always require conditions with `*` |
+| Unintended grants | Audit all `["*"]` usage |
+| Role escalation | Conditions still enforced after wildcard match |
+
+---
+
+### 3.5 Circular Dependency Detection
 
 Derived roles can reference other derived roles. The system must detect cycles:
 
@@ -1137,6 +1235,7 @@ spec:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2025-11-24 | Added Section 3.4: Wildcard Parent Roles (`*`) documentation |
 | 1.0.0 | 2024-11-23 | Initial specification |
 
 ---

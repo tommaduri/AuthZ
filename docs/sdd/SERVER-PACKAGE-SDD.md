@@ -1,9 +1,9 @@
 # Software Design Document: @authz-engine/server
 
-**Version**: 2.0.0
+**Version**: 2.1.0
 **Package**: `packages/server`
 **Status**: ✅ Fully Documented
-**Last Updated**: 2024-11-24
+**Last Updated**: 2025-11-24
 
 ---
 
@@ -546,6 +546,132 @@ The server maintains wire-level compatibility with Cerbos for core endpoints:
 'EFFECT_DENY'  → 'deny'
 ```
 
+### 5.3 Request Limits (Cerbos Parity)
+
+#### 5.3.1 Overview
+
+The server supports configurable request limits to prevent abuse and ensure fair resource usage. These limits are enforced at the middleware layer before policy evaluation.
+
+#### 5.3.2 Configuration
+
+```typescript
+interface RequestLimitsConfig {
+  /** Maximum actions per single check request */
+  maxActionsPerCheck: number;          // Default: 50
+
+  /** Maximum resources per batch request */
+  maxResourcesPerBatch: number;        // Default: 50
+
+  /** Maximum request body size in bytes */
+  maxRequestBodySize: number;          // Default: 1MB (1048576)
+
+  /** Maximum concurrent requests per client */
+  maxConcurrentRequests?: number;      // Default: 100
+
+  /** Request timeout in milliseconds */
+  requestTimeoutMs?: number;           // Default: 30000 (30s)
+}
+```
+
+#### 5.3.3 Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MAX_ACTIONS_PER_CHECK` | Maximum actions in single check | 50 |
+| `MAX_RESOURCES_PER_BATCH` | Maximum resources in batch | 50 |
+| `MAX_REQUEST_BODY_SIZE` | Maximum body size (bytes) | 1048576 |
+| `REQUEST_TIMEOUT_MS` | Request timeout | 30000 |
+
+#### 5.3.4 Error Responses
+
+| Condition | Status | Response |
+|-----------|--------|----------|
+| Actions exceed limit | 400 | `{ error: "Too many actions", max: 50, received: N }` |
+| Resources exceed limit | 400 | `{ error: "Too many resources", max: 50, received: N }` |
+| Body too large | 413 | `{ error: "Request body too large" }` |
+| Timeout | 408 | `{ error: "Request timeout" }` |
+
+#### 5.3.5 Implementation
+
+```typescript
+// Middleware validation
+fastify.addHook('preHandler', async (request, reply) => {
+  const body = request.body as CheckRequestBody;
+
+  if (body.actions && body.actions.length > config.maxActionsPerCheck) {
+    return reply.status(400).send({
+      error: 'Too many actions',
+      max: config.maxActionsPerCheck,
+      received: body.actions.length,
+    });
+  }
+});
+```
+
+### 5.4 cerbosCallId (Request Correlation)
+
+#### 5.4.1 Overview
+
+Every request processed by the server is assigned a unique `cerbosCallId` for tracing and correlation. This ID is included in all responses and logs for debugging and audit purposes.
+
+#### 5.4.2 Generation
+
+```typescript
+// UUID v4 generation for each request
+const cerbosCallId = request.headers['x-request-id']
+  ?? request.headers['x-cerbos-call-id']
+  ?? crypto.randomUUID();
+```
+
+#### 5.4.3 Request Headers
+
+| Header | Description |
+|--------|-------------|
+| `X-Request-Id` | Client-provided request ID (preferred) |
+| `X-Cerbos-Call-Id` | Alternative Cerbos-compatible header |
+
+#### 5.4.4 Response Headers
+
+| Header | Description |
+|--------|-------------|
+| `X-Cerbos-Call-Id` | Server-assigned or echoed call ID |
+
+#### 5.4.5 Response Body
+
+```json
+{
+  "requestId": "client-provided-id",
+  "cerbosCallId": "550e8400-e29b-41d4-a716-446655440000",
+  "results": { ... },
+  "meta": {
+    "evaluationDurationMs": 2,
+    "policiesEvaluated": ["document:v1"]
+  }
+}
+```
+
+#### 5.4.6 Logging Integration
+
+```typescript
+// All log entries include cerbosCallId
+logger.info({
+  cerbosCallId,
+  principal: request.body.principal.id,
+  resource: request.body.resource.kind,
+  action: request.body.actions[0],
+}, 'Processing authorization request');
+```
+
+#### 5.4.7 Use Cases
+
+| Use Case | How cerbosCallId Helps |
+|----------|------------------------|
+| Request tracing | Correlate logs across services |
+| Audit trail | Link decisions to audit records |
+| Debugging | Find specific request in logs |
+| Support tickets | Reference unique request ID |
+| Distributed tracing | Propagate to downstream calls |
+
 ---
 
 ## 6. Error Handling
@@ -787,5 +913,6 @@ spec:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.1.0 | 2025-11-24 | Added Section 5.3: Request Limits, Section 5.4: cerbosCallId |
 | 2.0.0 | 2024-11-24 | Full documentation of all 30+ endpoints, WebSocket, middleware |
 | 1.0.0 | 2024-11-23 | Initial release with REST server |

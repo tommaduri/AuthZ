@@ -1,8 +1,8 @@
 # CEL Evaluator - System Design Document
 
 **Module**: `@authz-engine/core/cel`
-**Version**: 0.1.0
-**Last Updated**: 2024-11-23
+**Version**: 0.2.0
+**Last Updated**: 2025-11-24
 **Author**: Aegis Authorization Engine Team
 
 ---
@@ -269,6 +269,120 @@ Examples:
 - "5m"   -> 300000ms (5 minutes)
 - "2h"   -> 7200000ms (2 hours)
 - "1d"   -> 86400000ms (1 day)
+```
+
+### 5.6 Condition Operators (Cerbos Parity)
+
+AuthZ Engine supports Cerbos-compatible condition operators for combining multiple CEL expressions.
+
+#### 5.6.1 Operator Types
+
+| Operator | Cerbos Syntax | Description | Implementation Status |
+|----------|---------------|-------------|----------------------|
+| `all.of` | `match.all.of` | All expressions must be true (AND) | ❌ P1 Gap |
+| `any.of` | `match.any.of` | At least one expression must be true (OR) | ❌ P1 Gap |
+| `none.of` | `match.none.of` | No expressions may be true (NOT ANY) | ❌ P1 Gap |
+| Single `expr` | `condition.match.expr` | Single CEL expression | ✅ Implemented |
+
+#### 5.6.2 Policy Syntax
+
+```yaml
+# Single expression (currently supported)
+rules:
+  - actions: ["read"]
+    effect: EFFECT_ALLOW
+    condition:
+      match:
+        expr: "resource.ownerId == principal.id"
+
+# all.of - All conditions must be true (P1 implementation)
+rules:
+  - actions: ["delete"]
+    effect: EFFECT_ALLOW
+    condition:
+      match:
+        all:
+          of:
+            - expr: "resource.ownerId == principal.id"
+            - expr: "resource.status != 'archived'"
+            - expr: "principal.department == 'admin'"
+
+# any.of - At least one condition must be true (P1 implementation)
+rules:
+  - actions: ["read"]
+    effect: EFFECT_ALLOW
+    condition:
+      match:
+        any:
+          of:
+            - expr: '"admin" in principal.roles'
+            - expr: "resource.ownerId == principal.id"
+            - expr: "resource.visibility == 'public'"
+
+# none.of - No conditions may be true (P1 implementation)
+rules:
+  - actions: ["access"]
+    effect: EFFECT_DENY
+    condition:
+      match:
+        none:
+          of:
+            - expr: "resource.status == 'deleted'"
+            - expr: "principal.suspended == true"
+```
+
+#### 5.6.3 Nested Operators
+
+Operators can be nested for complex conditions:
+
+```yaml
+condition:
+  match:
+    all:
+      of:
+        - expr: "resource.status == 'active'"
+        - any:
+            of:
+              - expr: '"admin" in principal.roles'
+              - expr: "resource.ownerId == principal.id"
+```
+
+#### 5.6.4 Implementation Design
+
+```typescript
+interface ConditionMatch {
+  /** Single CEL expression */
+  expr?: string;
+  /** All conditions must be true */
+  all?: { of: ConditionMatch[] };
+  /** At least one condition must be true */
+  any?: { of: ConditionMatch[] };
+  /** No conditions may be true */
+  none?: { of: ConditionMatch[] };
+}
+
+class ConditionEvaluator {
+  evaluateCondition(match: ConditionMatch, context: EvaluationContext): boolean {
+    if (match.expr) {
+      return this.celEvaluator.evaluateBoolean(match.expr, context);
+    }
+
+    if (match.all) {
+      return match.all.of.every(m => this.evaluateCondition(m, context));
+    }
+
+    if (match.any) {
+      return match.all.of.some(m => this.evaluateCondition(m, context));
+    }
+
+    if (match.none) {
+      return !match.none.of.some(m => this.evaluateCondition(m, context));
+    }
+
+    // No condition = always true
+    return true;
+  }
+}
 ```
 
 ---
