@@ -42,6 +42,8 @@ export interface PolicyMetadata {
   version?: string;
   /** Labels for organization */
   labels?: Record<string, string>;
+  /** Hierarchical scope using dot notation (e.g., "acme.corp.engineering") */
+  scope?: string;
 }
 
 export interface PolicyCondition {
@@ -228,4 +230,46 @@ export interface PlanResourcesResponse {
     /** Condition expression (if conditional) */
     condition?: string;
   };
+}
+
+// =============================================================================
+// Scoped Policy Types
+// =============================================================================
+
+/** Scope context for scoped check requests */
+export interface ScopeContext {
+  /** Scope of the requesting principal (e.g., their tenant) */
+  principal?: string;
+  /** Scope of the resource being accessed */
+  resource?: string;
+}
+
+/** Extended CheckRequest with scope context */
+export interface ScopedCheckRequest extends CheckRequest {
+  scope?: ScopeContext;
+}
+
+/** Scope resolution details in response */
+export interface ScopeResolutionInfo {
+  /** Effective scope used for policy lookup */
+  effectiveScope: string;
+  /** Chain of scopes checked */
+  inheritanceChain: string[];
+  /** Whether a scoped policy was found */
+  scopedPolicyMatched: boolean;
+}
+
+/** Extended CheckResponse with scope information */
+export interface ScopedCheckResponse extends CheckResponse {
+  scopeResolution?: ScopeResolutionInfo;
+}
+
+/** Result of scope resolution process */
+export interface ScopeResolutionResult {
+  /** The scope that matched (or "(global)" for unscoped) */
+  matchedScope: string;
+  /** The effective policy to apply (ResourcePolicy with validated metadata) */
+  effectivePolicy: ResourcePolicy | null;
+  /** Scopes checked during resolution */
+  inheritanceChain: string[];
 }

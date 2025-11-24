@@ -7,6 +7,9 @@ export * from './policy';
 // CEL expression evaluation
 export * from './cel';
 
+// Scope resolution
+export * from './scope';
+
 // Decision engine
 export * from './engine';
 

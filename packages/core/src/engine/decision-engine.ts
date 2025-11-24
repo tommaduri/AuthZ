@@ -6,8 +6,12 @@ import type {
   Principal,
   Resource,
   Effect,
+  ScopedCheckRequest,
+  ScopedCheckResponse,
+  ScopeResolutionInfo,
 } from '../types';
 import type { ValidatedResourcePolicy, ValidatedDerivedRolesPolicy } from '../policy/schema';
+import { ScopeResolver } from '../scope';
 import {
   createAuthzCheckSpan,
   createCelEvaluateSpan,
@@ -126,6 +130,8 @@ export class DecisionEngine {
   private derivedRolesPolicies: ValidatedDerivedRolesPolicy[];
   private auditLogger?: AuditLogger;
   private auditEnabled: boolean;
+  private scopedResourcePolicies: Map<string, ValidatedResourcePolicy[]>;
+  private scopeResolver: ScopeResolver;
 
   constructor(config: DecisionEngineConfig = {}) {
     this.celEvaluator = new CelEvaluator();
@@ -133,6 +139,8 @@ export class DecisionEngine {
     this.derivedRolesPolicies = [];
     this.auditLogger = config.auditLogger;
     this.auditEnabled = config.auditEnabled ?? (config.auditLogger !== undefined);
+    this.scopedResourcePolicies = new Map();
+    this.scopeResolver = new ScopeResolver();
   }
 
   /**
@@ -175,6 +183,162 @@ export class DecisionEngine {
   clearPolicies(): void {
     this.resourcePolicies.clear();
     this.derivedRolesPolicies = [];
+    this.scopedResourcePolicies.clear();
+  }
+
+  /**
+   * Load scoped resource policies
+   * Policies with metadata.scope are stored separately from global policies
+   */
+  loadScopedResourcePolicies(policies: ValidatedResourcePolicy[]): void {
+    for (const policy of policies) {
+      const scope = policy.metadata.scope || '(global)';
+      const resourceKind = policy.spec.resource;
+      const key = `${scope}:${resourceKind}`;
+
+      const existing = this.scopedResourcePolicies.get(key) || [];
+      existing.push(policy);
+      this.scopedResourcePolicies.set(key, existing);
+    }
+  }
+
+  /**
+   * Check authorization with scope context
+   * Uses ScopeResolver to find matching policies with inheritance support
+   */
+  checkWithScope(request: ScopedCheckRequest, parentSpan?: Span): ScopedCheckResponse {
+    const startTime = Date.now();
+    const requestId = request.requestId || `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    // Compute effective scope (empty string means global)
+    const computedScope = this.scopeResolver.computeEffectiveScope(
+      request.scope?.principal,
+      request.scope?.resource,
+    );
+    const effectiveScope = computedScope || '(global)';
+
+    // Build inheritance chain (including global at the end for fallback)
+    const baseChain = this.scopeResolver.buildInheritanceChain(
+      effectiveScope === '(global)' ? undefined : effectiveScope,
+    );
+    const inheritanceChain = [...baseChain, '(global)'];
+
+    // Find matching scoped policy
+    const scopeResolution = this.scopeResolver.findMatchingPolicy(
+      this.scopedResourcePolicies,
+      request.resource.kind,
+      effectiveScope,
+    );
+
+    // Get policies to evaluate
+    let policies: ValidatedResourcePolicy[];
+    let scopedPolicyMatched = false;
+
+    if (scopeResolution.effectivePolicy) {
+      // Use the scoped policy
+      const key = scopeResolution.matchedScope === '(global)'
+        ? `(global):${request.resource.kind}`
+        : `${scopeResolution.matchedScope}:${request.resource.kind}`;
+      policies = this.scopedResourcePolicies.get(key) || [];
+      scopedPolicyMatched = scopeResolution.matchedScope !== '(global)';
+    } else {
+      // Fall back to global resource policies (loaded via loadResourcePolicies)
+      policies = this.resourcePolicies.get(request.resource.kind) || [];
+    }
+
+    // Create span for this check
+    const span = createAuthzCheckSpan({ ...request, requestId }, parentSpan);
+
+    try {
+      const results: Record<string, ActionResult> = {};
+      const policiesEvaluated: string[] = [];
+
+      // Compute derived roles
+      const derivedRolesSpan = createDerivedRolesSpan(span);
+      const derivedRoles = this.computeDerivedRoles(request.principal, request.resource, request.auxData);
+      recordDerivedRoles(derivedRolesSpan, derivedRoles);
+      derivedRolesSpan.end();
+
+      addSpanAttributes(span, {
+        'authz.num_policies': policies.length,
+        'authz.effective_scope': effectiveScope,
+        'authz.scoped_policy_matched': scopedPolicyMatched,
+      });
+
+      // Evaluate each action
+      for (const action of request.actions) {
+        const result = this.evaluateAction(
+          action,
+          request.principal,
+          request.resource,
+          derivedRoles,
+          policies,
+          request.auxData,
+          span,
+        );
+
+        results[action] = result;
+
+        if (result.policy && !policiesEvaluated.includes(result.policy)) {
+          policiesEvaluated.push(result.policy);
+        }
+      }
+
+      const scopeResolutionInfo: ScopeResolutionInfo = {
+        effectiveScope,
+        inheritanceChain,
+        scopedPolicyMatched,
+      };
+
+      const response: ScopedCheckResponse = {
+        requestId,
+        results,
+        meta: {
+          evaluationDurationMs: Date.now() - startTime,
+          policiesEvaluated,
+        },
+        scopeResolution: scopeResolutionInfo,
+      };
+
+      recordDecisionOutcome(span, response);
+      span.end();
+
+      // Log decision
+      this.logDecision(request, response, requestId);
+
+      return response;
+    } catch (error) {
+      setSpanError(span, error instanceof Error ? error : new Error(String(error)));
+      span.end();
+      throw error;
+    }
+  }
+
+  /**
+   * Get policies for a specific scope
+   * If resourceKind is not specified, returns all policies for that scope
+   */
+  getPoliciesForScope(scope: string, resourceKind?: string): ValidatedResourcePolicy[] {
+    if (resourceKind) {
+      const key = `${scope}:${resourceKind}`;
+      return this.scopedResourcePolicies.get(key) || [];
+    }
+
+    // Return all policies for the scope (any resource kind)
+    const policies: ValidatedResourcePolicy[] = [];
+    for (const [key, policyList] of this.scopedResourcePolicies.entries()) {
+      if (key.startsWith(`${scope}:`)) {
+        policies.push(...policyList);
+      }
+    }
+    return policies;
+  }
+
+  /**
+   * Get all registered scopes
+   */
+  getRegisteredScopes(): string[] {
+    return this.scopeResolver.extractScopes(this.scopedResourcePolicies);
   }
 
   /**

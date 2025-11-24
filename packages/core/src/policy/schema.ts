@@ -20,6 +20,8 @@ const PolicyMetadataSchema = z.object({
   description: z.string().optional(),
   version: z.string().optional(),
   labels: z.record(z.string()).optional(),
+  /** Hierarchical scope using dot notation (e.g., "acme.corp.engineering") */
+  scope: z.string().optional(),
 });
 
 // =============================================================================
