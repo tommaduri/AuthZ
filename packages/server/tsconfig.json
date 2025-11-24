@@ -7,5 +7,5 @@
     "noUnusedParameters": false
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "exclude": ["node_modules", "dist", "tests", "src/websocket/__tests__/websocket-client.test.ts"]
 }
