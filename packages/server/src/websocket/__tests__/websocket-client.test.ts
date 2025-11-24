@@ -7,6 +7,13 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+// Type definition for CloseEvent (not available in Node.js)
+interface CloseEvent {
+  code: number;
+  reason: string;
+  wasClean?: boolean;
+}
+
 // Mock WebSocket
 class MockWebSocket {
   static CONNECTING = 0;

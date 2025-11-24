@@ -5,9 +5,10 @@
  * subscriptions, real-time checks, and policy updates.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { WebSocket } from 'ws';
-import { WebSocketServer } from '../index';
+// WebSocketServer imported but only used in mocks
+// import { WebSocketServer } from '../index';
 import { WebSocketHandlers } from '../handlers';
 import type {
   WebSocketMessage,
@@ -84,8 +85,10 @@ function generateMessageId(): string {
 
 describe('WebSocketHandlers', () => {
   let handlers: WebSocketHandlers;
-  let mockEngine: ReturnType<typeof vi.fn>;
-  let mockLogger: ReturnType<typeof vi.fn>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockEngine: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockLogger: any;
 
   beforeEach(async () => {
     const { DecisionEngine } = await import('@authz-engine/core');
