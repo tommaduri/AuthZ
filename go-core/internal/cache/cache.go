@@ -184,3 +184,57 @@ func (c *LRU) Cleanup() int {
 
 	return removed
 }
+
+// CacheType defines the type of cache to use
+type CacheType string
+
+const (
+	// LRUCache uses only local LRU cache
+	LRUCache CacheType = "lru"
+	// RedisCache uses only Redis distributed cache
+	RedisOnly CacheType = "redis"
+	// HybridCache uses both LRU and Redis
+	HybridCacheType CacheType = "hybrid"
+)
+
+// NewCache creates a cache based on the specified type and configuration
+func NewCache(cacheType CacheType, config interface{}) (Cache, error) {
+	switch cacheType {
+	case LRUCache:
+		cfg, ok := config.(map[string]interface{})
+		if !ok {
+			return NewLRU(10000, 5*time.Minute), nil
+		}
+		capacity := 10000
+		ttl := 5 * time.Minute
+		if c, ok := cfg["capacity"].(int); ok {
+			capacity = c
+		}
+		if t, ok := cfg["ttl"].(time.Duration); ok {
+			ttl = t
+		}
+		return NewLRU(capacity, ttl), nil
+
+	case RedisOnly:
+		redisCfg, ok := config.(*RedisConfig)
+		if !ok {
+			redisCfg = DefaultRedisConfig()
+		}
+		return NewRedisCache(redisCfg)
+
+	case HybridCacheType:
+		hybridCfg, ok := config.(*HybridCacheConfig)
+		if !ok {
+			hybridCfg = &HybridCacheConfig{
+				L1Capacity: 10000,
+				L1TTL:      1 * time.Minute,
+				L2Enabled:  true,
+				L2Config:   DefaultRedisConfig(),
+			}
+		}
+		return NewHybridCache(hybridCfg)
+
+	default:
+		return NewLRU(10000, 5*time.Minute), nil
+	}
+}

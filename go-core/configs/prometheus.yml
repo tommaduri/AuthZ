@@ -1,13 +1,40 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    monitor: 'authz-engine'
 
 scrape_configs:
+  # Authorization server metrics
   - job_name: 'authz-server'
     static_configs:
-      - targets: ['authz-server:8080']
+      - targets: ['localhost:8080']
     metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_labels: true
 
+  # Health checks
+  - job_name: 'authz-server-health'
+    static_configs:
+      - targets: ['localhost:8080']
+    metrics_path: '/health'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Redis (optional)
   - job_name: 'redis'
     static_configs:
       - targets: ['redis:6379']
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+# Alerting rules (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files (optional)
+rule_files: []
+  # - "authz_alerts.yml"

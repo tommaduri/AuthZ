@@ -50,12 +50,15 @@ coverage:
 lint:
 	golangci-lint run ./...
 
-# Proto generation (requires buf)
+# Proto generation (supports both buf and manual protoc)
 proto:
-	buf generate
+	@command -v buf >/dev/null 2>&1 && buf generate || ./scripts/generate-proto.sh
 
 proto-lint:
-	buf lint
+	@command -v buf >/dev/null 2>&1 && buf lint || echo "buf not installed, skipping lint"
+
+proto-generate-manual:
+	./scripts/generate-proto.sh
 
 # Dependencies
 deps:

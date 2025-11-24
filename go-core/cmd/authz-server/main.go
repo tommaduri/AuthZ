@@ -2,8 +2,11 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -27,7 +30,8 @@ var (
 func main() {
 	// Parse command line flags
 	var (
-		port            = flag.Int("port", 50051, "gRPC server port")
+		grpcPort        = flag.Int("grpc-port", 50051, "gRPC server port")
+		httpPort        = flag.Int("http-port", 8080, "HTTP server port for health/metrics")
 		cacheEnabled    = flag.Bool("cache", true, "Enable decision cache")
 		cacheSize       = flag.Int("cache-size", 100000, "Maximum cache entries")
 		cacheTTL        = flag.Duration("cache-ttl", 5*time.Minute, "Cache TTL")
@@ -37,6 +41,7 @@ func main() {
 		showVersion     = flag.Bool("version", false, "Show version information")
 		policyDir       = flag.String("policy-dir", "", "Directory to load policies from")
 		enableReflect   = flag.Bool("reflection", true, "Enable gRPC reflection")
+		gracefulTimeout = flag.Duration("shutdown-timeout", 30*time.Second, "Graceful shutdown timeout")
 	)
 	flag.Parse()
 
@@ -58,7 +63,8 @@ func main() {
 
 	logger.Info("Starting authorization server",
 		zap.String("version", Version),
-		zap.Int("port", *port),
+		zap.Int("grpc_port", *grpcPort),
+		zap.Int("http_port", *httpPort),
 	)
 
 	// Initialize policy store
@@ -92,34 +98,86 @@ func main() {
 
 	// Initialize gRPC server
 	srvConfig := server.Config{
-		Port:             *port,
+		Port:             *grpcPort,
 		EnableReflection: *enableReflect,
 	}
 
-	srv, err := server.New(srvConfig, eng, logger)
+	grpcSrv, err := server.New(srvConfig, eng, logger)
 	if err != nil {
-		logger.Fatal("Failed to create server", zap.Error(err))
+		logger.Fatal("Failed to create gRPC server", zap.Error(err))
 	}
 
-	// Start server in goroutine
-	errChan := make(chan error, 1)
-	go func() {
-		errChan <- srv.Start()
-	}()
+	// Create metrics and health handlers
+	metricsCollector := server.NewMetricsCollector()
+	metricsHandler := server.NewMetricsHandler(metricsCollector)
 
-	// Wait for shutdown signal
+	// Create minimal engine for health checks
+	healthEngine := &server.Engine{
+		cacheEnabled: *cacheEnabled,
+	}
+	healthHandler := server.NewHealthHandler(healthEngine, logger)
+
+	// Initialize HTTP mux for health/metrics
+	httpMux := http.NewServeMux()
+	server.RegisterHealthHandlers(httpMux, healthHandler)
+	server.RegisterMetricsHandlers(httpMux, metricsHandler)
+
+	// Create HTTP server
+	httpSrv := &http.Server{
+		Addr:         fmt.Sprintf(":%d", *httpPort),
+		Handler:      httpMux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Channels for error handling
+	errChan := make(chan error, 2)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	// Start gRPC server
+	go func() {
+		logger.Info("Starting gRPC server", zap.Int("port", *grpcPort))
+		errChan <- grpcSrv.Start()
+	}()
+
+	// Start HTTP server for health/metrics
+	go func() {
+		logger.Info("Starting HTTP server for health/metrics", zap.Int("port", *httpPort))
+		errChan <- httpSrv.ListenAndServe()
+	}()
+
+	// Wait for shutdown signal or error
 	select {
 	case err := <-errChan:
-		logger.Fatal("Server error", zap.Error(err))
+		if err != http.ErrServerClosed {
+			logger.Fatal("Server error", zap.Error(err))
+		}
 	case sig := <-sigChan:
 		logger.Info("Received shutdown signal", zap.String("signal", sig.String()))
-		srv.Stop()
+
+		// Graceful shutdown context
+		ctx, cancel := context.WithTimeout(context.Background(), *gracefulTimeout)
+		defer cancel()
+
+		// Mark as not ready to stop accepting new requests
+		healthHandler.SetReady(false)
+		logger.Info("Server marked as not ready for new requests")
+
+		// Give in-flight requests time to complete
+		time.Sleep(5 * time.Second)
+
+		// Stop gRPC server
+		logger.Info("Stopping gRPC server")
+		grpcSrv.Stop()
+
+		// Stop HTTP server
+		logger.Info("Stopping HTTP server")
+		httpSrv.Shutdown(ctx)
 	}
 
-	logger.Info("Server stopped")
+	logger.Info("Server stopped successfully")
 }
 
 // initLogger initializes the zap logger

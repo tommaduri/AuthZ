@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -17,15 +18,19 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/authz-engine/go-core/internal/engine"
+	"github.com/authz-engine/go-core/internal/policy"
 	"github.com/authz-engine/go-core/pkg/types"
 )
 
 // Server is the gRPC authorization server
 type Server struct {
-	engine     *engine.Engine
-	grpcServer *grpc.Server
-	logger     *zap.Logger
-	config     Config
+	engine         *engine.Engine
+	grpcServer     *grpc.Server
+	logger         *zap.Logger
+	config         Config
+	policyWatcher  *policy.FileWatcher
+	reloadMu       sync.RWMutex
+	lastReloadTime time.Time
 }
 
 // Config configures the gRPC server
@@ -46,6 +51,10 @@ type Config struct {
 	KeepaliveTimeout time.Duration
 	// EnableReflection enables gRPC reflection for debugging
 	EnableReflection bool
+	// PolicyDirPath is the path to watch for policy file changes (optional)
+	PolicyDirPath string
+	// EnablePolicyWatcher enables automatic policy hot-reload (optional)
+	EnablePolicyWatcher bool
 }
 
 // DefaultConfig returns default server configuration
@@ -146,7 +155,152 @@ func (s *Server) Start() error {
 // Stop gracefully stops the gRPC server
 func (s *Server) Stop() {
 	s.logger.Info("Stopping gRPC server")
+
+	// Stop policy watcher if running
+	if s.policyWatcher != nil && s.policyWatcher.IsWatching() {
+		if err := s.policyWatcher.Stop(); err != nil {
+			s.logger.Error("Error stopping policy watcher", zap.Error(err))
+		}
+	}
+
 	s.grpcServer.GracefulStop()
+}
+
+// EnablePolicyWatcher starts watching for policy file changes
+func (s *Server) EnablePolicyWatcher(ctx context.Context, pollingPath string) error {
+	if s.policyWatcher != nil {
+		return fmt.Errorf("policy watcher is already enabled")
+	}
+
+	// Get the memory store from the engine
+	memStore, ok := s.engine.GetPolicyStore().(*policy.MemoryStore)
+	if !ok {
+		return fmt.Errorf("policy watcher requires a MemoryStore implementation")
+	}
+
+	// Create loader and watcher
+	loader := policy.NewLoader(s.logger)
+	watcher, err := policy.NewFileWatcher(pollingPath, memStore, loader, s.logger)
+	if err != nil {
+		return fmt.Errorf("failed to create policy watcher: %w", err)
+	}
+
+	// Start watching
+	if err := watcher.Watch(ctx); err != nil {
+		return fmt.Errorf("failed to start policy watcher: %w", err)
+	}
+
+	// Monitor reload events in a background goroutine
+	go s.handleReloadEvents(watcher.EventChan())
+
+	s.policyWatcher = watcher
+	s.logger.Info("Policy watcher enabled",
+		zap.String("path", pollingPath),
+	)
+
+	return nil
+}
+
+// handleReloadEvents processes policy reload events from the watcher
+func (s *Server) handleReloadEvents(eventChan <-chan policy.ReloadedEvent) {
+	for event := range eventChan {
+		if event.Error != nil {
+			s.logger.Error("Policy reload failed",
+				zap.Time("timestamp", event.Timestamp),
+				zap.Error(event.Error),
+			)
+			continue
+		}
+
+		s.reloadMu.Lock()
+		s.lastReloadTime = event.Timestamp
+		s.reloadMu.Unlock()
+
+		s.logger.Info("Policies reloaded successfully",
+			zap.Time("timestamp", event.Timestamp),
+			zap.Int("count", len(event.PolicyIDs)),
+			zap.Strings("policies", event.PolicyIDs),
+		)
+	}
+}
+
+// ReloadPolicies manually triggers a policy reload
+func (s *Server) ReloadPolicies(ctx context.Context) error {
+	if s.policyWatcher == nil {
+		return fmt.Errorf("policy watcher is not enabled")
+	}
+
+	// Trigger reload by the watcher's performReload method
+	// For now, we'll reload by reading from the filesystem directly
+	memStore, ok := s.engine.GetPolicyStore().(*policy.MemoryStore)
+	if !ok {
+		return fmt.Errorf("policy store is not a MemoryStore")
+	}
+
+	loader := policy.NewLoader(s.logger)
+	reloadPath := s.policyWatcher.pollingPath
+
+	// Load all policies
+	policies, err := loader.LoadFromDirectory(reloadPath)
+	if err != nil {
+		s.logger.Error("Failed to reload policies",
+			zap.String("path", reloadPath),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	// Validate all policies
+	validator := policy.NewValidator()
+	for _, p := range policies {
+		if err := validator.ValidatePolicy(p); err != nil {
+			s.logger.Error("Policy validation failed",
+				zap.String("policy", p.Name),
+				zap.Error(err),
+			)
+			return err
+		}
+	}
+
+	// Clear and reload policies
+	memStore.Clear()
+	policyNames := make([]string, 0, len(policies))
+	for _, p := range policies {
+		if err := memStore.Add(p); err != nil {
+			s.logger.Error("Failed to add policy",
+				zap.String("policy", p.Name),
+				zap.Error(err),
+			)
+			return err
+		}
+		policyNames = append(policyNames, p.Name)
+	}
+
+	s.reloadMu.Lock()
+	s.lastReloadTime = time.Now()
+	s.reloadMu.Unlock()
+
+	s.logger.Info("Policies reloaded manually",
+		zap.Int("count", len(policies)),
+		zap.Strings("policies", policyNames),
+	)
+
+	return nil
+}
+
+// GetLastReloadTime returns the last time policies were reloaded
+func (s *Server) GetLastReloadTime() time.Time {
+	s.reloadMu.RLock()
+	defer s.reloadMu.RUnlock()
+	return s.lastReloadTime
+}
+
+// IsPolicyWatcherRunning returns true if the policy watcher is active
+func (s *Server) IsPolicyWatcherRunning() bool {
+	if s.policyWatcher == nil {
+		return false
+	}
+	return s.policyWatcher.IsWatching()
 }
 
 // Check implements the Check RPC method

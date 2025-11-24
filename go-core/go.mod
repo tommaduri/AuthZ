@@ -3,7 +3,9 @@ module github.com/authz-engine/go-core
 go 1.22
 
 require (
+	github.com/fsnotify/fsnotify v1.7.0
 	github.com/google/cel-go v0.20.1
+	github.com/redis/go-redis/v9 v9.5.0
 	google.golang.org/grpc v1.62.1
 	google.golang.org/protobuf v1.33.0
 	go.uber.org/zap v1.27.0
