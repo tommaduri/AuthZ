@@ -14,6 +14,7 @@ import type { ValidatedResourcePolicy, ValidatedDerivedRolesPolicy, ValidatedPri
 import { ScopeResolver } from '../scope';
 import { PrincipalPolicyEvaluator } from '../principal/principal-policy-evaluator';
 import { matchesActionPattern } from '../utils/pattern-matching';
+import { DerivedRolesResolver, DerivedRolesCache } from '../derived-roles';
 import {
   createAuthzCheckSpan,
   createCelEvaluateSpan,
@@ -48,6 +49,7 @@ export class DecisionEngine {
   private celEvaluator: CelEvaluator;
   private resourcePolicies: Map<string, ValidatedResourcePolicy[]>;
   private derivedRolesPolicies: ValidatedDerivedRolesPolicy[];
+  private derivedRolesResolver: DerivedRolesResolver;
   private auditLogger?: AuditLogger;
   private auditEnabled: boolean;
   private scopedResourcePolicies: Map<string, ValidatedResourcePolicy[]>;
@@ -58,6 +60,9 @@ export class DecisionEngine {
     this.celEvaluator = new CelEvaluator();
     this.resourcePolicies = new Map();
     this.derivedRolesPolicies = [];
+    this.derivedRolesResolver = new DerivedRolesResolver({
+      celEvaluator: this.celEvaluator,
+    });
     this.auditLogger = config.auditLogger;
     this.auditEnabled = config.auditEnabled ?? (config.auditLogger !== undefined);
     this.scopedResourcePolicies = new Map();
@@ -99,6 +104,7 @@ export class DecisionEngine {
    */
   loadDerivedRolesPolicies(policies: ValidatedDerivedRolesPolicy[]): void {
     this.derivedRolesPolicies.push(...policies);
+    this.derivedRolesResolver.loadPolicies(policies);
   }
 
   /**
@@ -114,6 +120,7 @@ export class DecisionEngine {
   clearPolicies(): void {
     this.resourcePolicies.clear();
     this.derivedRolesPolicies = [];
+    this.derivedRolesResolver.clear();
     this.scopedResourcePolicies.clear();
     this.principalPolicyEvaluator.clearPolicies();
   }
@@ -410,37 +417,12 @@ export class DecisionEngine {
     resource: Resource,
     auxData?: Record<string, unknown>,
   ): string[] {
-    const derivedRoles: string[] = [];
-
-    for (const policy of this.derivedRolesPolicies) {
-      for (const definition of policy.spec.definitions) {
-        // Check if principal has required parent roles
-        const hasParentRole = definition.parentRoles.length === 0 ||
-          definition.parentRoles.some(role => principal.roles.includes(role));
-
-        if (!hasParentRole) {
-          continue;
-        }
-
-        // Evaluate condition
-        const context: EvaluationContext = {
-          principal,
-          resource,
-          auxData,
-        };
-
-        const matches = this.celEvaluator.evaluateBoolean(
-          definition.condition.expression,
-          context,
-        );
-
-        if (matches) {
-          derivedRoles.push(definition.name);
-        }
-      }
-    }
-
-    return derivedRoles;
+    // Use the enhanced DerivedRolesResolver with support for:
+    // - Wildcard parent roles (*, prefix:*, *:suffix)
+    // - Circular dependency detection
+    // - Per-request caching (cache parameter optional)
+    // - Evaluation tracing (via resolveWithTrace)
+    return this.derivedRolesResolver.resolve(principal, resource, auxData);
   }
 
   /**

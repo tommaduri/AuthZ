@@ -13,6 +13,9 @@ export * from './scope';
 // Principal policy evaluation
 export * from './principal';
 
+// Derived roles
+export * from './derived-roles';
+
 // Decision engine
 export * from './engine';
 

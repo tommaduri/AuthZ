@@ -293,19 +293,23 @@ export class CelEvaluator {
   private buildEvalContext(context: EvaluationContext): Record<string, unknown> {
     const now = context.now ?? new Date();
 
+    const principalData = {
+      id: context.principal.id,
+      roles: context.principal.roles,
+      attr: context.principal.attributes,
+    };
+
+    const resourceData = {
+      kind: context.resource.kind,
+      id: context.resource.id,
+      attr: context.resource.attributes,
+    };
+
     return {
       // Cerbos-style request object
       request: {
-        principal: {
-          id: context.principal.id,
-          roles: context.principal.roles,
-          attr: context.principal.attributes,
-        },
-        resource: {
-          kind: context.resource.kind,
-          id: context.resource.id,
-          attr: context.resource.attributes,
-        },
+        principal: principalData,
+        resource: resourceData,
         auxData: context.auxData ?? {},
       },
 
@@ -320,6 +324,11 @@ export class CelEvaluator {
         id: context.resource.id,
         ...context.resource.attributes,
       },
+
+      // Shorthand variables (P, R, A)
+      P: principalData,
+      R: resourceData,
+      A: context.auxData ?? {},
 
       // Variables section (for auxData)
       variables: context.auxData ?? {},

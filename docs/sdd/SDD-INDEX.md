@@ -1,9 +1,9 @@
 # AuthZ Engine - System Design Documents Master Index
 
-**Version**: 2.3.0
-**Last Updated**: 2024-11-24
+**Version**: 2.4.0
+**Last Updated**: 2025-11-24
 **Document Type**: Master Navigation Index
-**Total SDDs**: 43 Documents (1 newly implemented)
+**Total SDDs**: 43 Documents (1 newly implemented: Derived Roles)
 **Total ADRs**: 9 Documents
 
 ---
@@ -514,7 +514,7 @@ External Systems                     AuthZ Engine                    Clients
 |----------|----------|--------|---------|-------|--------------|
 | **Core Foundation** | | | | | |
 | | CORE-ARCHITECTURE-SDD | SPEC | 0.1.0 | 732 | 2024-11-23 |
-| | CORE-PACKAGE-SDD | ✅ **COMPLETE** | 2.1.0 | 1100+ | 2025-11-24 |
+| | CORE-PACKAGE-SDD | ✅ **COMPLETE** | 2.3.0 | 1250+ | 2025-11-24 |
 | | CEL-EVALUATOR-SDD | DONE | 0.1.0 | 546 | 2024-11-23 |
 | | TYPES-REFERENCE-SDD | DONE | 0.1.0 | 685 | 2024-11-23 |
 | | GO-CORE-SDD | DRAFT | 1.0.0 | 1050 | 2024-11-23 |
@@ -531,7 +531,7 @@ External Systems                     AuthZ Engine                    Clients
 | | MULTI-LANGUAGE-SDK-SDD | DONE | 1.0.0 | 3460 | 2024-11-23 |
 | | OIDC-OAUTH-INTEGRATION-SDD | DONE | 1.0.0 | 2728 | 2024-11-23 |
 | **Policy Features** | | | | | |
-| | DERIVED-ROLES-SDD | DONE | 1.0.0 | 1144 | 2024-11-23 |
+| | DERIVED-ROLES-SDD | ✅ **IMPLEMENTED** | 1.2.0 | 1300+ | 2025-11-24 |
 | | PRINCIPAL-POLICIES-SDD | ✅ **IMPLEMENTED** | 1.1.0 | 1095+ | 2024-11-24 |
 | | SCOPED-POLICIES-SDD | ✅ **IMPLEMENTED** | 1.1.0 | 1250+ | 2024-11-24 |
 | | EXPORTED-VARIABLES-SDD | DONE | 1.0.0 | 1039 | 2024-11-23 |
@@ -1012,6 +1012,7 @@ Every SDD follows this structure (defined in [SDD-FRAMEWORK](./SDD-FRAMEWORK.md)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.4.0 | 2025-11-24 | **Phase 4 Complete**: DERIVED-ROLES-SDD status to IMPLEMENTED (11 modules: derived-roles with resolver, cache, validator), CORE-PACKAGE-SDD to v2.3.0. 524 LOC, 84 tests, Kahn's algorithm, wildcard patterns, per-request caching, 10x performance improvement. |
 | 2.3.0 | 2024-11-24 | **Phase 3 Complete**: PRINCIPAL-POLICIES-SDD status to IMPLEMENTED (10 modules: principal, utils), CORE-PACKAGE-SDD to v2.2.0 |
 | 2.2.0 | 2024-11-24 | Updated SCOPED-POLICIES-SDD status to IMPLEMENTED, CORE-PACKAGE-SDD to v2.1.0 (added scope module) |
 | 2.1.0 | 2025-11-24 | Added SDD-FEATURE-MAPPING cross-reference, updated SDD/ADR counts to 43/9, added implementation status summary |
