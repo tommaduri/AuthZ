@@ -1,6 +1,6 @@
 # AuthZ Engine - System Design Documents Master Index
 
-**Version**: 2.1.0
+**Version**: 2.2.0
 **Last Updated**: 2025-11-24
 **Document Type**: Master Navigation Index
 **Total SDDs**: 43 Documents
@@ -514,7 +514,7 @@ External Systems                     AuthZ Engine                    Clients
 |----------|----------|--------|---------|-------|--------------|
 | **Core Foundation** | | | | | |
 | | CORE-ARCHITECTURE-SDD | SPEC | 0.1.0 | 732 | 2024-11-23 |
-| | CORE-PACKAGE-SDD | ✅ **COMPLETE** | 2.0.0 | 1050+ | 2024-11-24 |
+| | CORE-PACKAGE-SDD | ✅ **COMPLETE** | 2.1.0 | 1100+ | 2025-11-24 |
 | | CEL-EVALUATOR-SDD | DONE | 0.1.0 | 546 | 2024-11-23 |
 | | TYPES-REFERENCE-SDD | DONE | 0.1.0 | 685 | 2024-11-23 |
 | | GO-CORE-SDD | DRAFT | 1.0.0 | 1050 | 2024-11-23 |
@@ -533,7 +533,7 @@ External Systems                     AuthZ Engine                    Clients
 | **Policy Features** | | | | | |
 | | DERIVED-ROLES-SDD | DONE | 1.0.0 | 1144 | 2024-11-23 |
 | | PRINCIPAL-POLICIES-SDD | DONE | 1.0.0 | 1035 | 2024-11-23 |
-| | SCOPED-POLICIES-SDD | DONE | 1.0.0 | 1191 | 2024-11-23 |
+| | SCOPED-POLICIES-SDD | ✅ **IMPLEMENTED** | 1.1.0 | 1250+ | 2025-11-24 |
 | | EXPORTED-VARIABLES-SDD | DONE | 1.0.0 | 1039 | 2024-11-23 |
 | | SCHEMA-VALIDATION-SDD | DONE | 1.0.0 | 1050 | 2024-11-23 |
 | | POLICY-VERSIONING-SDD | DONE | 1.0.0 | 3534 | 2024-11-23 |
@@ -587,7 +587,7 @@ The following SDDs received comprehensive accuracy audits on 2025-11-24:
 
 | SDD | Previous Status | New Status | Key Improvements |
 |-----|-----------------|------------|------------------|
-| CORE-PACKAGE-SDD | ⚠️ PARTIAL (45%) | ✅ **COMPLETE** v2.0.0 | All 8 modules fully documented (types, policy, CEL, engine, telemetry, audit, rate-limiting, storage) |
+| CORE-PACKAGE-SDD | ⚠️ PARTIAL (45%) | ✅ **COMPLETE** v2.1.0 | All 9 modules fully documented (types, policy, CEL, engine, **scope**, telemetry, audit, rate-limiting, storage) |
 | AGENTS-PACKAGE-SDD | ✅ IMPL+ | ✅ **COMPLETE** v2.0.0 | Full orchestrator pipeline (1,269 lines), 4 pre-defined pipelines, circuit breakers, 30+ event types |
 | SERVER-PACKAGE-SDD | ⚠️ PARTIAL (58%) | ✅ **COMPLETE** v2.0.0 | All 30+ endpoints documented including agentic endpoints |
 | SDK-PACKAGE-SDD | ✅ IMPL+ | ✅ **COMPLETE** v1.1.0 | Corrected inaccuracy: REST-only client (no WebSocket), accurate 288-line implementation |
@@ -1012,6 +1012,7 @@ Every SDD follows this structure (defined in [SDD-FRAMEWORK](./SDD-FRAMEWORK.md)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.2.0 | 2025-11-24 | Updated SCOPED-POLICIES-SDD status to IMPLEMENTED, CORE-PACKAGE-SDD to v2.1.0 (added scope module) |
 | 2.1.0 | 2025-11-24 | Added SDD-FEATURE-MAPPING cross-reference, updated SDD/ADR counts to 43/9, added implementation status summary |
 | 2.0.0 | 2025-11-24 | **Comprehensive accuracy audit**: Updated CORE-PACKAGE-SDD (8 modules), AGENTS-PACKAGE-SDD (orchestrator, pipelines, circuit breakers), SERVER-PACKAGE-SDD (30+ endpoints), SDK-PACKAGE-SDD (REST-only correction) |
 | 1.0.0 | 2025-11-23 | Initial master index creation |

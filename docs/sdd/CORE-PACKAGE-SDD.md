@@ -1,9 +1,9 @@
 # Software Design Document: @authz-engine/core
 
-**Version**: 2.0.0
+**Version**: 2.1.0
 **Package**: `packages/core`
 **Status**: ✅ Fully Documented
-**Last Updated**: 2024-11-24
+**Last Updated**: 2025-11-24
 
 ---
 
@@ -15,11 +15,12 @@ The `@authz-engine/core` package provides the foundational policy evaluation eng
 
 ### 1.2 Scope
 
-This package includes **8 major modules**:
+This package includes **9 major modules**:
 - **Types**: Policy definitions, principals, resources, requests/responses
 - **Policy**: Schema validation, parsing, and validation
 - **CEL**: Common Expression Language evaluation with caching
 - **Engine**: Decision engine with deny-overrides algorithm
+- **Scope**: Hierarchical scope resolution for multi-tenant policies
 - **Telemetry**: OpenTelemetry integration for distributed tracing
 - **Audit**: Multiple audit sink types (console, file, HTTP)
 - **Rate Limiting**: Token bucket and sliding window algorithms
@@ -31,20 +32,24 @@ This package includes **8 major modules**:
 ```
 packages/core/
 ├── src/
-│   ├── index.ts                    # Package exports (all 8 modules)
+│   ├── index.ts                    # Package exports (all 9 modules)
 │   ├── types/
 │   │   ├── index.ts               # Type exports
 │   │   └── policy.types.ts        # All type definitions
 │   ├── policy/
 │   │   ├── index.ts               # Policy exports
 │   │   ├── parser.ts              # YAML/JSON policy parser
-│   │   └── schema.ts              # Zod schema validation
+│   │   └── schema.ts              # Zod schema validation (includes scope field)
 │   ├── cel/
 │   │   ├── index.ts               # CEL exports
 │   │   └── evaluator.ts           # CelEvaluator class (~556 lines)
+│   ├── scope/
+│   │   ├── index.ts               # Scope exports
+│   │   ├── types.ts               # Scope types and interfaces
+│   │   └── scope-resolver.ts      # ScopeResolver class (~553 lines)
 │   ├── engine/
 │   │   ├── index.ts               # Engine exports
-│   │   └── decision-engine.ts     # DecisionEngine class (~376 lines)
+│   │   └── decision-engine.ts     # DecisionEngine class (~450 lines, includes scope resolution)
 │   ├── telemetry/
 │   │   ├── index.ts               # Telemetry exports
 │   │   └── tracing.ts             # OpenTelemetry spans
@@ -319,9 +324,9 @@ interface EvaluationResult {
 
 #### 3.3.1 Class: `DecisionEngine`
 
-**Purpose**: Core authorization logic implementing deny-overrides combining algorithm.
+**Purpose**: Core authorization logic implementing deny-overrides combining algorithm with hierarchical scope resolution.
 
-**Implementation**: ~376 lines.
+**Implementation**: ~450 lines (includes scope integration).
 
 **Key Methods**:
 
@@ -577,7 +582,52 @@ interface PostgresConfig {
 }
 ```
 
-### 3.9 Policy Schema (`policy/schema.ts`)
+### 3.9 Scope Module (`scope/`)
+
+#### 3.9.1 Class: `ScopeResolver`
+
+**Purpose**: Hierarchical scope resolution for multi-tenant policy evaluation.
+
+**Implementation**: ~553 lines.
+
+**Key Methods**:
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `buildScopeChain` | `(scope: string) => string[]` | Build inheritance chain from most to least specific |
+| `buildInheritanceChain` | `(scope: string \| undefined) => string[]` | Build chain handling undefined (global) scope |
+| `matchScope` | `(pattern: string, scope: string) => boolean` | Match scope with wildcards (`*`, `**`) |
+| `validateScope` | `(scope: string) => ScopeValidationResult` | Validate scope format |
+| `computeEffectiveScope` | `(principalScope?: string, resourceScope?: string) => string` | Compute intersection scope |
+| `findMatchingPolicy` | `(scopedPolicies, resourceKind, effectiveScope) => ScopeResolutionResult` | Find policy walking up inheritance chain |
+| `extractScopes` | `(scopedPolicies) => string[]` | Extract unique scopes from policy map |
+
+#### 3.9.2 Scope Patterns
+
+```typescript
+// Scope chain example
+buildScopeChain("acme.corp.engineering.team1")
+// Returns: ["acme.corp.engineering.team1", "acme.corp.engineering", "acme.corp", "acme"]
+
+// Pattern matching
+matchScope("acme.*", "acme.corp")           // true (single wildcard)
+matchScope("acme.**", "acme.corp.eng.team") // true (multi wildcard)
+matchScope("**.engineering", "acme.engineering") // true (suffix wildcard)
+```
+
+#### 3.9.3 Configuration
+
+```typescript
+interface ScopeResolverConfig {
+  maxDepth?: number;      // Default: 10
+  separator?: string;     // Default: '.'
+  enableCaching?: boolean; // Default: true
+  maxCacheSize?: number;  // Default: 1000
+  cacheTTL?: number;      // Default: 300000 (5 minutes)
+}
+```
+
+### 3.10 Policy Schema (`policy/schema.ts`)
 
 **Purpose**: Zod-based schema validation for policy YAML/JSON.
 
@@ -585,6 +635,8 @@ interface PostgresConfig {
 - `ValidatedResourcePolicy`
 - `ValidatedDerivedRolesPolicy`
 - `ValidatedPrincipalPolicy`
+
+**Scope Support**: PolicyMetadataSchema includes optional `scope` field for hierarchical policy organization.
 
 ---
 
@@ -847,6 +899,7 @@ spec:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.1.0 | 2025-11-24 | Added scope module documentation (9 modules total) |
 | 2.0.0 | 2024-11-24 | Full documentation of all 8 modules |
 | 1.1.0 | 2024-11-24 | Added documentation gap notice |
 | 1.0.0 | 2024-11-23 | Initial release with CEL evaluator, decision engine |
