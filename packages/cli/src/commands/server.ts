@@ -157,11 +157,34 @@ async function reload(options: ServerOptions): Promise<void> {
   const spinner = ora('Reloading server...').start();
 
   try {
-    // TODO: Implement server reload endpoint
+    const host = options.host || 'localhost';
+    const port = options.port || 3592;
+    const baseUrl = `http://${host}:${port}`;
+
+    // Call the server's reload endpoint to refresh policies and configuration
+    const response = await fetch(`${baseUrl}/api/reload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) {
+      // If reload endpoint doesn't exist, try SIGHUP-style reload via management API
+      const mgmtResponse = await fetch(`${baseUrl}/_admin/reload`, {
+        method: 'POST',
+      }).catch(() => null);
+
+      if (!mgmtResponse?.ok) {
+        throw new Error(`Server reload failed: ${response.status} ${response.statusText}`);
+      }
+    }
+
+    const data = await response.json().catch(() => ({ reloaded: true }));
     spinner.succeed('Server reloaded successfully');
 
     if (options.json) {
-      console.log(JSON.stringify({ reloaded: true }, null, 2));
+      console.log(JSON.stringify({ reloaded: true, ...data }, null, 2));
+    } else {
+      console.log(chalk.green('  Policies and configuration reloaded'));
     }
   } catch (error) {
     spinner.fail('Error reloading server');
