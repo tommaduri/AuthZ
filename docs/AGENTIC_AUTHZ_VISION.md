@@ -1,9 +1,9 @@
 # Agentic Authorization Engine: Project Scope
 
 **Status**: APPROVED - IN PRODUCTION
-**Version**: 1.0.0
-**Last Updated**: 2025-11-23
-**Implementation**: 75% Complete
+**Version**: 1.1.0
+**Last Updated**: 2025-11-24
+**Implementation**: 85% Complete (Core + Agents + Server + SDK + NestJS production-ready)
 
 ## What Makes It "Agentic" (vs Cerbos)
 
@@ -405,8 +405,9 @@ The following features have been specified via comprehensive SDDs beyond the ori
 | Query Planning | [PLAN-RESOURCES-API-SDD](./sdd/PLAN-RESOURCES-API-SDD.md) |
 
 ### Total Documentation
-- **23 Software Design Documents**
-- **6 Architecture Decision Records**
+- **31 Software Design Documents** (see [SDD-INDEX](./sdd/SDD-INDEX.md))
+- **8 Architecture Decision Records** (see [ADR Index](./sdd/SDD-INDEX.md#6-adr-index))
+- **43,000+ lines of documentation**
 - **100% feature coverage** via SDDs
 
 ---
@@ -613,5 +614,5 @@ GET /api/explain/:decision_id       // Explain past decision
 *Document: Agentic Authorization Engine Vision*
 *Status: APPROVED - IN PRODUCTION*
 *Author: AuthZ Engine Team*
-*Last Updated: 2025-11-23*
-*SDD Coverage: 23 documents, 271 features*
+*Last Updated: 2025-11-24*
+*SDD Coverage: 31 documents, 271 features tracked*

@@ -1,6 +1,6 @@
 # Cerbos Feature Coverage Matrix
 
-**Last Updated**: 2025-11-23
+**Last Updated**: 2025-11-24
 **AuthZ Engine Version**: 1.0.0
 **Cerbos Reference Version**: Latest (2024)
 **Total Features Tracked**: 271
@@ -552,9 +552,10 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.2.1 | 2025-11-24 | Cross-referenced with SDD-INDEX, updated SDD/ADR counts |
 | 1.2.0 | 2025-11-23 | Added Advanced Features section (WASM, multi-tenancy, AI/agents, compliance). Total: 224→271 |
 | 1.1.0 | 2025-11-23 | Added Policy Testing, Observability, Deployment/CLI sections. Total: 159→224 |
-| 1.0.0 | 2024-11-23 | Initial feature matrix with 159 features |
+| 1.0.0 | 2025-11-23 | Initial feature matrix with 159 features |
 
 ---
 
