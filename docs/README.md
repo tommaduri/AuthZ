@@ -1,8 +1,8 @@
 # AuthZ Engine Documentation Index
 
-**Last Updated**: 2025-11-23
-**Total Documents**: 40
-**SDD Coverage**: 23 documents covering 271 Cerbos features
+**Last Updated**: 2025-11-24
+**Total Documents**: 50+
+**SDD Coverage**: 31 documents covering 271 Cerbos features
 
 ---
 
@@ -29,7 +29,7 @@
 
 ---
 
-## 2. Software Design Documents (23)
+## 2. Software Design Documents (31)
 
 ### 2.1 Package SDDs
 
@@ -86,7 +86,7 @@
 
 ---
 
-## 3. Architecture Decision Records (6)
+## 3. Architecture Decision Records (8)
 
 | ADR | Title | Status |
 |-----|-------|--------|
@@ -143,13 +143,13 @@ See [CERBOS-FEATURE-COVERAGE-MATRIX.md](./CERBOS-FEATURE-COVERAGE-MATRIX.md) for
 
 | Metric | Count |
 |--------|-------|
-| Total Documents | 40 |
-| SDDs | 23 |
-| ADRs | 6 |
+| Total Documents | 50+ |
+| SDDs | 31 |
+| ADRs | 8 |
 | Guides | 3 |
 | Other | 8 |
-| Total Lines | ~15,000+ |
+| Total Lines | ~43,000+ |
 
 ---
 
-*Last updated: 2025-11-23*
+*Last updated: 2025-11-24*
