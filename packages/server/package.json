@@ -37,9 +37,9 @@
     "chokidar": "^3.5.3",
     "yaml": "^2.3.4",
     "glob": "^10.3.10",
-    "@opentelemetry/api": "^1.7.0",
-    "@opentelemetry/sdk-trace-node": "^0.45.0",
-    "@opentelemetry/exporter-trace-http": "^0.45.0"
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-node": "^1.25.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.52.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
