@@ -55,6 +55,9 @@ message Principal {
 
   // Additional attributes for ABAC
   google.protobuf.Struct attributes = 3;
+
+  // Hierarchical scope for this principal (e.g., "acme.corp.engineering")
+  string scope = 4;
 }
 
 // Resource represents the resource being accessed
@@ -67,6 +70,9 @@ message Resource {
 
   // Resource attributes for ABAC
   google.protobuf.Struct attributes = 3;
+
+  // Hierarchical scope for this resource (e.g., "acme.corp.engineering")
+  string scope = 4;
 }
 
 // CheckResponse contains the authorization decision
@@ -119,6 +125,21 @@ message ResponseMetadata {
 
   // Cache hit or miss
   bool cache_hit = 4;
+
+  // Scope resolution information
+  ScopeResolution scope_resolution = 5;
+}
+
+// ScopeResolution contains scope resolution result
+message ScopeResolution {
+  // The scope that matched (or "(global)" for unscoped)
+  string matched_scope = 1;
+
+  // Scopes checked during resolution (most to least specific)
+  repeated string inheritance_chain = 2;
+
+  // Whether a scoped policy was found
+  bool scoped_policy_matched = 3;
 }
 
 // CheckBatchRequest contains multiple check requests
@@ -166,6 +187,9 @@ message Policy {
 
   // Policy rules
   repeated Rule rules = 4;
+
+  // Hierarchical scope where this policy applies (e.g., "acme.corp.engineering")
+  string scope = 5;
 }
 
 // Rule represents a single authorization rule

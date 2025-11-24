@@ -16,6 +16,9 @@ type Store interface {
 	// FindPolicies finds policies matching resource kind and actions
 	FindPolicies(resourceKind string, actions []string) []*types.Policy
 
+	// FindPoliciesForScope finds policies for a specific scope and resource kind
+	FindPoliciesForScope(scope, resourceKind string, actions []string) []*types.Policy
+
 	// Add adds a policy to the store
 	Add(policy *types.Policy) error
 

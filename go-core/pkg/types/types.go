@@ -21,6 +21,7 @@ type Principal struct {
 	ID         string                 `json:"id"`
 	Roles      []string               `json:"roles"`
 	Attributes map[string]interface{} `json:"attributes"`
+	Scope      string                 `json:"scope,omitempty"` // Hierarchical scope (e.g., "acme.corp.engineering")
 }
 
 // HasRole checks if the principal has a specific role
@@ -40,6 +41,7 @@ func (p *Principal) ToMap() map[string]interface{} {
 		"roles":      p.Roles,
 		"attributes": p.Attributes,
 		"attr":       p.Attributes, // alias
+		"scope":      p.Scope,
 	}
 }
 
@@ -48,6 +50,7 @@ type Resource struct {
 	Kind       string                 `json:"kind"`
 	ID         string                 `json:"id"`
 	Attributes map[string]interface{} `json:"attributes"`
+	Scope      string                 `json:"scope,omitempty"` // Hierarchical scope (e.g., "acme.corp.engineering")
 }
 
 // ToMap converts Resource to a map for CEL evaluation
@@ -57,6 +60,7 @@ func (r *Resource) ToMap() map[string]interface{} {
 		"id":         r.ID,
 		"attributes": r.Attributes,
 		"attr":       r.Attributes, // alias
+		"scope":      r.Scope,
 	}
 }
 
@@ -105,10 +109,18 @@ func (r *ActionResult) IsAllowed() bool {
 
 // ResponseMetadata contains evaluation details
 type ResponseMetadata struct {
-	EvaluationDurationUs float64  `json:"evaluationDurationUs"`
-	PoliciesEvaluated    int      `json:"policiesEvaluated"`
-	MatchedPolicies      []string `json:"matchedPolicies,omitempty"`
-	CacheHit             bool     `json:"cacheHit"`
+	EvaluationDurationUs float64                `json:"evaluationDurationUs"`
+	PoliciesEvaluated    int                    `json:"policiesEvaluated"`
+	MatchedPolicies      []string               `json:"matchedPolicies,omitempty"`
+	CacheHit             bool                   `json:"cacheHit"`
+	ScopeResolution      *ScopeResolutionResult `json:"scopeResolution,omitempty"` // Scope resolution information
+}
+
+// ScopeResolutionResult contains scope resolution result
+type ScopeResolutionResult struct {
+	MatchedScope        string   `json:"matchedScope"`        // The scope that matched (or "(global)" for unscoped)
+	InheritanceChain    []string `json:"inheritanceChain"`    // Scopes checked during resolution (most to least specific)
+	ScopedPolicyMatched bool     `json:"scopedPolicyMatched"` // Whether a scoped policy was found
 }
 
 // Policy represents an authorization policy
@@ -117,6 +129,7 @@ type Policy struct {
 	Name         string  `json:"name" yaml:"name"`
 	ResourceKind string  `json:"resourceKind" yaml:"resourceKind"`
 	Rules        []*Rule `json:"rules" yaml:"rules"`
+	Scope        string  `json:"scope,omitempty" yaml:"scope,omitempty"` // Hierarchical scope (e.g., "acme.corp.engineering")
 }
 
 // Rule represents a single authorization rule

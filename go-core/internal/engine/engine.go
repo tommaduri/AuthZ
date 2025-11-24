@@ -9,15 +9,17 @@ import (
 	"github.com/authz-engine/go-core/internal/cache"
 	"github.com/authz-engine/go-core/internal/cel"
 	"github.com/authz-engine/go-core/internal/policy"
+	"github.com/authz-engine/go-core/internal/scope"
 	"github.com/authz-engine/go-core/pkg/types"
 )
 
 // Engine is the core authorization decision engine
 type Engine struct {
-	cel        *cel.Engine
-	store      policy.Store
-	cache      cache.Cache
-	workerPool *WorkerPool
+	cel           *cel.Engine
+	store         policy.Store
+	cache         cache.Cache
+	workerPool    *WorkerPool
+	scopeResolver *scope.Resolver
 
 	config Config
 }
@@ -59,16 +61,20 @@ func New(cfg Config, store policy.Store) (*Engine, error) {
 		c = cache.NewLRU(cfg.CacheSize, cfg.CacheTTL)
 	}
 
+	// Initialize scope resolver with default config
+	scopeResolver := scope.NewResolver(scope.DefaultConfig())
+
 	return &Engine{
-		cel:        celEngine,
-		store:      store,
-		cache:      c,
-		workerPool: NewWorkerPool(cfg.ParallelWorkers),
-		config:     cfg,
+		cel:           celEngine,
+		store:         store,
+		cache:         c,
+		workerPool:    NewWorkerPool(cfg.ParallelWorkers),
+		scopeResolver: scopeResolver,
+		config:        cfg,
 	}, nil
 }
 
-// Check evaluates an authorization request
+// Check evaluates an authorization request with scope resolution
 func (e *Engine) Check(ctx context.Context, req *types.CheckRequest) (*types.CheckResponse, error) {
 	start := time.Now()
 
@@ -82,18 +88,21 @@ func (e *Engine) Check(ctx context.Context, req *types.CheckRequest) (*types.Che
 		}
 	}
 
-	// Find matching policies
-	policies := e.store.FindPolicies(req.Resource.Kind, req.Actions)
+	// Determine effective scope (resource scope takes precedence over principal scope)
+	effectiveScope := e.computeEffectiveScope(req)
 
-	// If no policies found, return default response
+	// Find matching policies with scope resolution
+	policies, scopeResult := e.findPoliciesWithScope(effectiveScope, req.Resource.Kind, req.Actions)
+
+	// If no policies found, return default response with scope info
 	if len(policies) == 0 {
-		return e.defaultResponse(req, start), nil
+		return e.defaultResponseWithScope(req, start, scopeResult), nil
 	}
 
 	// Evaluate policies in parallel
 	results := e.evaluateParallel(ctx, req, policies)
 
-	// Build response
+	// Build response with scope information
 	response := &types.CheckResponse{
 		RequestID: req.RequestID,
 		Results:   results,
@@ -101,6 +110,7 @@ func (e *Engine) Check(ctx context.Context, req *types.CheckRequest) (*types.Che
 			EvaluationDurationUs: float64(time.Since(start).Microseconds()),
 			PoliciesEvaluated:    len(policies),
 			CacheHit:             false,
+			ScopeResolution:      scopeResult,
 		},
 	}
 
@@ -226,8 +236,71 @@ func (e *Engine) evaluatePolicy(ctx context.Context, req *types.CheckRequest, po
 	}
 }
 
-// defaultResponse creates a response when no policies match
+// computeEffectiveScope determines which scope to use for policy resolution
+// Resource scope takes precedence over principal scope
+func (e *Engine) computeEffectiveScope(req *types.CheckRequest) string {
+	if req.Resource.Scope != "" {
+		return req.Resource.Scope
+	}
+	if req.Principal.Scope != "" {
+		return req.Principal.Scope
+	}
+	return ""
+}
+
+// findPoliciesWithScope finds policies using hierarchical scope resolution
+// Returns policies and scope resolution metadata
+func (e *Engine) findPoliciesWithScope(requestScope, resourceKind string, actions []string) ([]*types.Policy, *types.ScopeResolutionResult) {
+	scopeResult := &types.ScopeResolutionResult{
+		InheritanceChain:    []string{},
+		ScopedPolicyMatched: false,
+	}
+
+	// If no scope, use global policies
+	if requestScope == "" {
+		policies := e.store.FindPolicies(resourceKind, actions)
+		scopeResult.MatchedScope = "(global)"
+		return policies, scopeResult
+	}
+
+	// Build scope chain (most to least specific)
+	chain, err := e.scopeResolver.BuildScopeChain(requestScope)
+	if err != nil {
+		// Invalid scope, fail closed (deny)
+		scopeResult.MatchedScope = "(invalid)"
+		scopeResult.InheritanceChain = []string{requestScope}
+		return []*types.Policy{}, scopeResult
+	}
+
+	scopeResult.InheritanceChain = chain
+
+	// Try each scope from most to least specific
+	for _, currentScope := range chain {
+		policies := e.store.FindPoliciesForScope(currentScope, resourceKind, actions)
+		if len(policies) > 0 {
+			scopeResult.MatchedScope = currentScope
+			scopeResult.ScopedPolicyMatched = true
+			return policies, scopeResult
+		}
+	}
+
+	// Fall back to global policies
+	policies := e.store.FindPolicies(resourceKind, actions)
+	scopeResult.MatchedScope = "(global)"
+	return policies, scopeResult
+}
+
+// defaultResponse creates a response when no policies match (backwards compatibility)
 func (e *Engine) defaultResponse(req *types.CheckRequest, start time.Time) *types.CheckResponse {
+	return e.defaultResponseWithScope(req, start, &types.ScopeResolutionResult{
+		MatchedScope:        "(global)",
+		InheritanceChain:    []string{},
+		ScopedPolicyMatched: false,
+	})
+}
+
+// defaultResponseWithScope creates a response when no policies match, with scope info
+func (e *Engine) defaultResponseWithScope(req *types.CheckRequest, start time.Time, scopeResult *types.ScopeResolutionResult) *types.CheckResponse {
 	results := make(map[string]types.ActionResult)
 	for _, action := range req.Actions {
 		results[action] = types.ActionResult{
@@ -243,6 +316,7 @@ func (e *Engine) defaultResponse(req *types.CheckRequest, start time.Time) *type
 			EvaluationDurationUs: float64(time.Since(start).Microseconds()),
 			PoliciesEvaluated:    0,
 			CacheHit:             false,
+			ScopeResolution:      scopeResult,
 		},
 	}
 }

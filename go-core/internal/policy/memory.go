@@ -9,16 +9,18 @@ import (
 
 // MemoryStore implements an in-memory policy store
 type MemoryStore struct {
-	policies map[string]*types.Policy
-	index    *Index
-	mu       sync.RWMutex
+	policies   map[string]*types.Policy
+	index      *Index
+	scopeIndex *ScopeIndex
+	mu         sync.RWMutex
 }
 
 // NewMemoryStore creates a new in-memory policy store
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		policies: make(map[string]*types.Policy),
-		index:    NewIndex(),
+		policies:   make(map[string]*types.Policy),
+		index:      NewIndex(),
+		scopeIndex: NewScopeIndex(),
 	}
 }
 
@@ -65,6 +67,7 @@ func (s *MemoryStore) Add(policy *types.Policy) error {
 
 	s.policies[policy.Name] = policy
 	s.index.Add(policy)
+	s.scopeIndex.Add(policy)
 	return nil
 }
 
@@ -80,6 +83,7 @@ func (s *MemoryStore) Remove(name string) error {
 
 	delete(s.policies, name)
 	s.index.Remove(policy)
+	s.scopeIndex.Remove(policy)
 	return nil
 }
 
@@ -90,6 +94,7 @@ func (s *MemoryStore) Clear() {
 
 	s.policies = make(map[string]*types.Policy)
 	s.index = NewIndex()
+	s.scopeIndex = NewScopeIndex()
 }
 
 // Count returns the number of policies
@@ -155,4 +160,92 @@ func (i *Index) FindByResource(kind string) []*types.Policy {
 	result := make([]*types.Policy, len(policies))
 	copy(result, policies)
 	return result
+}
+
+// FindPoliciesForScope finds policies for a specific scope and resource kind
+func (s *MemoryStore) FindPoliciesForScope(scope, resourceKind string, actions []string) []*types.Policy {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.scopeIndex.FindByScope(scope, resourceKind)
+}
+
+// ScopeIndex provides fast policy lookup by scope and resource kind
+type ScopeIndex struct {
+	// scope -> resourceKind -> policies
+	byScope map[string]map[string][]*types.Policy
+	mu      sync.RWMutex
+}
+
+// NewScopeIndex creates a new scope index
+func NewScopeIndex() *ScopeIndex {
+	return &ScopeIndex{
+		byScope: make(map[string]map[string][]*types.Policy),
+	}
+}
+
+// Add adds a policy to the scope index
+func (i *ScopeIndex) Add(policy *types.Policy) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Only index scoped policies
+	if policy.Scope == "" {
+		return
+	}
+
+	// Initialize scope map if needed
+	if i.byScope[policy.Scope] == nil {
+		i.byScope[policy.Scope] = make(map[string][]*types.Policy)
+	}
+
+	// Add to scope and resource kind index
+	i.byScope[policy.Scope][policy.ResourceKind] = append(
+		i.byScope[policy.Scope][policy.ResourceKind],
+		policy,
+	)
+}
+
+// Remove removes a policy from the scope index
+func (i *ScopeIndex) Remove(policy *types.Policy) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	if policy.Scope == "" {
+		return
+	}
+
+	if kindMap, ok := i.byScope[policy.Scope]; ok {
+		policies := kindMap[policy.ResourceKind]
+		for j, p := range policies {
+			if p.Name == policy.Name {
+				kindMap[policy.ResourceKind] = append(policies[:j], policies[j+1:]...)
+				break
+			}
+		}
+
+		// Clean up empty maps
+		if len(kindMap[policy.ResourceKind]) == 0 {
+			delete(kindMap, policy.ResourceKind)
+		}
+		if len(kindMap) == 0 {
+			delete(i.byScope, policy.Scope)
+		}
+	}
+}
+
+// FindByScope finds policies for a specific scope and resource kind
+func (i *ScopeIndex) FindByScope(scope, resourceKind string) []*types.Policy {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+
+	if kindMap, ok := i.byScope[scope]; ok {
+		policies := kindMap[resourceKind]
+		// Return copy to avoid race conditions
+		result := make([]*types.Policy, len(policies))
+		copy(result, policies)
+		return result
+	}
+
+	return nil
 }
