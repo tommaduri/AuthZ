@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'yaml';
 import { table } from 'table';
-import { DecisionEngine, type EvaluationContext } from '@authz-engine/core';
+import { DecisionEngine, type CheckRequest } from '@authz-engine/core';
 
 interface TestCase {
   name: string;
@@ -24,11 +24,6 @@ interface TestResult {
   duration: number;
 }
 
-interface TestOptions {
-  json?: boolean;
-  verbose?: boolean;
-  bail?: boolean;
-}
 
 class TestRunner {
   private engine = new DecisionEngine();
@@ -41,7 +36,7 @@ class TestRunner {
       const start = Date.now();
 
       try {
-        const context: EvaluationContext = {
+        const request: CheckRequest = {
           principal: {
             id: testCase.principal,
             roles: [],
@@ -49,24 +44,23 @@ class TestRunner {
           },
           resource: {
             id: testCase.resource,
-            type: testCase.resource.split('/')[0],
+            kind: testCase.resource.split('/')[0],
             attributes: {}
           },
-          action: testCase.action,
-          environment: {
-            timestamp: new Date().toISOString(),
-            ip: 'unknown'
-          }
+          actions: [testCase.action]
         };
 
-        const decision = await this.engine.evaluate(context);
+        // Use check() method - DecisionEngine API
+        const response = this.engine.check(request);
+        const actionResult = response.results[testCase.action];
+        const isAllowed = actionResult?.effect === 'allow';
         const duration = Date.now() - start;
 
         this.results.push({
           name: testCase.name,
-          passed: decision.allowed === testCase.expected,
+          passed: isAllowed === testCase.expected,
           expected: testCase.expected,
-          actual: decision.allowed,
+          actual: isAllowed,
           duration
         });
       } catch (error) {

@@ -246,11 +246,14 @@ export class PlatformOrchestrator implements IPlatformOrchestrator {
       // Dynamically import @authz-engine/swarm to avoid hard dependency
       const swarmModule = await import('@authz-engine/swarm').catch(() => null);
       if (swarmModule?.TopologyManager && this.config?.swarm) {
-        this.topologyManager = new swarmModule.TopologyManager();
-        await this.topologyManager.initialize({
-          topology: this.config.swarm.topology || 'mesh',
-          maxAgents: this.config.swarm.maxAgents || 8,
+        // TopologyManager takes TopologyConfig (from @authz-engine/swarm) in constructor
+        // which requires: type, maxNodes, replicationFactor
+        this.topologyManager = new swarmModule.TopologyManager({
+          type: (this.config.swarm.topology.type || 'mesh') as 'mesh' | 'hierarchical' | 'ring' | 'star' | 'adaptive',
+          maxNodes: this.config.swarm.scaling.maxAgents || 8,
+          replicationFactor: 2, // Default replication factor
         });
+        // No initialize() method - topology is set up via connect() when agents are added
       }
       this.swarmReady = true;
       this.healthMonitor?.updateSubsystemStatus('swarm', 'healthy');
@@ -266,13 +269,14 @@ export class PlatformOrchestrator implements IPlatformOrchestrator {
     try {
       // Dynamically import @authz-engine/neural
       const neuralModule = await import('@authz-engine/neural').catch(() => null);
-      if (neuralModule && this.config?.neural?.enabled) {
-        if (neuralModule.InferenceEngine) {
-          this.inferenceEngine = new neuralModule.InferenceEngine();
-        }
-        if (neuralModule.PatternRecognizer) {
-          this.patternRecognizer = new neuralModule.PatternRecognizer();
-        }
+      // Check if any pattern is enabled in the config
+      const anyPatternEnabled = this.config?.neural?.patterns?.some(p => p.enabled);
+      if (neuralModule && anyPatternEnabled) {
+        // InferenceEngine requires InferenceEngineConfig with modelLoader
+        // PatternRecognizer requires PatternRecognizerConfig
+        // Since we don't have actual models, we'll skip initialization and use fallback
+        // TODO: Implement proper model loader when neural models are available
+        console.warn('[Platform] Neural module loaded but no model loader configured, using fallback');
       }
       this.neuralReady = true;
       this.healthMonitor?.updateSubsystemStatus('neural', 'healthy');
@@ -289,12 +293,46 @@ export class PlatformOrchestrator implements IPlatformOrchestrator {
       // Dynamically import @authz-engine/consensus
       const consensusModule = await import('@authz-engine/consensus').catch(() => null);
       if (consensusModule?.ConsensusManager && this.config?.consensus) {
-        this.consensusManager = new consensusModule.ConsensusManager();
-        await this.consensusManager.initialize({
-          protocol: this.config.consensus.default || 'pbft',
-          minNodes: this.config.consensus.minNodes || 3,
-          timeoutMs: this.config.consensus.timeoutMs || 5000,
+        // ConsensusManager requires ConsensusManagerConfig in constructor
+        // Create minimal node setup for consensus
+        const nodeId = this.config.instanceId || `node-${Date.now()}`;
+        const nodes = [
+          { id: nodeId, address: 'local', isActive: true, lastSeen: Date.now() },
+          { id: `${nodeId}-replica-1`, address: 'local', isActive: true, lastSeen: Date.now() },
+          { id: `${nodeId}-replica-2`, address: 'local', isActive: true, lastSeen: Date.now() },
+        ];
+
+        // Use actual config types from @authz-engine/consensus:
+        // PBFTConfig: viewChangeTimeoutMs, requestTimeoutMs, checkpointInterval, watermarkWindow
+        // RaftConfig: electionTimeoutMinMs, electionTimeoutMaxMs, heartbeatIntervalMs, maxLogEntriesPerRequest, snapshotThreshold
+        // GossipConfig: fanout, gossipIntervalMs, maxRoundsToKeep, antiEntropyIntervalMs, maxMessageAge, maxPendingMessages
+        this.consensusManager = new consensusModule.ConsensusManager({
+          nodeId,
+          nodes,
+          defaultProtocol: (this.config.consensus.default || 'pbft') as 'pbft' | 'raft' | 'gossip',
+          pbftConfig: {
+            viewChangeTimeoutMs: this.config.consensus.thresholds.timeoutMs || 10000,
+            requestTimeoutMs: this.config.consensus.thresholds.timeoutMs || 5000,
+            checkpointInterval: 100,
+            watermarkWindow: 200,
+          },
+          raftConfig: {
+            electionTimeoutMinMs: 1000,
+            electionTimeoutMaxMs: 2000,
+            heartbeatIntervalMs: 100,
+            maxLogEntriesPerRequest: 100,
+            snapshotThreshold: 1000,
+          },
+          gossipConfig: {
+            fanout: 3,
+            gossipIntervalMs: 100,
+            maxRoundsToKeep: 10,
+            antiEntropyIntervalMs: 5000,
+            maxMessageAge: 60000,
+            maxPendingMessages: 1000,
+          },
         });
+        // No initialize() method - initialization happens in constructor
       }
       this.consensusReady = true;
       this.healthMonitor?.updateSubsystemStatus('consensus', 'healthy');
@@ -311,12 +349,16 @@ export class PlatformOrchestrator implements IPlatformOrchestrator {
       // Dynamically import @authz-engine/memory
       const memoryModule = await import('@authz-engine/memory').catch(() => null);
       if (memoryModule?.MemoryManager && this.config?.memory) {
-        this.memoryManager = new memoryModule.MemoryManager();
-        await this.memoryManager.initialize({
-          cacheSize: this.config.memory.maxCacheSize || 10000,
-          ttlMs: this.config.memory.defaultTtlMs || 300000,
-          persistence: this.config.memory.persistence || 'memory',
+        // MemoryManager requires MemoryManagerConfig with nodeId in constructor
+        // Cache config from @authz-engine/memory uses: maxSize, defaultTtl
+        this.memoryManager = new memoryModule.MemoryManager({
+          nodeId: this.config.instanceId || `memory-node-${Date.now()}`,
+          cache: {
+            maxSize: this.config.memory.cache.maxSize || 10000,
+            defaultTtl: this.config.memory.cache.ttlMs || 300000,
+          },
         });
+        // No initialize() method - initialization happens in constructor
       }
       this.memoryReady = true;
       this.healthMonitor?.updateSubsystemStatus('memory', 'healthy');
@@ -333,7 +375,48 @@ export class PlatformOrchestrator implements IPlatformOrchestrator {
       // Dynamically import @authz-engine/agents
       const agentsModule = await import('@authz-engine/agents').catch(() => null);
       if (agentsModule?.AgentOrchestrator) {
-        this.agentOrchestrator = new agentsModule.AgentOrchestrator();
+        // AgentOrchestrator requires OrchestratorConfig in constructor
+        // Use the actual AgentConfig type from @authz-engine/agents:
+        // guardian: { anomalyThreshold, baselinePeriodDays, velocityWindowMinutes, enableRealTimeDetection }
+        // analyst: { minSampleSize, confidenceThreshold, learningEnabled, patternDiscoveryInterval }
+        // advisor: { llmProvider, llmModel, enableNaturalLanguage, maxExplanationLength }
+        // enforcer: { autoEnforceEnabled, requireApprovalForSeverity, maxActionsPerHour, rollbackWindowMinutes }
+        this.agentOrchestrator = new agentsModule.AgentOrchestrator({
+          agents: {
+            enabled: true,
+            logLevel: 'info' as const,
+            guardian: {
+              anomalyThreshold: 0.7,
+              baselinePeriodDays: 30,
+              velocityWindowMinutes: 5,
+              enableRealTimeDetection: true,
+            },
+            analyst: {
+              minSampleSize: 100,
+              confidenceThreshold: 0.8,
+              learningEnabled: true,
+              patternDiscoveryInterval: '1h',
+            },
+            advisor: {
+              llmProvider: 'local' as const,
+              llmModel: 'default',
+              enableNaturalLanguage: false,
+              maxExplanationLength: 500,
+            },
+            enforcer: {
+              autoEnforceEnabled: false,
+              requireApprovalForSeverity: 'high' as const,
+              maxActionsPerHour: 100,
+              rollbackWindowMinutes: 60,
+            },
+          },
+          store: {
+            retentionDays: 90,
+          },
+          eventBus: {
+            maxQueueSize: 1000,
+          },
+        });
         await this.agentOrchestrator.initialize();
       }
       this._agentsReady = true;
@@ -377,47 +460,11 @@ export class PlatformOrchestrator implements IPlatformOrchestrator {
   // ===========================================================================
 
   private async performNeuralAnalysis(request: AuthorizationRequest): Promise<NeuralAnalysis> {
-    // Use actual neural engine if available
-    if (this.inferenceEngine && this.patternRecognizer) {
-      try {
-        // Prepare input for neural analysis
-        const inputFeatures = {
-          principal: request.principal,
-          resource: request.resource,
-          actions: request.actions,
-          context: request.context,
-          timestamp: Date.now(),
-        };
-
-        // Run pattern recognition
-        const patterns = await this.patternRecognizer.recognize(inputFeatures);
-
-        // Run inference for anomaly detection
-        const inference = await this.inferenceEngine.infer({
-          type: 'anomaly_detection',
-          input: inputFeatures,
-        });
-
-        const anomalyScore = inference.anomalyScore ?? this.computeSimulatedAnomalyScore(request);
-        const riskLevel = this.determineRiskLevel(anomalyScore);
-
-        return {
-          anomalyScore,
-          riskLevel,
-          confidence: inference.confidence ?? 0.85,
-          patterns: patterns.map((p: { type: PatternType; score: number; description: string }) => ({
-            type: p.type,
-            score: p.score,
-            description: p.description,
-          })),
-          predictedOutcome: anomalyScore > 0.7 ? 'deny' : 'allow',
-          factors: this.extractRiskFactors(request, anomalyScore),
-        };
-      } catch (error) {
-        // Fall back to simulated analysis on error
-        console.warn('[Platform] Neural analysis failed, using fallback:', error);
-      }
-    }
+    // Neural engines require complex configuration (model loaders, trained models)
+    // For now, use simulated analysis. TODO: Integrate when models are available
+    // The actual APIs are:
+    // - InferenceEngine: predict(input, modelId), detectAnomaly(input), assessRisk(input)
+    // - PatternRecognizer: detectAnomaly(input, profile), extractFeatures(input), buildProfile(records)
 
     // Fallback to simulated analysis
     const anomalyScore = this.computeSimulatedAnomalyScore(request);
@@ -457,32 +504,52 @@ export class PlatformOrchestrator implements IPlatformOrchestrator {
     agentsUsed: AuthorizationResult['platform']['agentsInvolved'];
   }> {
     // Use actual agent orchestrator if available
+    // AgentOrchestrator.processRequest takes (CheckRequest, CheckResponse, ProcessingOptions)
+    // and returns ProcessingResult with response, anomalyScore, anomaly, explanation, enforcement
     if (this.agentOrchestrator) {
       try {
-        const agenticResult = await this.agentOrchestrator.processRequest({
+        // First create a simulated response to pass to the agent orchestrator
+        const simulatedResults: AuthorizationResult['results'] = {};
+        for (const action of request.actions) {
+          const allowed = this.simulateDecision(request, action);
+          simulatedResults[action] = {
+            effect: allowed ? 'allow' : 'deny',
+            policy: allowed ? 'default-allow' : 'default-deny',
+            meta: { matchedRule: allowed ? 'role-based-access' : 'no-matching-rule' },
+          };
+        }
+
+        const checkRequest = {
+          requestId: request.requestId,
           principal: request.principal,
           resource: request.resource,
           actions: request.actions,
-          context: request.context || {},
-          includeExplanation: request.includeExplanation,
-        });
+        };
 
-        const agentsUsed: AuthorizationResult['platform']['agentsInvolved'] = [];
-        if (agenticResult.guardian) agentsUsed.push('guardian');
-        if (agenticResult.analyst) agentsUsed.push('analyst');
-        if (agenticResult.advisor) agentsUsed.push('advisor');
-        if (agenticResult.enforcer) agentsUsed.push('enforcer');
+        const checkResponse = {
+          requestId: request.requestId || `req-${Date.now()}`,
+          results: simulatedResults,
+          meta: { evaluationDurationMs: 0, policiesEvaluated: [] },
+        };
 
+        const agenticResult = await this.agentOrchestrator.processRequest(
+          checkRequest,
+          checkResponse,
+          { includeExplanation: request.includeExplanation }
+        );
+
+        // ProcessingResult has agentsInvolved as string array
+        const agentsUsed = agenticResult.agentsInvolved as AuthorizationResult['platform']['agentsInvolved'];
+
+        // Use the response from the agentic result
         const results: AuthorizationResult['results'] = {};
         for (const action of request.actions) {
-          const decision = agenticResult.decisions?.[action];
+          const actionResult = agenticResult.response.results[action];
           results[action] = {
-            effect: decision?.allowed ? 'allow' : 'deny',
-            policy: decision?.matchedPolicy || 'agentic-decision',
+            effect: actionResult?.effect || 'deny',
+            policy: actionResult?.policy || 'agentic-decision',
             meta: {
-              matchedRule: decision?.matchedRule || 'agent-evaluation',
-              anomalyScore: agenticResult.guardian?.anomalyScore,
-              rateLimit: agenticResult.enforcer?.rateLimit,
+              matchedRule: actionResult?.meta?.matchedRule || 'agent-evaluation',
             },
           };
         }
@@ -522,6 +589,8 @@ export class PlatformOrchestrator implements IPlatformOrchestrator {
     results: AuthorizationResult['results']
   ): Promise<ConsensusResult> {
     // Use actual consensus manager if available
+    // ConsensusManager.propose(value) returns ConsensusResult with:
+    // - proposalId, accepted, value, votes, timestamp, consensusTimeMs, quorumReached
     if (this.consensusManager) {
       try {
         const consensusStartTime = Date.now();
@@ -539,11 +608,11 @@ export class PlatformOrchestrator implements IPlatformOrchestrator {
 
         return {
           required: true,
-          reached: consensusResult.achieved,
-          protocol: consensusResult.protocol || this.config?.consensus.default || 'pbft',
-          participants: consensusResult.participants || 4,
-          approvals: consensusResult.approvals || 3,
-          timeMs: Date.now() - consensusStartTime,
+          reached: consensusResult.accepted,
+          protocol: this.config?.consensus.default || 'pbft',
+          participants: consensusResult.votes?.length || 3,
+          approvals: consensusResult.votes?.filter((v: { vote: boolean }) => v.vote).length || 2,
+          timeMs: consensusResult.consensusTimeMs || (Date.now() - consensusStartTime),
         };
       } catch (error) {
         console.warn('[Platform] Consensus failed, using fallback:', error);

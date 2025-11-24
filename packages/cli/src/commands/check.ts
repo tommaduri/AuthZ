@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
-import { DecisionEngine, type EvaluationContext, type Policy } from '@authz-engine/core';
+import { DecisionEngine, type CheckRequest, type CheckResponse } from '@authz-engine/core';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -34,8 +34,8 @@ async function performCheck(options: CheckOptions): Promise<void> {
       }
     }
 
-    // Create evaluation context
-    const context: EvaluationContext = {
+    // Create check request
+    const request: CheckRequest = {
       principal: {
         id: options.principal,
         roles: [],
@@ -43,62 +43,64 @@ async function performCheck(options: CheckOptions): Promise<void> {
       },
       resource: {
         id: options.resource,
-        type: options.resource.split('/')[0],
+        kind: options.resource.split('/')[0],
         attributes: {}
       },
-      action: options.action,
-      environment: {
-        timestamp: new Date().toISOString(),
-        ip: 'unknown'
-      }
+      actions: [options.action]
     };
 
     // Initialize decision engine
     const engine = new DecisionEngine();
 
-    // Evaluate decision
-    const decision = await engine.evaluate(context);
+    // Evaluate decision using check() method
+    const response: CheckResponse = engine.check(request);
+
+    // Get result for the requested action
+    const actionResult = response.results[options.action];
+    const isAllowed = actionResult?.effect === 'allow';
 
     spinner.stop();
 
     if (options.json) {
       console.log(
         JSON.stringify({
-          allowed: decision.allowed,
-          principal: context.principal.id,
-          resource: context.resource.id,
-          action: context.action,
-          explanation: decision.explanation,
-          metadata: decision.metadata
+          allowed: isAllowed,
+          principal: request.principal.id,
+          resource: request.resource.id,
+          action: options.action,
+          effect: actionResult?.effect,
+          policy: actionResult?.policy,
+          metadata: actionResult?.meta
         }, null, 2)
       );
     } else {
-      const statusColor = decision.allowed ? chalk.green : chalk.red;
-      const statusText = decision.allowed ? 'ALLOWED' : 'DENIED';
+      const statusColor = isAllowed ? chalk.green : chalk.red;
+      const statusText = isAllowed ? 'ALLOWED' : 'DENIED';
 
       console.log('\n' + chalk.bold('Authorization Decision'));
       console.log(chalk.gray('─'.repeat(50)));
-      console.log(`Principal: ${chalk.cyan(context.principal.id)}`);
-      console.log(`Resource:  ${chalk.cyan(context.resource.id)}`);
-      console.log(`Action:    ${chalk.cyan(context.action)}`);
+      console.log(`Principal: ${chalk.cyan(request.principal.id)}`);
+      console.log(`Resource:  ${chalk.cyan(request.resource.id)}`);
+      console.log(`Action:    ${chalk.cyan(options.action)}`);
       console.log(chalk.gray('─'.repeat(50)));
       console.log(`Result:    ${statusColor.bold(statusText)}`);
 
-      if (options.verbose || decision.explanation) {
+      if (options.verbose && actionResult) {
         console.log(chalk.gray('─'.repeat(50)));
-        if (decision.explanation) {
-          console.log(`Explanation: ${decision.explanation}`);
+        console.log(`Policy:    ${actionResult.policy}`);
+        if (actionResult.meta?.matchedRule) {
+          console.log(`Rule:      ${actionResult.meta.matchedRule}`);
         }
-        if (decision.metadata) {
+        if (actionResult.meta) {
           console.log('\nMetadata:');
-          console.log(JSON.stringify(decision.metadata, null, 2));
+          console.log(JSON.stringify(actionResult.meta, null, 2));
         }
       }
       console.log('');
     }
 
     // Exit with appropriate code
-    process.exit(decision.allowed ? 0 : 2);
+    process.exit(isAllowed ? 0 : 2);
   } catch (error) {
     spinner.fail('Error evaluating policy');
     if (options.verbose) {

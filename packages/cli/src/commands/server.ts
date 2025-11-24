@@ -178,7 +178,7 @@ async function reload(options: ServerOptions): Promise<void> {
       }
     }
 
-    const data = await response.json().catch(() => ({ reloaded: true }));
+    const data = await response.json().catch(() => ({})) as Record<string, unknown>;
     spinner.succeed('Server reloaded successfully');
 
     if (options.json) {

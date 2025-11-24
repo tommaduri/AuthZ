@@ -307,9 +307,21 @@ importers:
       '@authz-engine/agents':
         specifier: workspace:*
         version: link:../agents
+      '@authz-engine/consensus':
+        specifier: workspace:*
+        version: link:../consensus
       '@authz-engine/core':
         specifier: workspace:*
         version: link:../core
+      '@authz-engine/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@authz-engine/neural':
+        specifier: workspace:*
+        version: link:../neural
+      '@authz-engine/swarm':
+        specifier: workspace:*
+        version: link:../swarm
       eventemitter3:
         specifier: ^5.0.1
         version: 5.0.1

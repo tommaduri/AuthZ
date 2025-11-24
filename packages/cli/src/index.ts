@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 
-import { Program } from 'commander';
+import { program } from 'commander';
 import chalk from 'chalk';
 import { checkCommand } from './commands/check.js';
 import { policyCommand } from './commands/policy.js';
 import { serverCommand } from './commands/server.js';
 import { testCommand } from './commands/test.js';
-
-const program = new Program();
 
 program
   .name('authz')

@@ -24,6 +24,10 @@
   "dependencies": {
     "@authz-engine/core": "workspace:*",
     "@authz-engine/agents": "workspace:*",
+    "@authz-engine/swarm": "workspace:*",
+    "@authz-engine/neural": "workspace:*",
+    "@authz-engine/consensus": "workspace:*",
+    "@authz-engine/memory": "workspace:*",
     "eventemitter3": "^5.0.1",
     "pino": "^8.16.2",
     "zod": "^3.22.4"

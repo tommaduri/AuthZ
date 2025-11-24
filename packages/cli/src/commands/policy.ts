@@ -6,21 +6,6 @@ import * as path from 'path';
 import * as yaml from 'yaml';
 import { table } from 'table';
 
-interface PolicyLintOptions {
-  json?: boolean;
-  strict?: boolean;
-}
-
-interface PolicyValidateOptions {
-  schema?: string;
-  json?: boolean;
-}
-
-interface PolicyTestOptions {
-  fixtures: string;
-  json?: boolean;
-}
-
 interface PolicyIssue {
   level: 'error' | 'warning' | 'info';
   line?: number;
@@ -248,13 +233,8 @@ async function validate(filePath: string, options: any): Promise<void> {
     let validationResult: { valid: boolean; errors: string[] } = { valid: true, errors: [] };
 
     try {
-      const coreModule = await import('@authz-engine/core').catch(() => null);
-      if (coreModule?.validatePolicy) {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const ext = path.extname(filePath).toLowerCase();
-        const policy = ext === '.json' ? JSON.parse(content) : yaml.parse(content);
-        validationResult = await coreModule.validatePolicy(policy);
-      }
+      // Validation is done via schema parsing - no separate validatePolicy function exists
+      // The built-in PolicyValidator handles structural validation
     } catch {
       // Fall back to built-in validation
     }
@@ -322,27 +302,30 @@ async function runTests(filePath: string, options: any): Promise<void> {
       const coreModule = await import('@authz-engine/core').catch(() => null);
       if (coreModule?.DecisionEngine) {
         const engine = new coreModule.DecisionEngine();
-        await engine.loadPolicy(policy);
+        // Use loadResourcePolicies which takes an array of policies
+        engine.loadResourcePolicies([policy]);
 
         // Run each test case from fixtures
         const testCases = fixtures.tests || fixtures.testCases || [];
         for (const testCase of testCases) {
           const testName = testCase.name || testCase.description || `Test ${results.tests.length + 1}`;
           try {
-            const result = await engine.evaluate({
+            // Use check() which takes CheckRequest { principal, resource, actions }
+            const checkResult = engine.check({
               principal: testCase.principal,
               resource: testCase.resource,
-              action: testCase.action,
-              context: testCase.context || {},
+              actions: [testCase.action],
             });
 
-            const expectedEffect = testCase.expectedEffect || testCase.expect?.effect || 'allow';
-            const passed = result.effect === expectedEffect;
+            // Get the result for this action from the results map
+            const actionResult = checkResult.results[testCase.action];
+            const expectedEffect = (testCase.expectedEffect || testCase.expect?.effect || 'allow').toLowerCase();
+            const passed = actionResult?.effect === expectedEffect;
 
             results.tests.push({
               name: testName,
               passed,
-              error: passed ? undefined : `Expected ${expectedEffect}, got ${result.effect}`,
+              error: passed ? undefined : `Expected ${expectedEffect}, got ${actionResult?.effect}`,
             });
 
             if (passed) results.passed++;
