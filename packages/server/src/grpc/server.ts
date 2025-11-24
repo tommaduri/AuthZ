@@ -19,6 +19,8 @@ const PROTO_PATH = path.join(__dirname, '../proto/authz.proto');
  * Extended with agentic authorization handlers.
  */
 export class GrpcServer {
+  private static readonly MILLISECONDS_PER_SECOND = 1000;
+
   private server: grpc.Server;
   private engine: DecisionEngine;
   private logger: Logger;
@@ -45,10 +47,12 @@ export class GrpcServer {
       oneofs: true,
     });
 
-    const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any;
-    const authzService = protoDescriptor.authz.v1.AuthzService.service;
+    const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as grpc.GrpcObject;
+    const authzService = (protoDescriptor.authz as grpc.GrpcObject).v1 as grpc.GrpcObject;
+    const service = (authzService.AuthzService as grpc.ServiceClientConstructor).service;
 
     // Build service handlers
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handlers: Record<string, any> = {
       check: this.handleCheck.bind(this),
       batchCheck: this.handleBatchCheck.bind(this),
@@ -70,7 +74,7 @@ export class GrpcServer {
       this.logger.info('Agentic gRPC handlers registered');
     }
 
-    this.server.addService(authzService, handlers);
+    this.server.addService(service, handlers);
 
     return new Promise((resolve, reject) => {
       this.server.bindAsync(
@@ -104,11 +108,11 @@ export class GrpcServer {
    * Handle Check RPC
    */
   private handleCheck(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): void {
     try {
-      const request = this.transformCheckRequest(call.request);
+      const request = this.transformCheckRequest(call.request as Record<string, unknown>);
       const response = this.engine.check(request);
       const grpcResponse = this.transformCheckResponse(response);
       callback(null, grpcResponse);
@@ -125,18 +129,18 @@ export class GrpcServer {
    * Handle BatchCheck RPC
    */
   private handleBatchCheck(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): void {
     try {
-      const req = call.request;
+      const req = call.request as Record<string, unknown>;
       const principal = this.transformPrincipal(req.principal);
-      const results: any[] = [];
+      const results: Array<{ resourceKey: string; results: Record<string, unknown> }> = [];
 
-      for (const resourceCheck of req.resources) {
+      for (const resourceCheck of req.resources as Array<{ resource: unknown; actions: string[] }>) {
         const resource = this.transformResource(resourceCheck.resource);
         const checkRequest: CheckRequest = {
-          requestId: req.requestId,
+          requestId: req.requestId as string | undefined,
           principal,
           resource,
           actions: resourceCheck.actions,
@@ -165,11 +169,11 @@ export class GrpcServer {
    * Handle PlanResources RPC
    */
   private handlePlanResources(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): void {
     // PlanResources is a more advanced feature - return conditional for now
-    const req = call.request;
+    const req = call.request as Record<string, unknown>;
     callback(null, {
       requestId: req.requestId || `plan-${Date.now()}`,
       filterKind: 'FILTER_KIND_CONDITIONAL',
@@ -181,50 +185,52 @@ export class GrpcServer {
    * Handle HealthCheck RPC
    */
   private handleHealthCheck(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    _call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): void {
     const stats = this.engine.getStats();
     callback(null, {
       status: 'serving',
       version: '0.1.0',
       policiesLoaded: stats.resourcePolicies + stats.derivedRolesPolicies,
-      uptimeSeconds: Math.floor((Date.now() - this.startTime) / 1000),
+      uptimeSeconds: Math.floor((Date.now() - this.startTime) / GrpcServer.MILLISECONDS_PER_SECOND),
     });
   }
 
   /**
    * Transform gRPC request to engine request
    */
-  private transformCheckRequest(grpcRequest: any): CheckRequest {
+  private transformCheckRequest(grpcRequest: Record<string, unknown>): CheckRequest {
     return {
-      requestId: grpcRequest.requestId,
+      requestId: grpcRequest.requestId as string | undefined,
       principal: this.transformPrincipal(grpcRequest.principal),
       resource: this.transformResource(grpcRequest.resource),
-      actions: grpcRequest.actions,
-      auxData: this.transformAttributes(grpcRequest.auxData),
+      actions: grpcRequest.actions as string[],
+      auxData: this.transformAttributes(grpcRequest.auxData as Record<string, unknown> | undefined),
     };
   }
 
   /**
    * Transform gRPC Principal
    */
-  private transformPrincipal(grpcPrincipal: any): Principal {
+  private transformPrincipal(grpcPrincipal: unknown): Principal {
+    const p = grpcPrincipal as Record<string, unknown>;
     return {
-      id: grpcPrincipal.id,
-      roles: grpcPrincipal.roles || [],
-      attributes: this.transformAttributes(grpcPrincipal.attributes),
+      id: p.id as string,
+      roles: (p.roles as string[]) || [],
+      attributes: this.transformAttributes(p.attributes as Record<string, unknown> | undefined),
     };
   }
 
   /**
    * Transform gRPC Resource
    */
-  private transformResource(grpcResource: any): Resource {
+  private transformResource(grpcResource: unknown): Resource {
+    const r = grpcResource as Record<string, unknown>;
     return {
-      kind: grpcResource.kind,
-      id: grpcResource.id,
-      attributes: this.transformAttributes(grpcResource.attributes),
+      kind: r.kind as string,
+      id: r.id as string,
+      attributes: this.transformAttributes(r.attributes as Record<string, unknown> | undefined),
     };
   }
 
@@ -244,14 +250,16 @@ export class GrpcServer {
   /**
    * Transform a single gRPC Value
    */
-  private transformValue(value: any): unknown {
+  private transformValue(value: unknown): unknown {
     if (!value) return null;
-    if (value.stringValue !== undefined) return value.stringValue;
-    if (value.intValue !== undefined) return parseInt(value.intValue, 10);
-    if (value.doubleValue !== undefined) return value.doubleValue;
-    if (value.boolValue !== undefined) return value.boolValue;
-    if (value.listValue?.values) {
-      return value.listValue.values.map((v: any) => this.transformValue(v));
+    const v = value as Record<string, unknown>;
+    if (v.stringValue !== undefined) return v.stringValue;
+    if (v.intValue !== undefined) return parseInt(v.intValue as string, 10);
+    if (v.doubleValue !== undefined) return v.doubleValue;
+    if (v.boolValue !== undefined) return v.boolValue;
+    const listValue = v.listValue as Record<string, unknown> | undefined;
+    if (listValue?.values) {
+      return (listValue.values as unknown[]).map((item: unknown) => this.transformValue(item));
     }
     return null;
   }
@@ -259,7 +267,7 @@ export class GrpcServer {
   /**
    * Transform engine response to gRPC response
    */
-  private transformCheckResponse(response: CheckResponse): any {
+  private transformCheckResponse(response: CheckResponse): Record<string, unknown> {
     return {
       requestId: response.requestId,
       results: this.transformActionResults(response.results),
@@ -273,15 +281,16 @@ export class GrpcServer {
   /**
    * Transform action results map
    */
-  private transformActionResults(results: Record<string, any>): Record<string, any> {
-    const transformed: Record<string, any> = {};
-    for (const [action, result] of Object.entries(results)) {
+  private transformActionResults(results: Record<string, unknown>): Record<string, unknown> {
+    const transformed: Record<string, unknown> = {};
+    for (const [action, result] of Object.entries(results) as [string, Record<string, unknown>][]) {
+      const meta = result.meta as Record<string, unknown> | undefined;
       transformed[action] = {
         effect: result.effect === 'allow' ? 'EFFECT_ALLOW' : 'EFFECT_DENY',
         policy: result.policy,
         meta: {
-          matchedRule: result.meta?.matchedRule || '',
-          effectiveDerivedRoles: result.meta?.effectiveDerivedRoles || [],
+          matchedRule: meta?.matchedRule || '',
+          effectiveDerivedRoles: meta?.effectiveDerivedRoles || [],
         },
       };
     }
@@ -294,8 +303,8 @@ export class GrpcServer {
    * Handle AgenticCheck RPC
    */
   private async handleAgenticCheck(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): Promise<void> {
     if (!this.orchestrator) {
       callback({
@@ -306,7 +315,7 @@ export class GrpcServer {
     }
 
     try {
-      const req = call.request;
+      const req = call.request as Record<string, unknown>;
       const checkRequest = this.transformCheckRequest(req);
 
       // Run standard check
@@ -317,7 +326,7 @@ export class GrpcServer {
         checkRequest,
         response,
         {
-          includeExplanation: req.includeExplanation ?? true,
+          includeExplanation: (req.includeExplanation as boolean | undefined) ?? true,
           policyContext: {
             matchedRules: response.meta?.policiesEvaluated || [],
             derivedRoles: [],
@@ -338,7 +347,7 @@ export class GrpcServer {
             ? this.transformAnomaly(agenticResult.anomaly)
             : null,
           explanation: agenticResult.explanation
-            ? this.transformExplanation(agenticResult.explanation)
+            ? this.transformExplanation(agenticResult.explanation as unknown as Record<string, unknown>)
             : null,
           enforcement: {
             allowed: agenticResult.enforcement?.allowed ?? true,
@@ -364,7 +373,7 @@ export class GrpcServer {
    * Handle StreamExplanation RPC (server streaming)
    */
   private async handleStreamExplanation(
-    call: grpc.ServerWritableStream<any, any>,
+    call: grpc.ServerWritableStream<unknown, unknown>,
   ): Promise<void> {
     if (!this.orchestrator) {
       call.emit('error', {
@@ -375,7 +384,7 @@ export class GrpcServer {
     }
 
     try {
-      const req = call.request;
+      const req = call.request as Record<string, unknown>;
       const checkRequest = this.transformCheckRequest(req);
 
       // Run standard check
@@ -462,8 +471,8 @@ export class GrpcServer {
    * Handle AgentHealthCheck RPC
    */
   private async handleAgentHealthCheck(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    _call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): Promise<void> {
     if (!this.orchestrator) {
       callback({
@@ -475,7 +484,7 @@ export class GrpcServer {
 
     try {
       const health = await this.orchestrator.getHealth();
-      const agents: Record<string, any> = {};
+      const agents: Record<string, unknown> = {};
 
       for (const [name, agentHealth] of Object.entries(health.agents)) {
         agents[name] = this.transformAgentHealth(agentHealth);
@@ -488,7 +497,7 @@ export class GrpcServer {
           store: health.infrastructure.store,
           eventBus: health.infrastructure.eventBus,
         },
-        uptimeSeconds: Math.floor((Date.now() - this.startTime) / 1000),
+        uptimeSeconds: Math.floor((Date.now() - this.startTime) / GrpcServer.MILLISECONDS_PER_SECOND),
       });
     } catch (error) {
       this.logger.error('AgentHealthCheck failed', error);
@@ -503,8 +512,8 @@ export class GrpcServer {
    * Handle GetPatterns RPC
    */
   private handleGetPatterns(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    _call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): void {
     if (!this.orchestrator) {
       callback({
@@ -533,8 +542,8 @@ export class GrpcServer {
    * Handle DiscoverPatterns RPC
    */
   private async handleDiscoverPatterns(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    _call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): Promise<void> {
     if (!this.orchestrator) {
       callback({
@@ -564,8 +573,8 @@ export class GrpcServer {
    * Handle GetAnomalies RPC
    */
   private handleGetAnomalies(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): void {
     if (!this.orchestrator) {
       callback({
@@ -576,8 +585,8 @@ export class GrpcServer {
     }
 
     try {
-      const { principalId } = call.request;
-      const anomalies = this.orchestrator.getAnomalies(principalId);
+      const { principalId } = call.request as Record<string, unknown>;
+      const anomalies = this.orchestrator.getAnomalies(principalId as string);
       callback(null, {
         principalId,
         count: anomalies.length,
@@ -596,8 +605,8 @@ export class GrpcServer {
    * Handle GetPendingActions RPC
    */
   private handleGetPendingActions(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    _call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): void {
     if (!this.orchestrator) {
       callback({
@@ -626,8 +635,8 @@ export class GrpcServer {
    * Handle ApproveAction RPC
    */
   private async handleApproveAction(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): Promise<void> {
     if (!this.orchestrator) {
       callback({
@@ -638,7 +647,7 @@ export class GrpcServer {
     }
 
     try {
-      const { actionId, approvedBy } = call.request;
+      const { actionId, approvedBy } = call.request as Record<string, unknown>;
 
       if (!approvedBy) {
         callback({
@@ -648,7 +657,7 @@ export class GrpcServer {
         return;
       }
 
-      const action = await this.orchestrator.approveAction(actionId, approvedBy);
+      const action = await this.orchestrator.approveAction(actionId as string, approvedBy as string);
       if (!action) {
         callback({
           code: grpc.status.NOT_FOUND,
@@ -674,8 +683,8 @@ export class GrpcServer {
    * Handle AskQuestion RPC
    */
   private async handleAskQuestion(
-    call: grpc.ServerUnaryCall<any, any>,
-    callback: grpc.sendUnaryData<any>,
+    call: grpc.ServerUnaryCall<unknown, unknown>,
+    callback: grpc.sendUnaryData<unknown>,
   ): Promise<void> {
     if (!this.orchestrator) {
       callback({
@@ -686,7 +695,7 @@ export class GrpcServer {
     }
 
     try {
-      const { question } = call.request;
+      const { question } = call.request as Record<string, unknown>;
 
       if (!question) {
         callback({
@@ -696,7 +705,7 @@ export class GrpcServer {
         return;
       }
 
-      const answer = await this.orchestrator.askQuestion(question);
+      const answer = await this.orchestrator.askQuestion(question as string);
       callback(null, {
         question,
         answer,
@@ -713,7 +722,7 @@ export class GrpcServer {
 
   // === Transform Helpers for Agentic Types ===
 
-  private transformAnomaly(anomaly: Anomaly): any {
+  private transformAnomaly(anomaly: Anomaly): Record<string, unknown> {
     return {
       id: anomaly.id,
       type: anomaly.type,
@@ -727,32 +736,44 @@ export class GrpcServer {
     };
   }
 
-  private transformExplanation(explanation: any): any {
+  private transformExplanation(explanation: Record<string, unknown>): Record<string, unknown> {
+    interface Factor { type: string; description: string; impact: string }
+    interface Attribute { key: string; expectedValue: unknown }
+    interface PathToAllow {
+      missingRoles?: string[];
+      missingAttributes?: Attribute[];
+      requiredConditions?: string[];
+      suggestedActions?: string[];
+    }
+
+    const factors = explanation.factors as Factor[];
+    const pathToAllow = explanation.pathToAllow as PathToAllow | undefined;
+
     return {
       requestId: explanation.requestId,
       summary: explanation.summary,
-      factors: explanation.factors.map((f: any) => ({
+      factors: factors.map((f: Factor) => ({
         type: f.type,
         description: f.description,
         impact: f.impact,
       })),
       naturalLanguage: explanation.naturalLanguage || '',
       recommendations: explanation.recommendations || [],
-      pathToAllow: explanation.pathToAllow
+      pathToAllow: pathToAllow
         ? {
-            missingRoles: explanation.pathToAllow.missingRoles || [],
-            missingAttributes: (explanation.pathToAllow.missingAttributes || []).map((a: any) => ({
+            missingRoles: pathToAllow.missingRoles || [],
+            missingAttributes: (pathToAllow.missingAttributes || []).map((a: Attribute) => ({
               key: a.key,
               expectedValue: String(a.expectedValue),
             })),
-            requiredConditions: explanation.pathToAllow.requiredConditions || [],
-            suggestedActions: explanation.pathToAllow.suggestedActions || [],
+            requiredConditions: pathToAllow.requiredConditions || [],
+            suggestedActions: pathToAllow.suggestedActions || [],
           }
         : null,
     };
   }
 
-  private transformEnforcerAction(action: EnforcerAction): any {
+  private transformEnforcerAction(action: EnforcerAction): Record<string, unknown> {
     return {
       id: action.id,
       type: action.type,
@@ -776,7 +797,7 @@ export class GrpcServer {
     };
   }
 
-  private transformPattern(pattern: LearnedPattern): any {
+  private transformPattern(pattern: LearnedPattern): Record<string, unknown> {
     return {
       id: pattern.id,
       type: pattern.type,
@@ -790,7 +811,7 @@ export class GrpcServer {
     };
   }
 
-  private transformAgentHealth(health: AgentHealth): any {
+  private transformAgentHealth(health: AgentHealth): Record<string, unknown> {
     return {
       agentId: health.agentId,
       agentType: health.agentType,

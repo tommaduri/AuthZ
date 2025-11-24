@@ -6,6 +6,28 @@ import type {
   Effect,
 } from '@authz-engine/core';
 
+// =============================================================================
+// Constants
+// =============================================================================
+
+/** Default request timeout in milliseconds */
+const DEFAULT_TIMEOUT_MS = 5000;
+
+/** Default maximum retry attempts */
+const DEFAULT_MAX_RETRIES = 3;
+
+/** Default backoff delay in milliseconds */
+const DEFAULT_BACKOFF_MS = 100;
+
+/** Exponential backoff base multiplier */
+const EXPONENTIAL_BACKOFF_BASE = 2;
+
+/** Client error status code range start */
+const CLIENT_ERROR_MIN = 400;
+
+/** Client error status code range end */
+const CLIENT_ERROR_MAX = 500;
+
 /**
  * SDK Configuration
  */
@@ -62,9 +84,9 @@ export class AuthzClient {
     this.config = {
       serverUrl: config.serverUrl.replace(/\/$/, ''), // Remove trailing slash
       grpcUrl: config.grpcUrl || '',
-      timeout: config.timeout || 5000,
+      timeout: config.timeout || DEFAULT_TIMEOUT_MS,
       headers: config.headers || {},
-      retry: config.retry || { maxRetries: 3, backoffMs: 100 },
+      retry: config.retry || { maxRetries: DEFAULT_MAX_RETRIES, backoffMs: DEFAULT_BACKOFF_MS },
     };
   }
 
@@ -221,13 +243,13 @@ export class AuthzClient {
         lastError = error instanceof Error ? error : new Error(String(error));
 
         // Don't retry on client errors (4xx)
-        if (error instanceof AuthzError && error.statusCode >= 400 && error.statusCode < 500) {
+        if (error instanceof AuthzError && error.statusCode >= CLIENT_ERROR_MIN && error.statusCode < CLIENT_ERROR_MAX) {
           throw error;
         }
 
-        // Wait before retry
+        // Wait before retry with exponential backoff
         if (attempt < this.config.retry.maxRetries) {
-          await this.sleep(this.config.retry.backoffMs * Math.pow(2, attempt));
+          await this.sleep(this.config.retry.backoffMs * Math.pow(EXPONENTIAL_BACKOFF_BASE, attempt));
         }
       }
     }

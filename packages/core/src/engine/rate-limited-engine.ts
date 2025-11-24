@@ -6,9 +6,23 @@
 
 import { DecisionEngine, DecisionEngineConfig } from './decision-engine';
 import { RateLimiter, RateLimiterConfig, RateLimitResult } from '../rate-limiting';
-import { QuotaManager, QuotaManagerConfig, QuotaCheckResult } from '../quota';
+import { QuotaManager, QuotaManagerConfig, QuotaCheckResult, QuotaStatus } from '../quota';
 import type { CheckRequest, CheckResponse, ActionResult, Effect } from '../types';
 import type { Span } from '@opentelemetry/api';
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/** Default rate limiting configuration values */
+const RATE_LIMIT_DEFAULTS = {
+  /** Default requests per window */
+  DEFAULT_LIMIT: 100,
+  /** Default window size in milliseconds (1 minute) */
+  DEFAULT_WINDOW_MS: 60000,
+  /** Reset offset in milliseconds */
+  RESET_OFFSET_MS: 60000,
+} as const;
 
 // =============================================================================
 // Types
@@ -302,7 +316,7 @@ export class RateLimitedDecisionEngine extends DecisionEngine {
   /**
    * Get quota status for a principal
    */
-  async getQuotaStatus(principalId: string) {
+  async getQuotaStatus(principalId: string): Promise<QuotaStatus | null> {
     if (!this.quotaManager) return null;
 
     return this.quotaManager.getQuotaStatus(principalId);
@@ -353,7 +367,7 @@ export class RateLimitedDecisionEngine extends DecisionEngine {
       allowed: true,
       remaining: Infinity,
       limit: Infinity,
-      resetAt: Date.now() + 60000,
+      resetAt: Date.now() + RATE_LIMIT_DEFAULTS.RESET_OFFSET_MS,
       retryAfterMs: 0,
     };
 
@@ -519,8 +533,8 @@ export function createEngineWithRateLimiting(
     ...decisionConfig,
     rateLimiter: {
       enabled: true,
-      defaultLimit: 100,
-      defaultWindowMs: 60000,
+      defaultLimit: RATE_LIMIT_DEFAULTS.DEFAULT_LIMIT,
+      defaultWindowMs: RATE_LIMIT_DEFAULTS.DEFAULT_WINDOW_MS,
       ...rateLimitConfig,
     },
   });

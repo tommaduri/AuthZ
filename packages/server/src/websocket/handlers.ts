@@ -661,8 +661,10 @@ export class WebSocketHandlers {
   /**
    * Send a message to a client
    */
+  private static readonly WEBSOCKET_OPEN = 1;
+
   sendMessage(client: ClientConnection, message: WebSocketMessage): void {
-    if (client.socket.readyState === 1) { // WebSocket.OPEN
+    if (client.socket.readyState === WebSocketHandlers.WEBSOCKET_OPEN) {
       client.socket.send(JSON.stringify(message));
     }
   }

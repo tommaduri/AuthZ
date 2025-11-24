@@ -8,7 +8,6 @@ import { randomUUID } from 'crypto';
 import {
   type OTelConfig,
   type TraceContext,
-  type AuthzSpanAttributes,
   type MetricsConfig,
   type PrometheusMetrics,
   type CheckRequest,
@@ -110,7 +109,7 @@ class InternalTracer implements Tracer {
     const context: TraceContext = {
       traceId: parentContext?.traceId || this.generateTraceId(),
       spanId: this.generateSpanId(),
-      parentSpanId: parentContext?.spanId,
+      ...(parentContext?.spanId ? { parentSpanId: parentContext.spanId } : {}),
       traceFlags: 1, // Sampled
     };
 
@@ -152,7 +151,7 @@ class InternalTracer implements Tracer {
   private exportSpan(span: Span): void {
     // In a real implementation, this would send to an OTel collector
     // For now, emit an event for testing/debugging
-    if (typeof process !== 'undefined' && process.env.AUTHZ_TRACE_DEBUG) {
+    if (typeof process !== 'undefined' && process.env['AUTHZ_TRACE_DEBUG']) {
       console.log('[TRACE]', JSON.stringify({
         name: span.name,
         traceId: span.context.traceId,
@@ -169,11 +168,14 @@ class InternalTracer implements Tracer {
    * Add event to span
    */
   addEvent(span: Span, name: string, attributes?: Record<string, unknown>): void {
-    span.events.push({
+    const event: { name: string; timestamp: number; attributes?: Record<string, unknown> } = {
       name,
       timestamp: Date.now(),
-      attributes,
-    });
+    };
+    if (attributes !== undefined) {
+      event.attributes = attributes;
+    }
+    span.events.push(event);
   }
 
   /**
@@ -224,13 +226,16 @@ class InternalTracer implements Tracer {
         const traceparent = headers['traceparent'];
         if (traceparent) {
           const parts = traceparent.split('-');
-          if (parts.length >= 4) {
-            return {
+          if (parts.length >= 4 && parts[1] && parts[2] && parts[3]) {
+            const ctx: TraceContext = {
               traceId: parts[1],
               spanId: parts[2],
               traceFlags: parseInt(parts[3], 16),
-              traceState: headers['tracestate'],
             };
+            if (headers['tracestate']) {
+              ctx.traceState = headers['tracestate'];
+            }
+            return ctx;
           }
         }
         break;
@@ -239,12 +244,15 @@ class InternalTracer implements Tracer {
         const traceId = headers['X-B3-TraceId'];
         const spanId = headers['X-B3-SpanId'];
         if (traceId && spanId) {
-          return {
+          const ctx: TraceContext = {
             traceId,
             spanId,
-            parentSpanId: headers['X-B3-ParentSpanId'],
             traceFlags: headers['X-B3-Sampled'] === '1' ? 1 : 0,
           };
+          if (headers['X-B3-ParentSpanId']) {
+            ctx.parentSpanId = headers['X-B3-ParentSpanId'];
+          }
+          return ctx;
         }
         break;
       }
@@ -252,13 +260,16 @@ class InternalTracer implements Tracer {
         const uberTraceId = headers['uber-trace-id'];
         if (uberTraceId) {
           const parts = uberTraceId.split(':');
-          if (parts.length >= 4) {
-            return {
+          if (parts.length >= 4 && parts[0] && parts[1] && parts[3]) {
+            const ctx: TraceContext = {
               traceId: parts[0],
               spanId: parts[1],
-              parentSpanId: parts[2] !== '0' ? parts[2] : undefined,
               traceFlags: parseInt(parts[3], 10),
             };
+            if (parts[2] && parts[2] !== '0') {
+              ctx.parentSpanId = parts[2];
+            }
+            return ctx;
           }
         }
         break;
@@ -453,7 +464,7 @@ export class ObservabilityManager {
     const span = this.tracer.startSpan('authz.check', parentContext);
 
     // Set span attributes
-    const attributes: AuthzSpanAttributes = {
+    const attributes: Record<string, unknown> = {
       'authz.request_id': request.requestId,
       'authz.principal_id': request.principal.id,
       'authz.resource_kind': request.resource.kind,
@@ -482,7 +493,7 @@ export class ObservabilityManager {
    */
   private completeCheckTrace(
     span: Span,
-    request: CheckRequest,
+    _request: CheckRequest,
     response: CheckResponse,
     error?: Error
   ): void {

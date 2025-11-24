@@ -17,7 +17,6 @@ import {
   type CheckResponse,
   type CheckBatchRequest,
   type CheckBatchResponse,
-  type ClientOptions,
   type ClientStats,
   type StreamCallback,
   type StreamErrorCallback,
@@ -58,7 +57,6 @@ import { ConnectionPool, createConnectionPool } from './connection-pool.js';
 import {
   ObservabilityManager,
   createObservabilityManager,
-  type Span,
 } from './observability.js';
 import {
   HealthMonitor,
@@ -75,8 +73,8 @@ const PROTO_PATH = '../../../go-core/api/proto/authz/v1/authz.proto';
  * gRPC service definition type
  */
 interface AuthzServiceClient {
-  Check: grpc.requestCallback<unknown, unknown>;
-  CheckBatch: grpc.requestCallback<unknown, unknown>;
+  Check: (request: unknown, callback: (error: grpc.ServiceError | null, response: unknown) => void) => grpc.ClientUnaryCall;
+  CheckBatch: (request: unknown, callback: (error: grpc.ServiceError | null, response: unknown) => void) => grpc.ClientUnaryCall;
   CheckStream: () => grpc.ClientDuplexStream<unknown, unknown>;
 }
 
@@ -512,7 +510,7 @@ export class AuthzClient extends EventEmitter {
    */
   private async executeGrpcCheck(
     request: CheckRequest,
-    headers?: Record<string, string>
+    _headers?: Record<string, string>
   ): Promise<CheckResponse> {
     if (this.connectionPool) {
       const { client, release } = await this.connectionPool.acquire();
@@ -596,7 +594,7 @@ export class AuthzClient extends EventEmitter {
    */
   async checkBatch(
     requests: CheckRequest[],
-    parentContext?: TraceContext
+    _parentContext?: TraceContext
   ): Promise<CheckResponse[]> {
     this.ensureConnected();
 
@@ -955,27 +953,35 @@ export class AuthzClient extends EventEmitter {
     const results = new Map<string, ActionResult>();
     if (protoAny.results) {
       for (const [action, result] of Object.entries(protoAny.results)) {
-        results.set(action, {
+        const actionResult: ActionResult = {
           effect: this.convertEffect(result.effect),
-          policy: result.policy,
-          rule: result.rule,
           matched: result.matched ?? false,
-        });
+        };
+        if (result.policy !== undefined) {
+          actionResult.policy = result.policy;
+        }
+        if (result.rule !== undefined) {
+          actionResult.rule = result.rule;
+        }
+        results.set(action, actionResult);
       }
     }
 
-    return {
+    const response: CheckResponse = {
       requestId: protoAny.request_id ?? '',
       results,
-      metadata: protoAny.metadata
-        ? {
-            evaluationDurationUs: protoAny.metadata.evaluation_duration_us ?? 0,
-            policiesEvaluated: protoAny.metadata.policies_evaluated ?? 0,
-            cacheHit: protoAny.metadata.cache_hit ?? false,
-          }
-        : undefined,
-      error: protoAny.error,
     };
+    if (protoAny.metadata) {
+      response.metadata = {
+        evaluationDurationUs: protoAny.metadata.evaluation_duration_us ?? 0,
+        policiesEvaluated: protoAny.metadata.policies_evaluated ?? 0,
+        cacheHit: protoAny.metadata.cache_hit ?? false,
+      };
+    }
+    if (protoAny.error !== undefined) {
+      response.error = protoAny.error;
+    }
+    return response;
   }
 
   /**
@@ -1074,7 +1080,6 @@ export class AuthzClient extends EventEmitter {
    * Clean up idle streams
    */
   private cleanupIdleStreams(): void {
-    const now = Date.now();
     const toRemove: string[] = [];
 
     for (const [id, stream] of this.activeStreams) {
@@ -1343,7 +1348,7 @@ export function createPooledClient(
   options?: Partial<ExtendedClientOptions>
 ): AuthzClient {
   return new AuthzClient({
-    address: addresses[0],
+    address: addresses[0] ?? '',
     connectionPool: {
       ...DEFAULT_POOL_OPTIONS,
       maxConnections: addresses.length * 2,

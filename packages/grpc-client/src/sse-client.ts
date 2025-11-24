@@ -5,7 +5,6 @@
  */
 
 import { EventEmitter } from 'events';
-import { randomUUID } from 'crypto';
 import {
   type CheckRequest,
   type CheckResponse,
@@ -110,7 +109,7 @@ export class SSEClient extends EventEmitter {
       onConnect();
     };
 
-    this.eventSource.onerror = (event) => {
+    this.eventSource.onerror = (_event) => {
       const error = new Error('SSE connection error');
       if (!this.connected) {
         onConnectError(error);
@@ -133,7 +132,7 @@ export class SSEClient extends EventEmitter {
     });
 
     this.eventSource.addEventListener(SSEEventType.ERROR, (event) => {
-      this.handleErrorEvent(event as MessageEvent);
+      this.handleErrorEvent(event as unknown as MessageEvent);
     });
 
     this.eventSource.addEventListener(SSEEventType.HEARTBEAT, (event) => {
@@ -315,25 +314,35 @@ export class SSEClient extends EventEmitter {
     const results = new Map<string, ActionResult>();
     if (d.results) {
       for (const [action, result] of Object.entries(d.results)) {
-        results.set(action, {
+        const actionResult: ActionResult = {
           effect: this.parseEffect(result.effect),
-          policy: result.policy,
-          rule: result.rule,
           matched: result.matched ?? false,
-        });
+        };
+        if (result.policy !== undefined) {
+          actionResult.policy = result.policy;
+        }
+        if (result.rule !== undefined) {
+          actionResult.rule = result.rule;
+        }
+        results.set(action, actionResult);
       }
     }
 
-    return {
+    const response: CheckResponse = {
       requestId: d.request_id || d.requestId || '',
       results,
-      metadata: d.metadata ? {
+    };
+    if (d.metadata) {
+      response.metadata = {
         evaluationDurationUs: d.metadata.evaluation_duration_us ?? d.metadata.evaluationDurationUs ?? 0,
         policiesEvaluated: d.metadata.policies_evaluated ?? d.metadata.policiesEvaluated ?? 0,
         cacheHit: d.metadata.cache_hit ?? d.metadata.cacheHit ?? false,
-      } : undefined,
-      error: d.error,
-    };
+      };
+    }
+    if (d.error !== undefined) {
+      response.error = d.error;
+    }
+    return response;
   }
 
   /**
@@ -497,7 +506,7 @@ export class SSEClient extends EventEmitter {
     }
 
     // Cancel all pending requests
-    for (const [requestId, pending] of this.pendingRequests) {
+    for (const [_requestId, pending] of this.pendingRequests) {
       clearTimeout(pending.timeout);
       pending.reject(new Error('Client disconnected'));
     }

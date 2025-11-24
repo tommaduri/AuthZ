@@ -8,13 +8,7 @@
 
 import * as http from 'http';
 import { PolicySimulator } from './simulator.js';
-import type {
-  DecisionExplanation,
-  WhatIfResult,
-  GeneratedTestCase,
-  RuleMatch,
-} from './simulator.js';
-import type { CheckRequest, CheckResponse } from '@authz-engine/core';
+import type { CheckRequest } from '@authz-engine/core';
 
 /**
  * Web Server Configuration

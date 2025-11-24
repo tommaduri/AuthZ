@@ -198,3 +198,47 @@ export type {
   ConnectionStats,
 } from './websocket';
 export type { AgentOrchestrator, OrchestratorConfig } from '@authz-engine/agents';
+
+// Production middleware and utilities
+export {
+  CircuitBreaker,
+  CircuitBreakerError,
+  RateLimiter,
+  HealthCheckSystem,
+  registerProductionMiddleware,
+  withRetry,
+} from './middleware/production';
+export type {
+  CircuitBreakerConfig,
+  CircuitState,
+  RateLimitConfig,
+  ProductionMiddlewareConfig,
+  HealthCheckResult,
+  DependencyCheck,
+  RetryConfig,
+} from './middleware/production';
+
+// Policy hot-reload
+export {
+  PolicyHotReloadManager,
+  createFileWatcher,
+} from './policy/hot-reload';
+export type {
+  HotReloadConfig,
+  ReloadEvent,
+  ReloadEventHandler,
+  FileWatchConfig,
+} from './policy/hot-reload';
+
+// Server startup and storage integration
+export {
+  StorageIntegrationManager,
+  createStorageIntegration,
+} from './startup';
+export type {
+  ServerStartupConfig,
+  IPolicyStore,
+  StoredPolicy,
+  PolicyChangeEvent,
+  PolicyQueryResult,
+} from './startup';

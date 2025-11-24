@@ -21,3 +21,6 @@ export * from './rate-limiting';
 
 // Quota management
 export * from './quota';
+
+// Policy storage
+export * from './storage';

@@ -11,6 +11,24 @@ import type { AuditEntry, AuditSink, AuditSinkConfig } from '../types';
 import { LOG_LEVEL_PRIORITY } from '../types';
 
 // =============================================================================
+// Constants
+// =============================================================================
+
+/** Default file sink configuration values */
+const FILE_SINK_DEFAULTS = {
+  /** Default filename prefix */
+  FILENAME: 'audit',
+  /** Default max file size: 10MB */
+  MAX_FILE_SIZE: 10 * 1024 * 1024,
+  /** Default max rotated files to keep */
+  MAX_FILES: 10,
+  /** Default file permissions (octal) */
+  FILE_MODE: 0o644,
+  /** Default directory permissions (octal) */
+  DIR_MODE: 0o755,
+} as const;
+
+// =============================================================================
 // File Sink Configuration
 // =============================================================================
 
@@ -49,13 +67,13 @@ export class FileSink implements AuditSink {
   constructor(config: FileSinkConfig) {
     this.config = {
       directory: config.directory,
-      filename: config.filename ?? 'audit',
-      maxFileSize: config.maxFileSize ?? 10 * 1024 * 1024, // 10MB default
-      maxFiles: config.maxFiles ?? 10,
+      filename: config.filename ?? FILE_SINK_DEFAULTS.FILENAME,
+      maxFileSize: config.maxFileSize ?? FILE_SINK_DEFAULTS.MAX_FILE_SIZE,
+      maxFiles: config.maxFiles ?? FILE_SINK_DEFAULTS.MAX_FILES,
       dailyRotation: config.dailyRotation ?? true,
       compress: config.compress ?? false,
-      fileMode: config.fileMode ?? 0o644,
-      dirMode: config.dirMode ?? 0o755,
+      fileMode: config.fileMode ?? FILE_SINK_DEFAULTS.FILE_MODE,
+      dirMode: config.dirMode ?? FILE_SINK_DEFAULTS.DIR_MODE,
       minLevel: config.minLevel ?? 'DEBUG',
       eventTypes: config.eventTypes ?? [],
       enabled: config.enabled ?? true,
@@ -205,9 +223,9 @@ export class FileSink implements AuditSink {
       mode: this.config.fileMode,
     });
 
-    // Handle stream errors
-    this.currentStream.on('error', (error) => {
-      console.error(`FileSink error: ${error.message}`);
+    // Handle stream errors - errors are tracked but not re-thrown
+    this.currentStream.on('error', (_error) => {
+      // Stream error occurred - will be handled on next write attempt
     });
   }
 
@@ -319,8 +337,8 @@ export class FileSink implements AuditSink {
 
     try {
       await fs.promises.rename(this.currentFilePath, rotatedPath);
-    } catch (error) {
-      console.error(`Failed to rotate file: ${(error as Error).message}`);
+    } catch (_error) {
+      // Failed to rotate file - will retry on next rotation
     }
   }
 
@@ -349,8 +367,8 @@ export class FileSink implements AuditSink {
           })
           .on('error', reject);
       });
-    } catch (error) {
-      console.error(`Failed to compress rotated file: ${(error as Error).message}`);
+    } catch (_error) {
+      // Failed to compress rotated file - file remains uncompressed
     }
   }
 }

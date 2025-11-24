@@ -45,7 +45,7 @@ export class HealthMonitor extends EventEmitter {
   private readonly config: HealthCheckConfig;
   private readonly failoverConfig: FailoverConfig;
   private readonly healthCheckFn: HealthCheckFn;
-  private readonly addressChangeCallback?: AddressChangeCallback;
+  private readonly addressChangeCallback: AddressChangeCallback | undefined;
 
   private healthCheckTimer: NodeJS.Timeout | null = null;
   private failbackTimer: NodeJS.Timeout | null = null;
@@ -250,10 +250,10 @@ export class HealthMonitor extends EventEmitter {
       return;
     }
 
-    const newAddress = this.failoverConfig.fallbackAddresses[nextIndex];
+    const newAddress = this.failoverConfig.fallbackAddresses[nextIndex] ?? '';
 
     this.emit('failover_started', {
-      from: this.failoverConfig.fallbackAddresses[this.currentAddressIndex],
+      from: this.failoverConfig.fallbackAddresses[this.currentAddressIndex] ?? '',
       to: newAddress,
     });
 
@@ -293,7 +293,7 @@ export class HealthMonitor extends EventEmitter {
    * Attempt to failback to original address
    */
   private async attemptFailback(): Promise<void> {
-    const originalAddress = this.failoverConfig.fallbackAddresses[this.originalAddressIndex];
+    const originalAddress = this.failoverConfig.fallbackAddresses[this.originalAddressIndex] ?? '';
 
     this.emit('failback_started', { address: originalAddress });
 

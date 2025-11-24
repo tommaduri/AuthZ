@@ -8,6 +8,50 @@
 import type { Principal, Resource, Effect } from '@authz-engine/core';
 
 // =============================================================================
+// Constants
+// =============================================================================
+
+/** Default maximum reconnection attempts */
+const DEFAULT_MAX_RECONNECT_ATTEMPTS = 10;
+
+/** Default initial reconnection delay in milliseconds */
+const DEFAULT_RECONNECT_DELAY_MS = 1000;
+
+/** Default maximum reconnection delay in milliseconds */
+const DEFAULT_MAX_RECONNECT_DELAY_MS = 30000;
+
+/** Default ping interval in milliseconds */
+const DEFAULT_PING_INTERVAL_MS = 30000;
+
+/** Default connection timeout in milliseconds */
+const DEFAULT_CONNECTION_TIMEOUT_MS = 10000;
+
+/** Authentication timeout in milliseconds */
+const AUTH_TIMEOUT_MS = 10000;
+
+/** Subscription operation timeout in milliseconds */
+const SUBSCRIPTION_TIMEOUT_MS = 10000;
+
+/** Authorization check timeout in milliseconds */
+const CHECK_TIMEOUT_MS = 30000;
+
+/** Exponential backoff base multiplier */
+const EXPONENTIAL_BACKOFF_BASE = 2;
+
+/** Normal WebSocket close code */
+const NORMAL_CLOSE_CODE = 1000;
+
+/** Logger interface for dependency injection */
+interface Logger {
+  log: (...args: unknown[]) => void;
+}
+
+/** Default console logger */
+const defaultLogger: Logger = {
+  log: (...args: unknown[]) => console.log(...args),
+};
+
+// =============================================================================
 // Types
 // =============================================================================
 
@@ -33,6 +77,8 @@ export interface AuthzWebSocketClientConfig {
   connectionTimeout?: number;
   /** Enable debug logging */
   debug?: boolean;
+  /** Custom logger for debug output (defaults to console) */
+  logger?: Logger;
 }
 
 /**
@@ -185,18 +231,21 @@ export class AuthzWebSocketClient {
   private subscriptions: Map<string, SubscriptionOptions> = new Map();
   private listeners: Map<keyof WebSocketClientEvents, Set<(...args: unknown[]) => void>> = new Map();
   private messageCounter = 0;
+  private readonly logger: Logger;
 
   constructor(config: AuthzWebSocketClientConfig) {
+    this.logger = config.logger || defaultLogger;
     this.config = {
       url: config.url,
       authToken: config.authToken || '',
       autoReconnect: config.autoReconnect ?? true,
-      maxReconnectAttempts: config.maxReconnectAttempts ?? 10,
-      reconnectDelay: config.reconnectDelay ?? 1000,
-      maxReconnectDelay: config.maxReconnectDelay ?? 30000,
-      pingInterval: config.pingInterval ?? 30000,
-      connectionTimeout: config.connectionTimeout ?? 10000,
+      maxReconnectAttempts: config.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS,
+      reconnectDelay: config.reconnectDelay ?? DEFAULT_RECONNECT_DELAY_MS,
+      maxReconnectDelay: config.maxReconnectDelay ?? DEFAULT_MAX_RECONNECT_DELAY_MS,
+      pingInterval: config.pingInterval ?? DEFAULT_PING_INTERVAL_MS,
+      connectionTimeout: config.connectionTimeout ?? DEFAULT_CONNECTION_TIMEOUT_MS,
       debug: config.debug ?? false,
+      logger: this.logger,
     };
   }
 
@@ -294,7 +343,7 @@ export class AuthzWebSocketClient {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(messageId);
         reject(new Error('Authentication timeout'));
-      }, 10000);
+      }, AUTH_TIMEOUT_MS);
 
       this.pendingRequests.set(messageId, {
         resolve: (response: unknown) => {
@@ -338,7 +387,7 @@ export class AuthzWebSocketClient {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(messageId);
         reject(new Error('Subscription timeout'));
-      }, 10000);
+      }, SUBSCRIPTION_TIMEOUT_MS);
 
       this.pendingRequests.set(messageId, {
         resolve: (response: unknown) => {
@@ -379,7 +428,7 @@ export class AuthzWebSocketClient {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(messageId);
         reject(new Error('Unsubscribe timeout'));
-      }, 10000);
+      }, SUBSCRIPTION_TIMEOUT_MS);
 
       this.pendingRequests.set(messageId, {
         resolve: (response: unknown) => {
@@ -424,7 +473,7 @@ export class AuthzWebSocketClient {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(messageId);
         reject(new Error('Check timeout'));
-      }, 30000);
+      }, CHECK_TIMEOUT_MS);
 
       this.pendingRequests.set(messageId, {
         resolve: (response: unknown) => {
@@ -548,48 +597,62 @@ export class AuthzWebSocketClient {
       this.emit('message', message);
 
       // Check for pending request responses
-      const correlationId = (message.payload as Record<string, string>)?.correlationId;
-      const pendingRequest = correlationId
-        ? this.pendingRequests.get(correlationId)
-        : this.pendingRequests.get(message.id);
-
-      if (pendingRequest) {
-        this.pendingRequests.delete(correlationId || message.id);
-        clearTimeout(pendingRequest.timeout);
-        if (message.type === 'error') {
-          pendingRequest.reject(new Error((message.payload as Record<string, string>)?.message || 'Request failed'));
-        } else {
-          pendingRequest.resolve(message);
-        }
+      if (this.handlePendingRequest(message)) {
         return;
       }
 
       // Handle broadcast messages
-      switch (message.type) {
-        case 'policy_update':
-          this.emit('policy_update', message.payload as unknown as PolicyUpdateEvent);
-          break;
-        case 'authorization_change':
-          this.emit('authorization_change', message.payload as unknown as AuthorizationChangeEvent);
-          break;
-        case 'anomaly_detected':
-          this.emit('anomaly_detected', message.payload as unknown as AnomalyDetectedEvent);
-          break;
-        case 'enforcement_action':
-          this.emit('enforcement_action', message.payload as unknown as EnforcementActionEvent);
-          break;
-        case 'pong':
-          // Heartbeat response, nothing to do
-          break;
-        case 'authenticated':
-          // Handled in authenticate() via pending request
-          break;
-        default:
-          this.debug('Unhandled message type:', message.type);
-      }
+      this.handleBroadcastMessage(message);
     } catch (error) {
       this.debug('Failed to parse message:', error);
       this.emit('error', error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  /**
+   * Handle pending request responses
+   * @returns true if the message was handled as a pending request
+   */
+  private handlePendingRequest(message: WebSocketMessage): boolean {
+    const correlationId = (message.payload as Record<string, string>)?.correlationId;
+    const requestId = correlationId || message.id;
+    const pendingRequest = this.pendingRequests.get(requestId);
+
+    if (!pendingRequest) {
+      return false;
+    }
+
+    this.pendingRequests.delete(requestId);
+    clearTimeout(pendingRequest.timeout);
+
+    if (message.type === 'error') {
+      const errorMessage = (message.payload as Record<string, string>)?.message || 'Request failed';
+      pendingRequest.reject(new Error(errorMessage));
+    } else {
+      pendingRequest.resolve(message);
+    }
+
+    return true;
+  }
+
+  /**
+   * Handle broadcast messages by type
+   */
+  private handleBroadcastMessage(message: WebSocketMessage): void {
+    const eventHandlers: Record<string, () => void> = {
+      'policy_update': () => this.emit('policy_update', message.payload as unknown as PolicyUpdateEvent),
+      'authorization_change': () => this.emit('authorization_change', message.payload as unknown as AuthorizationChangeEvent),
+      'anomaly_detected': () => this.emit('anomaly_detected', message.payload as unknown as AnomalyDetectedEvent),
+      'enforcement_action': () => this.emit('enforcement_action', message.payload as unknown as EnforcementActionEvent),
+      'pong': () => { /* Heartbeat response, nothing to do */ },
+      'authenticated': () => { /* Handled in authenticate() via pending request */ },
+    };
+
+    const handler = eventHandlers[message.type];
+    if (handler) {
+      handler();
+    } else {
+      this.debug('Unhandled message type:', message.type);
     }
   }
 
@@ -608,8 +671,8 @@ export class AuthzWebSocketClient {
       this.pendingRequests.delete(id);
     }
 
-    // Auto-reconnect if enabled
-    if (this.config.autoReconnect && code !== 1000) {
+    // Auto-reconnect if enabled (not for normal close)
+    if (this.config.autoReconnect && code !== NORMAL_CLOSE_CODE) {
       this.scheduleReconnect();
     }
   }
@@ -625,7 +688,7 @@ export class AuthzWebSocketClient {
     }
 
     const delay = Math.min(
-      this.config.reconnectDelay * Math.pow(2, this.reconnectAttempts),
+      this.config.reconnectDelay * Math.pow(EXPONENTIAL_BACKOFF_BASE, this.reconnectAttempts),
       this.config.maxReconnectDelay,
     );
 
@@ -737,11 +800,11 @@ export class AuthzWebSocketClient {
   }
 
   /**
-   * Debug logging
+   * Debug logging - uses injected logger instead of direct console.log
    */
   private debug(...args: unknown[]): void {
     if (this.config.debug) {
-      console.log('[AuthzWebSocketClient]', ...args);
+      this.logger.log('[AuthzWebSocketClient]', ...args);
     }
   }
 }

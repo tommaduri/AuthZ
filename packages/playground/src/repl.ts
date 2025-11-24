@@ -16,7 +16,7 @@ import type {
   GeneratedTestCase,
   RuleMatch,
 } from './simulator.js';
-import type { CheckRequest, CheckResponse, Effect } from '@authz-engine/core';
+import type { CheckRequest, CheckResponse } from '@authz-engine/core';
 
 /**
  * REPL Configuration

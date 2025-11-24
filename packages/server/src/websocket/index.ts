@@ -16,7 +16,6 @@ import type {
   WebSocketServerConfig,
   WebSocketMessage,
   ConnectionStats,
-  AuthValidationResult,
   BroadcastOptions,
 } from './types';
 
@@ -31,6 +30,8 @@ function generateId(): string {
  * WebSocket Server for real-time authorization updates
  */
 export class WebSocketServer {
+  private static readonly MILLISECONDS_PER_SECOND = 1000;
+
   private wss: WSServer | null = null;
   private clients: Map<string, ClientConnection> = new Map();
   private handlers: WebSocketHandlers;
@@ -49,9 +50,9 @@ export class WebSocketServer {
   };
 
   constructor(
-    private engine: DecisionEngine,
+    engine: DecisionEngine,
     logger: Logger,
-    private orchestrator?: AgentOrchestrator,
+    orchestrator?: AgentOrchestrator,
     config: WebSocketServerConfig = {},
   ) {
     this.logger = logger.child({ component: 'websocket' });
@@ -177,12 +178,13 @@ export class WebSocketServer {
 
     // If auth is required, set a timeout for authentication
     if (this.config.requireAuth) {
+      const AUTH_TIMEOUT_MS = 10000;
       setTimeout(() => {
         if (client.state === 'connecting') {
           this.logger.warn(`Client ${clientId} did not authenticate in time`);
           socket.close(4001, 'Authentication timeout');
         }
-      }, 10000);
+      }, AUTH_TIMEOUT_MS);
     }
   }
 
@@ -449,7 +451,7 @@ export class WebSocketServer {
       messagesSent: this.stats.messagesSent,
       messagesReceived: this.stats.messagesReceived,
       errorsCount: this.stats.errorsCount,
-      uptimeSeconds: Math.floor((Date.now() - this.startTime.getTime()) / 1000),
+      uptimeSeconds: Math.floor((Date.now() - this.startTime.getTime()) / WebSocketServer.MILLISECONDS_PER_SECOND),
     };
   }
 

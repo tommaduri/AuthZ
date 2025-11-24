@@ -1,7 +1,7 @@
-import Fastify, { FastifyInstance, FastifyRequest } from 'fastify';
+import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
-import { DecisionEngine, extractTraceContext, injectTraceContext, createSpan } from '@authz-engine/core';
-import type { CheckRequest, CheckResponse, ActionResult, Principal, Resource, Span } from '@authz-engine/core';
+import { DecisionEngine } from '@authz-engine/core';
+import type { CheckRequest, ActionResult, Principal, Resource } from '@authz-engine/core';
 import { Logger } from '../utils/logger';
 import type { AgentOrchestrator } from '@authz-engine/agents';
 import type { LearnedPattern, Anomaly, EnforcerAction } from '@authz-engine/agents';
@@ -35,14 +35,10 @@ export class RestServer {
   }
 
   /**
-   * Extract trace context from request headers
+   * Generate a request ID for tracing
    */
-  private extractTraceContextFromRequest(request: FastifyRequest): { traceId: string; parentSpanId?: string } {
-    const headers: Record<string, string | string[]> = {};
-    for (const [key, value] of Object.entries(request.headers)) {
-      headers[key] = value as string | string[];
-    }
-    return extractTraceContext(headers) as { traceId: string; parentSpanId?: string };
+  private generateRequestId(): string {
+    return `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }
 
   /**
@@ -62,7 +58,7 @@ export class RestServer {
         status: 'healthy',
         version: '0.1.0',
         policies_loaded: stats.resourcePolicies + stats.derivedRolesPolicies,
-        uptime_seconds: Math.floor((Date.now() - this.startTime) / 1000),
+        uptime_seconds: Math.floor((Date.now() - this.startTime) / RestServer.MILLISECONDS_PER_SECOND),
       };
     });
 
@@ -78,28 +74,15 @@ export class RestServer {
 
     // Check authorization (Cerbos-compatible)
     this.server.post<{ Body: CheckRequestBody }>('/api/check', async (request, reply) => {
-      // Extract trace context from request headers
-      const traceContext = this.extractTraceContextFromRequest(request);
-      const span = createSpan('http.check', {
-        'http.method': 'POST',
-        'http.url': '/api/check',
-        'http.client_ip': request.ip,
-        'trace.id': traceContext.traceId,
-      });
+      const requestId = this.generateRequestId();
 
-      // Inject trace context into response headers
-      const responseHeaders: Record<string, string> = {};
-      injectTraceContext(span, traceContext.traceId || 'unknown', responseHeaders);
-      Object.entries(responseHeaders).forEach(([key, value]) => {
-        reply.header(key, value);
-      });
+      // Add request ID to response headers for tracing
+      reply.header('x-request-id', requestId);
 
       try {
         const body = request.body;
         const checkRequest = this.transformRequest(body);
-        const response = this.engine.check(checkRequest, span);
-
-        span.end();
+        const response = this.engine.check(checkRequest);
 
         return {
           requestId: response.requestId,
@@ -111,7 +94,6 @@ export class RestServer {
         };
       } catch (error) {
         this.logger.error('Check failed', error);
-        span.end();
         reply.status(400).send({
           error: error instanceof Error ? error.message : 'Invalid request',
         });
@@ -123,7 +105,7 @@ export class RestServer {
       try {
         const body = request.body;
         const principal = this.transformPrincipal(body.principal);
-        const results: Record<string, any> = {};
+        const results: Record<string, unknown> = {};
 
         for (const item of body.resources) {
           const resource = this.transformResource(item.resource);
@@ -222,30 +204,30 @@ export class RestServer {
   /**
    * Transform REST principal
    */
-  private transformPrincipal(p: any): Principal {
+  private transformPrincipal(p: Record<string, unknown>): Principal {
     return {
-      id: p.id,
-      roles: p.roles || [],
-      attributes: p.attr || p.attributes || {},
+      id: p.id as string,
+      roles: (p.roles as string[]) || [],
+      attributes: (p.attr || p.attributes || {}) as Record<string, unknown>,
     };
   }
 
   /**
    * Transform REST resource
    */
-  private transformResource(r: any): Resource {
+  private transformResource(r: Record<string, unknown>): Resource {
     return {
-      kind: r.kind,
-      id: r.id,
-      attributes: r.attr || r.attributes || {},
+      kind: r.kind as string,
+      id: r.id as string,
+      attributes: (r.attr || r.attributes || {}) as Record<string, unknown>,
     };
   }
 
   /**
    * Transform engine results to REST format
    */
-  private transformResults(results: Record<string, any>): Record<string, any> {
-    const transformed: Record<string, any> = {};
+  private transformResults(results: Record<string, ActionResult>): Record<string, unknown> {
+    const transformed: Record<string, unknown> = {};
     for (const [action, result] of Object.entries(results)) {
       transformed[action] = {
         effect: result.effect.toUpperCase(),
@@ -271,7 +253,6 @@ export class RestServer {
       async (request, reply) => {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
-          return;
           return;
         }
 
@@ -334,7 +315,7 @@ export class RestServer {
           status: health.status,
           agents: health.agents,
           infrastructure: health.infrastructure,
-          uptime_seconds: Math.floor((Date.now() - this.startTime) / 1000),
+          uptime_seconds: Math.floor((Date.now() - this.startTime) / RestServer.MILLISECONDS_PER_SECOND),
         };
       } catch (error) {
         this.logger.error('Health check failed', error);
@@ -353,7 +334,6 @@ export class RestServer {
       async (request, reply) => {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
-          return;
           return;
         }
 
@@ -406,7 +386,6 @@ export class RestServer {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
           return;
-          return;
         }
 
         try {
@@ -415,7 +394,6 @@ export class RestServer {
 
           if (approved === undefined || !validatedBy) {
             reply.status(400).send({ error: 'approved (boolean) and validatedBy are required' });
-          return;
             return;
           }
 
@@ -475,7 +453,6 @@ export class RestServer {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
           return;
-          return;
         }
 
         try {
@@ -519,7 +496,6 @@ export class RestServer {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
           return;
-          return;
         }
 
         try {
@@ -528,7 +504,6 @@ export class RestServer {
 
           if (!anomaly) {
             reply.status(404).send({ error: 'Anomaly not found' });
-          return;
             return;
           }
 
@@ -567,7 +542,6 @@ export class RestServer {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
           return;
-          return;
         }
 
         try {
@@ -576,7 +550,6 @@ export class RestServer {
 
           if (!resolution) {
             reply.status(400).send({ error: 'resolution is required (resolved or false_positive)' });
-          return;
             return;
           }
 
@@ -607,7 +580,6 @@ export class RestServer {
       async (request, reply) => {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
-          return;
           return;
         }
 
@@ -653,7 +625,6 @@ export class RestServer {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
           return;
-          return;
         }
 
         try {
@@ -662,14 +633,12 @@ export class RestServer {
 
           if (!approvedBy) {
             reply.status(400).send({ error: 'approvedBy is required' });
-          return;
             return;
           }
 
           const action = await this.orchestrator.approveAction(id, approvedBy);
           if (!action) {
             reply.status(404).send({ error: 'Enforcement action not found or already processed' });
-          return;
             return;
           }
 
@@ -702,7 +671,6 @@ export class RestServer {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
           return;
-          return;
         }
 
         try {
@@ -711,14 +679,12 @@ export class RestServer {
 
           if (!rejectedBy) {
             reply.status(400).send({ error: 'rejectedBy is required' });
-          return;
             return;
           }
 
           const success = this.orchestrator.rejectAction(id, rejectedBy, reason);
           if (!success) {
             reply.status(404).send({ error: 'Enforcement action not found or already processed' });
-          return;
             return;
           }
 
@@ -748,7 +714,6 @@ export class RestServer {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
           return;
-          return;
         }
 
         try {
@@ -756,7 +721,6 @@ export class RestServer {
 
           if (!principal || !resource || !actions) {
             reply.status(400).send({ error: 'principal, resource, and actions are required' });
-          return;
             return;
           }
 
@@ -805,7 +769,6 @@ export class RestServer {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
           return;
-          return;
         }
 
         try {
@@ -813,7 +776,6 @@ export class RestServer {
 
           if (!question) {
             reply.status(400).send({ error: 'question is required' });
-          return;
             return;
           }
 
@@ -839,7 +801,6 @@ export class RestServer {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
           return;
-          return;
         }
 
         try {
@@ -847,7 +808,6 @@ export class RestServer {
 
           if (!issue || !policyYaml) {
             reply.status(400).send({ error: 'issue and policyYaml are required' });
-          return;
             return;
           }
 
@@ -872,7 +832,6 @@ export class RestServer {
       async (request, reply) => {
         if (!this.orchestrator) {
           reply.status(503).send({ error: 'Agentic features not available' });
-          return;
           return;
         }
 
@@ -1371,7 +1330,7 @@ export class RestServer {
 
       try {
         const health = await this.orchestrator.getHealth();
-        const uptime = Math.floor((Date.now() - this.startTime) / 1000);
+        const uptime = Math.floor((Date.now() - this.startTime) / RestServer.MILLISECONDS_PER_SECOND);
 
         return {
           status: health.status,
@@ -1576,14 +1535,20 @@ export class RestServer {
     this.logger.info('Agentic V1 API routes registered at /api/v1/agentic/*');
   }
 
+  // Time constants for uptime calculation
+  private static readonly SECONDS_PER_DAY = 86400;
+  private static readonly SECONDS_PER_HOUR = 3600;
+  private static readonly SECONDS_PER_MINUTE = 60;
+  private static readonly MILLISECONDS_PER_SECOND = 1000;
+
   /**
    * Format uptime in human-readable format
    */
   private formatUptime(seconds: number): string {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    const days = Math.floor(seconds / RestServer.SECONDS_PER_DAY);
+    const hours = Math.floor((seconds % RestServer.SECONDS_PER_DAY) / RestServer.SECONDS_PER_HOUR);
+    const minutes = Math.floor((seconds % RestServer.SECONDS_PER_HOUR) / RestServer.SECONDS_PER_MINUTE);
+    const secs = seconds % RestServer.SECONDS_PER_MINUTE;
 
     const parts: string[] = [];
     if (days > 0) parts.push(`${days}d`);
@@ -1709,7 +1674,10 @@ interface ExplainDecisionRequestBody {
   decision?: {
     requestId: string;
     results: Record<string, ActionResult>;
-    meta?: CheckResponse['meta'];
+    meta?: {
+      evaluationDurationMs: number;
+      policiesEvaluated: string[];
+    };
   };
   policyContext?: {
     matchedRules: string[];

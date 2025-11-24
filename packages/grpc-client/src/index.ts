@@ -187,37 +187,40 @@ export {
   DEFAULT_OTEL_CONFIG,
 } from './types.js';
 
+// Import types for helper functions
+import { Effect as EffectEnum, type CheckResponse as CheckResponseType } from './types.js';
+
 /**
  * Helper function to check if an action is allowed
  */
 export function isAllowed(
-  response: import('./types.js').CheckResponse,
+  response: CheckResponseType,
   action: string
 ): boolean {
   const result = response.results.get(action);
-  return result?.effect === import('./types.js').Effect.ALLOW;
+  return result?.effect === EffectEnum.ALLOW;
 }
 
 /**
  * Helper function to check if an action is denied
  */
 export function isDenied(
-  response: import('./types.js').CheckResponse,
+  response: CheckResponseType,
   action: string
 ): boolean {
   const result = response.results.get(action);
-  return result?.effect === import('./types.js').Effect.DENY;
+  return result?.effect === EffectEnum.DENY;
 }
 
 /**
  * Helper function to get all allowed actions from a response
  */
 export function getAllowedActions(
-  response: import('./types.js').CheckResponse
+  response: CheckResponseType
 ): string[] {
   const allowed: string[] = [];
   for (const [action, result] of response.results) {
-    if (result.effect === import('./types.js').Effect.ALLOW) {
+    if (result.effect === EffectEnum.ALLOW) {
       allowed.push(action);
     }
   }
@@ -228,11 +231,11 @@ export function getAllowedActions(
  * Helper function to get all denied actions from a response
  */
 export function getDeniedActions(
-  response: import('./types.js').CheckResponse
+  response: CheckResponseType
 ): string[] {
   const denied: string[] = [];
   for (const [action, result] of response.results) {
-    if (result.effect === import('./types.js').Effect.DENY) {
+    if (result.effect === EffectEnum.DENY) {
       denied.push(action);
     }
   }
@@ -243,7 +246,7 @@ export function getDeniedActions(
  * Helper function to check if all actions are allowed
  */
 export function areAllAllowed(
-  response: import('./types.js').CheckResponse,
+  response: CheckResponseType,
   actions: string[]
 ): boolean {
   for (const action of actions) {
@@ -258,7 +261,7 @@ export function areAllAllowed(
  * Helper function to check if any action is allowed
  */
 export function isAnyAllowed(
-  response: import('./types.js').CheckResponse,
+  response: CheckResponseType,
   actions: string[]
 ): boolean {
   for (const action of actions) {

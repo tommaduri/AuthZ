@@ -5,7 +5,7 @@
  * subscriptions, and client connections for real-time authorization updates.
  */
 
-import type { Principal, Resource, Effect, CheckResponse } from '@authz-engine/core';
+import type { Principal, Resource, Effect } from '@authz-engine/core';
 import type WebSocket from 'ws';
 
 // =============================================================================
@@ -157,7 +157,7 @@ export interface EnforcementActionMessage extends WebSocketMessageBase {
   payload: {
     actionId: string;
     actionType: string;
-    status: 'pending' | 'executed' | 'rejected' | 'rolled_back';
+    status: 'pending' | 'executing' | 'executed' | 'completed' | 'failed' | 'cancelled' | 'rejected' | 'rolled_back';
     principalId?: string;
     reason: string;
     triggeredAt: string;

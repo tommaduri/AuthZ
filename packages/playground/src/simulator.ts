@@ -7,11 +7,9 @@
  * @module @authz-engine/playground/simulator
  */
 
-import { parse as parseYaml } from 'yaml';
 import type {
   CheckRequest,
   CheckResponse,
-  ActionResult,
   Principal,
   Resource,
   Effect,
@@ -114,16 +112,16 @@ export class PolicySimulator {
   private readonly celEvaluator: CelEvaluator;
   private resourcePolicies: ValidatedResourcePolicy[] = [];
   private derivedRolesPolicies: ValidatedDerivedRolesPolicy[] = [];
-  private readonly config: SimulatorConfig;
+  private readonly _config: SimulatorConfig;
   private lastRequest?: CheckRequest;
   private lastResponse?: CheckResponse;
-  private lastExplanation?: DecisionExplanation;
+  private _lastExplanation?: DecisionExplanation;
 
   constructor(config: SimulatorConfig = {}) {
     this.parser = new PolicyParser();
     this.engine = new DecisionEngine();
     this.celEvaluator = new CelEvaluator();
-    this.config = {
+    this._config = {
       verbose: config.verbose ?? false,
       maxWhatIfDepth: config.maxWhatIfDepth ?? 10,
     };
@@ -192,7 +190,7 @@ export class PolicySimulator {
     this.engine.clearPolicies();
     this.lastRequest = undefined;
     this.lastResponse = undefined;
-    this.lastExplanation = undefined;
+    this._lastExplanation = undefined;
   }
 
   /**
@@ -204,7 +202,7 @@ export class PolicySimulator {
   simulate(request: CheckRequest): CheckResponse {
     this.lastRequest = request;
     this.lastResponse = this.engine.check(request);
-    this.lastExplanation = undefined; // Clear cached explanation
+    this._lastExplanation = undefined; // Clear cached explanation
     return this.lastResponse;
   }
 
@@ -227,7 +225,7 @@ export class PolicySimulator {
 
     // Build explanation
     const explanation = this.buildExplanation(req, this.lastResponse!);
-    this.lastExplanation = explanation;
+    this._lastExplanation = explanation;
     return explanation;
   }
 

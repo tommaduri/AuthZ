@@ -6,7 +6,7 @@
  */
 
 import { trace, context, SpanStatusCode, Tracer } from '@opentelemetry/api';
-import type { Span } from '@opentelemetry/api';
+import type { Span, Attributes } from '@opentelemetry/api';
 
 /**
  * Global tracer instance
@@ -43,7 +43,7 @@ export interface SpanContext {
   traceId?: string;
   spanId?: string;
   parentSpanId?: string;
-  attributes?: Record<string, unknown>;
+  attributes?: Attributes;
 }
 
 /**
@@ -51,7 +51,7 @@ export interface SpanContext {
  */
 export function createSpan(
   name: string,
-  attributes?: Record<string, unknown>,
+  attributes?: Attributes,
   parentSpan?: Span,
 ): Span {
   const tracer = getTracer();
@@ -68,7 +68,7 @@ export function createSpan(
 export async function withSpan<T>(
   name: string,
   fn: (span: Span) => Promise<T>,
-  attributes?: Record<string, unknown>,
+  attributes?: Attributes,
   parentSpan?: Span,
 ): Promise<T> {
   const span = createSpan(name, attributes, parentSpan);
@@ -97,7 +97,7 @@ export async function withSpan<T>(
 export function withSpanSync<T>(
   name: string,
   fn: (span: Span) => T,
-  attributes?: Record<string, unknown>,
+  attributes?: Attributes,
   parentSpan?: Span,
 ): T {
   const span = createSpan(name, attributes, parentSpan);
@@ -151,7 +151,7 @@ export function setSpanError(span: Span, error: Error | string): void {
 /**
  * Add attributes to a span
  */
-export function addSpanAttributes(span: Span, attributes: Record<string, unknown>): void {
+export function addSpanAttributes(span: Span, attributes: Attributes): void {
   span.setAttributes(attributes);
 }
 
@@ -161,7 +161,7 @@ export function addSpanAttributes(span: Span, attributes: Record<string, unknown
 export function addSpanEvent(
   span: Span,
   name: string,
-  attributes?: Record<string, unknown>,
+  attributes?: Attributes,
 ): void {
   span.addEvent(name, attributes);
 }

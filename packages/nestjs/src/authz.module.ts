@@ -22,11 +22,11 @@ export interface AuthzModuleAsyncOptions {
   /** Make the module global */
   global?: boolean;
   /** Imports needed for the factory */
-  imports?: any[];
+  imports?: Type<unknown>[];
   /** Factory function to create options */
-  useFactory: (...args: any[]) => Promise<AuthzModuleOptions> | AuthzModuleOptions;
+  useFactory: (...args: unknown[]) => Promise<AuthzModuleOptions> | AuthzModuleOptions;
   /** Dependencies to inject into factory */
-  inject?: any[];
+  inject?: (Type<unknown> | string | symbol)[];
   /** Class that implements options factory */
   useClass?: Type<AuthzOptionsFactory>;
   /** Existing instance to use */
@@ -123,7 +123,7 @@ export class AuthzModule {
       AuthzGuard,
     ];
 
-    const exports: (string | Type<any>)[] = [
+    const exports: (string | Type<unknown>)[] = [
       AuthzService,
       AuthzGuard,
       AUTHZ_CLIENT,
@@ -159,7 +159,7 @@ export class AuthzModule {
   static forRootAsync(options: AuthzModuleAsyncOptions): DynamicModule {
     const clientProvider: Provider = {
       provide: AUTHZ_CLIENT,
-      useFactory: async (...args: any[]) => {
+      useFactory: async (...args: unknown[]): Promise<ReturnType<typeof createClient>> => {
         const config = await options.useFactory(...args);
         return createClient(config);
       },
@@ -174,7 +174,7 @@ export class AuthzModule {
 
     const agenticConfigProvider: Provider = {
       provide: AUTHZ_AGENTIC_CONFIG,
-      useFactory: async (...args: any[]) => {
+      useFactory: async (...args: unknown[]): Promise<AuthzAgenticConfig | undefined> => {
         const config = await options.useFactory(...args);
         return config.agentic;
       },
@@ -235,9 +235,9 @@ export class AuthzModule {
    * Register only the agentic features with async configuration
    */
   static forAgenticAsync(options: {
-    imports?: any[];
-    useFactory: (...args: any[]) => Promise<AuthzAgenticConfig> | AuthzAgenticConfig;
-    inject?: any[];
+    imports?: Type<unknown>[];
+    useFactory: (...args: unknown[]) => Promise<AuthzAgenticConfig> | AuthzAgenticConfig;
+    inject?: (Type<unknown> | string | symbol)[];
   }): DynamicModule {
     const agenticConfigProvider: Provider = {
       provide: AUTHZ_AGENTIC_CONFIG,

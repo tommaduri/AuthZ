@@ -3,6 +3,12 @@ import type { AuthzClient, Principal, Resource, CheckResult } from '@authz-engin
 import { AUTHZ_CLIENT, AUTHZ_OPTIONS } from './authz.module';
 import type { AuthzModuleOptions } from './authz.module';
 
+// Constants for magic numbers
+const DEFAULT_TIMEOUT_MS = 5000;
+const DEFAULT_CONFIDENCE_SCORE = 0.9;
+const DEFAULT_PATTERN_MIN_CONFIDENCE = 0.7;
+const DEFAULT_TIME_RANGE_HOURS = 24;
+
 /**
  * Agentic check options
  */
@@ -208,7 +214,11 @@ export class AuthzService {
     policiesLoaded: number;
     version: string;
   }> {
-    return this.client.healthCheck();
+    return this.client.healthCheck() as Promise<{
+      healthy: boolean;
+      policiesLoaded: number;
+      version: string;
+    }>;
   }
 
   // ============================================
@@ -278,7 +288,7 @@ export class AuthzService {
         agenticResult.explanation = baseResult.allowed
           ? `Access allowed based on policy matching ${resource.kind}`
           : `Access denied: no matching allow policy for ${action} on ${resource.kind}`;
-        agenticResult.confidence = 0.9;
+        agenticResult.confidence = DEFAULT_CONFIDENCE_SCORE;
       }
     }
 
@@ -421,8 +431,8 @@ export class AuthzService {
     try {
       return await this.sendAgenticRequest<PatternDiscoveryResult>('/api/agentic/patterns/discover', {
         resource: options.resource,
-        timeRangeHours: options.timeRangeHours || 24,
-        minConfidence: options.minConfidence || 0.7,
+        timeRangeHours: options.timeRangeHours || DEFAULT_TIME_RANGE_HOURS,
+        minConfidence: options.minConfidence || DEFAULT_PATTERN_MIN_CONFIDENCE,
       });
     } catch (error) {
       this.logger.error('Failed to trigger pattern discovery', error);
@@ -574,7 +584,7 @@ export class AuthzService {
   ): Promise<T> {
     const serverUrl = this.options.serverUrl.replace(/\/$/, '');
     const url = `${serverUrl}${path}`;
-    const timeout = this.options.timeout || 5000;
+    const timeout = this.options.timeout || DEFAULT_TIMEOUT_MS;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);

@@ -134,6 +134,13 @@ export class CelEvaluator {
    */
   private readonly customFunctions: CelFunctions;
 
+  /** Default cache size for CEL expressions */
+  private static readonly DEFAULT_CACHE_SIZE = 1000;
+  /** Default cache TTL: 1 hour in milliseconds */
+  private static readonly DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000;
+  /** Cache eviction percentage when full */
+  private static readonly CACHE_EVICTION_PERCENTAGE = 0.1;
+
   constructor(options?: {
     /** Maximum number of cached expressions (default: 1000) */
     maxCacheSize?: number;
@@ -141,8 +148,8 @@ export class CelEvaluator {
     cacheTtlMs?: number;
   }) {
     this.expressionCache = new Map();
-    this.maxCacheSize = options?.maxCacheSize ?? 1000;
-    this.cacheTtlMs = options?.cacheTtlMs ?? 60 * 60 * 1000; // 1 hour
+    this.maxCacheSize = options?.maxCacheSize ?? CelEvaluator.DEFAULT_CACHE_SIZE;
+    this.cacheTtlMs = options?.cacheTtlMs ?? CelEvaluator.DEFAULT_CACHE_TTL_MS;
 
     // Define custom CEL functions
     this.customFunctions = this.buildCustomFunctions();
@@ -261,7 +268,7 @@ export class CelEvaluator {
   private cacheExpression(expression: string, cst: ParsedCst, now: number): void {
     // Evict oldest entries if at capacity
     if (this.expressionCache.size >= this.maxCacheSize) {
-      this.evictOldestEntries(Math.floor(this.maxCacheSize * 0.1));
+      this.evictOldestEntries(Math.floor(this.maxCacheSize * CelEvaluator.CACHE_EVICTION_PERCENTAGE));
     }
 
     this.expressionCache.set(expression, { cst, createdAt: now });

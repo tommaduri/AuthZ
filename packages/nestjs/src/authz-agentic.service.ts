@@ -21,6 +21,29 @@ import type {
   WithRecommendationsOptions,
 } from './decorators';
 
+// Constants for magic numbers
+const DEFAULT_BASELINE_REQUESTS_PER_HOUR = 10;
+const ONE_HOUR_MS = 3600000;
+const DEFAULT_ANOMALY_THRESHOLD = 0.8;
+const VELOCITY_SPIKE_THRESHOLD = 2;
+const VELOCITY_SPIKE_SCORE = 0.3;
+const UNUSUAL_TIME_SCORE = 0.2;
+const SENSITIVE_ACTION_SCORE = 0.15;
+const UNUSUAL_TIME_START_HOUR = 0;
+const UNUSUAL_TIME_END_HOUR = 5;
+const BASELINE_DECAY_FACTOR = 0.9;
+const BASELINE_NEW_DATA_FACTOR = 0.1;
+const BASE_CONFIDENCE_SCORE = 0.7;
+const THREAT_CONFIDENCE_REDUCTION_FACTOR = 0.3;
+const MULTI_AGENT_CONFIDENCE_BOOST = 0.05;
+const MAX_CONFIDENCE = 0.99;
+const MIN_AGENT_COUNT_FOR_BOOST = 2;
+const MAX_RECOMMENDATIONS_DEFAULT = 5;
+const HIGH_SEVERITY_DEVIATION_THRESHOLD = 5;
+const SIMULATED_AVG_CONFIDENCE = 0.85;
+const SIMULATED_DECISION_RANGE = 100;
+const SIMULATED_DECISION_MIN = 10;
+
 /**
  * Configuration for the agentic service
  */
@@ -298,7 +321,7 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
    */
   async checkThreat(
     principalId: string,
-    resource: Resource,
+    _resource: Resource,
     action: string,
     options: ThreatProtectedOptions & { enabled: boolean },
   ): Promise<ThreatData> {
@@ -308,7 +331,7 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
 
     if (!baseline) {
       baseline = {
-        requestsPerHour: 10, // Default baseline
+        requestsPerHour: DEFAULT_BASELINE_REQUESTS_PER_HOUR,
         lastUpdated: new Date(),
         recentRequests: [],
       };
@@ -318,7 +341,7 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
     // Track recent request
     baseline.recentRequests.push(now);
     // Keep only last hour
-    const oneHourAgo = now - 3600000;
+    const oneHourAgo = now - ONE_HOUR_MS;
     baseline.recentRequests = baseline.recentRequests.filter(t => t > oneHourAgo);
 
     // Calculate anomaly score based on various factors
@@ -334,13 +357,13 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
     let anomalyScore = 0;
 
     // Velocity spike detection
-    if (deviation > 2) {
-      anomalyScore += 0.3;
-      riskFactors.push({ factor: 'velocity_spike', score: deviation / 5 });
+    if (deviation > VELOCITY_SPIKE_THRESHOLD) {
+      anomalyScore += VELOCITY_SPIKE_SCORE;
+      riskFactors.push({ factor: 'velocity_spike', score: deviation / HIGH_SEVERITY_DEVIATION_THRESHOLD });
       if (options.threatTypes?.includes('velocity_spike')) {
         detectedThreats.push({
           type: 'velocity_spike',
-          severity: deviation > 5 ? 'high' : 'medium',
+          severity: deviation > HIGH_SEVERITY_DEVIATION_THRESHOLD ? 'high' : 'medium',
           description: `Request rate ${currentRate}/hr is ${deviation.toFixed(1)}x above baseline ${expectedRate}/hr`,
         });
       }
@@ -348,9 +371,9 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
 
     // Unusual time detection (simplified: late night hours)
     const hour = new Date().getHours();
-    if (hour >= 0 && hour <= 5) {
-      anomalyScore += 0.2;
-      riskFactors.push({ factor: 'unusual_time', score: 0.2 });
+    if (hour >= UNUSUAL_TIME_START_HOUR && hour <= UNUSUAL_TIME_END_HOUR) {
+      anomalyScore += UNUSUAL_TIME_SCORE;
+      riskFactors.push({ factor: 'unusual_time', score: UNUSUAL_TIME_SCORE });
       if (options.threatTypes?.includes('unusual_access_time')) {
         detectedThreats.push({
           type: 'unusual_access_time',
@@ -362,8 +385,8 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
 
     // Permission escalation detection (simplified)
     if (action.includes('admin') || action.includes('delete') || action.includes('destroy')) {
-      anomalyScore += 0.15;
-      riskFactors.push({ factor: 'sensitive_action', score: 0.15 });
+      anomalyScore += SENSITIVE_ACTION_SCORE;
+      riskFactors.push({ factor: 'sensitive_action', score: SENSITIVE_ACTION_SCORE });
       if (options.threatTypes?.includes('permission_escalation')) {
         detectedThreats.push({
           type: 'permission_escalation',
@@ -377,16 +400,16 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
     anomalyScore = Math.min(1, anomalyScore);
 
     // Update baseline over time
-    if (now - baseline.lastUpdated.getTime() > 3600000) {
+    if (now - baseline.lastUpdated.getTime() > ONE_HOUR_MS) {
       baseline.requestsPerHour = Math.round(
-        baseline.requestsPerHour * 0.9 + currentRate * 0.1,
+        baseline.requestsPerHour * BASELINE_DECAY_FACTOR + currentRate * BASELINE_NEW_DATA_FACTOR,
       );
       baseline.lastUpdated = new Date();
     }
 
     return {
       anomalyScore,
-      isAnomalous: anomalyScore > (options.anomalyThreshold ?? 0.8),
+      isAnomalous: anomalyScore > (options.anomalyThreshold ?? DEFAULT_ANOMALY_THRESHOLD),
       detectedThreats,
       riskFactors,
       baseline: {
@@ -403,17 +426,25 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
     principal: Principal,
     resource: Resource,
     action: string,
-    config?: RequireAnalysisOptions,
+    _config?: RequireAnalysisOptions,
   ): Promise<AnalysisData> {
     // Simulated analysis - in production this would use ML models
-    const patterns = [];
+    const patterns: Array<{
+      id: string;
+      name: string;
+      confidence: number;
+      description: string;
+    }> = [];
+
+    const ADMIN_ACCESS_CONFIDENCE = 0.95;
+    const SUBSCRIPTION_CREATE_CONFIDENCE = 0.85;
 
     // Check for common access patterns
     if (principal.roles.includes('admin')) {
       patterns.push({
         id: 'admin-access',
         name: 'Administrative Access',
-        confidence: 0.95,
+        confidence: ADMIN_ACCESS_CONFIDENCE,
         description: 'Principal has administrative role',
       });
     }
@@ -422,7 +453,7 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
       patterns.push({
         id: 'subscription-create',
         name: 'Subscription Creation',
-        confidence: 0.85,
+        confidence: SUBSCRIPTION_CREATE_CONFIDENCE,
         description: 'Standard subscription creation pattern',
       });
     }
@@ -430,21 +461,44 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
     // Calculate overall confidence
     const avgPatternConfidence = patterns.length > 0
       ? patterns.reduce((sum, p) => sum + p.confidence, 0) / patterns.length
-      : 0.7;
+      : BASE_CONFIDENCE_SCORE;
 
     return {
       confidence: avgPatternConfidence,
       patterns,
       historicalContext: {
-        similarDecisions: Math.floor(Math.random() * 100) + 10, // Simulated
-        avgConfidence: 0.85,
+        similarDecisions: this.generateSimulatedDecisionCount(),
+        avgConfidence: SIMULATED_AVG_CONFIDENCE,
         commonOutcomes: ['allow', 'allow', 'allow', 'deny'],
       },
       riskAssessment: {
-        level: avgPatternConfidence > 0.8 ? 'low' : avgPatternConfidence > 0.5 ? 'medium' : 'high',
+        level: this.determineRiskLevel(avgPatternConfidence),
         factors: patterns.length > 0 ? ['matched_known_pattern'] : ['no_pattern_match'],
       },
     };
+  }
+
+  /**
+   * Generate simulated decision count for historical context
+   */
+  private generateSimulatedDecisionCount(): number {
+    return Math.floor(Math.random() * SIMULATED_DECISION_RANGE) + SIMULATED_DECISION_MIN;
+  }
+
+  /**
+   * Determine risk level based on confidence score
+   */
+  private determineRiskLevel(confidence: number): 'low' | 'medium' | 'high' {
+    const HIGH_CONFIDENCE_THRESHOLD = 0.8;
+    const MEDIUM_CONFIDENCE_THRESHOLD = 0.5;
+
+    if (confidence > HIGH_CONFIDENCE_THRESHOLD) {
+      return 'low';
+    }
+    if (confidence > MEDIUM_CONFIDENCE_THRESHOLD) {
+      return 'medium';
+    }
+    return 'high';
   }
 
   /**
@@ -457,7 +511,7 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
     config?: WithRecommendationsOptions,
   ): Promise<string[]> {
     const recommendations: string[] = [];
-    const maxRecommendations = config?.maxRecommendations ?? 5;
+    const maxRecommendations = config?.maxRecommendations ?? MAX_RECOMMENDATIONS_DEFAULT;
 
     // Generate context-aware recommendations
     if (action.includes('delete') || action.includes('destroy')) {
@@ -559,7 +613,7 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
     threatInfo?: ThreatData,
     agentCount?: number,
   ): number {
-    let confidence = 0.7; // Base confidence
+    let confidence = BASE_CONFIDENCE_SCORE;
 
     if (analysis) {
       confidence = analysis.confidence;
@@ -567,15 +621,16 @@ export class AuthzAgenticService implements OnModuleInit, OnModuleDestroy {
 
     // Reduce confidence if threats detected
     if (threatInfo?.anomalyScore) {
-      confidence *= (1 - threatInfo.anomalyScore * 0.3);
+      confidence *= (1 - threatInfo.anomalyScore * THREAT_CONFIDENCE_REDUCTION_FACTOR);
     }
 
     // Increase confidence with more agents involved
-    if (agentCount && agentCount > 2) {
-      confidence = Math.min(0.99, confidence + 0.05);
+    if (agentCount && agentCount > MIN_AGENT_COUNT_FOR_BOOST) {
+      confidence = Math.min(MAX_CONFIDENCE, confidence + MULTI_AGENT_CONFIDENCE_BOOST);
     }
 
-    return Math.round(confidence * 100) / 100;
+    const PRECISION_FACTOR = 100;
+    return Math.round(confidence * PRECISION_FACTOR) / PRECISION_FACTOR;
   }
 
   /**

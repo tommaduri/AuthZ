@@ -87,7 +87,7 @@ export class ConnectionPool extends EventEmitter {
     // Create minimum connections
     const promises: Promise<void>[] = [];
     for (let i = 0; i < this.options.minConnections; i++) {
-      const address = this.addresses[i % this.addresses.length];
+      const address = this.addresses[i % this.addresses.length] ?? this.addresses[0] ?? '';
       promises.push(this.createConnection(address));
     }
 
@@ -233,7 +233,7 @@ export class ConnectionPool extends EventEmitter {
     if (readyConnections.length === 0) {
       // Try to create a new connection if under max
       if (this.connections.size < this.options.maxConnections) {
-        const address = this.addresses[0];
+        const address = this.addresses[0] ?? '';
         await this.createConnection(address);
         return this.selectConnection();
       }
@@ -260,7 +260,7 @@ export class ConnectionPool extends EventEmitter {
    * Round-robin selection
    */
   private selectRoundRobin(connections: InternalConnection[]): InternalConnection {
-    const connection = connections[this.roundRobinIndex % connections.length];
+    const connection = connections[this.roundRobinIndex % connections.length]!;
     this.roundRobinIndex = (this.roundRobinIndex + 1) % connections.length;
     return connection;
   }
@@ -278,7 +278,7 @@ export class ConnectionPool extends EventEmitter {
    * Random selection
    */
   private selectRandom(connections: InternalConnection[]): InternalConnection {
-    return connections[Math.floor(Math.random() * connections.length)];
+    return connections[Math.floor(Math.random() * connections.length)]!;
   }
 
   /**
@@ -295,7 +295,7 @@ export class ConnectionPool extends EventEmitter {
       }
     }
 
-    return connections[0];
+    return connections[0]!;
   }
 
   /**
@@ -367,7 +367,7 @@ export class ConnectionPool extends EventEmitter {
             if (connection.healthCheckFailures >= 3) {
               connection.state = ConnectionState.TRANSIENT_FAILURE;
               this.emit('connection_unhealthy', { id, failures: connection.healthCheckFailures });
-              this.scheduleReconnect(id, this.addresses[0]);
+              this.scheduleReconnect(id, this.addresses[0] ?? '');
             }
           } else {
             connection.healthCheckFailures = 0;
@@ -531,7 +531,7 @@ export class ConnectionPool extends EventEmitter {
       // Scale up
       const promises: Promise<void>[] = [];
       for (let i = 0; i < clampedTarget - currentSize; i++) {
-        const address = this.addresses[i % this.addresses.length];
+        const address = this.addresses[i % this.addresses.length] ?? this.addresses[0] ?? '';
         promises.push(this.createConnection(address));
       }
       await Promise.all(promises);

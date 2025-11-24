@@ -11,6 +11,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { Principal, Resource } from '@authz-engine/sdk';
 import { AuthzService, AgenticCheckOptions as ServiceAgenticCheckOptions } from './authz.service';
 import {
   AUTHZ_METADATA_KEY,
@@ -88,12 +89,57 @@ interface ThreatProtectedMetadata extends ThreatProtectedOptions {
 }
 
 /**
+ * HTTP request with user context
+ */
+interface AuthenticatedRequest {
+  user?: { id: string; roles?: string[]; [key: string]: unknown };
+  params?: Record<string, string>;
+  body?: Record<string, unknown>;
+  authzExplanation?: string;
+  authzAnomalyScore?: number;
+  authzFactors?: Array<{ factor: string; impact: string; weight: number }>;
+  authzConfidence?: number;
+  authzResult?: unknown;
+  authzRateLimitInfo?: RateLimitData;
+  authzThreatInfo?: ThreatData;
+  authzAgenticResult?: AgenticProcessingResult;
+  authzRecommendations?: string[];
+  authzAnalysis?: AnalysisData;
+}
+
+/**
+ * WebSocket client with user context
+ */
+interface WebSocketClient {
+  user?: { id: string; roles?: string[]; [key: string]: unknown };
+  handshake?: { user?: { id: string; roles?: string[]; [key: string]: unknown } };
+}
+
+/**
+ * GraphQL context
+ */
+interface GqlContext {
+  user?: { id: string; roles?: string[]; [key: string]: unknown };
+  req?: AuthenticatedRequest;
+}
+
+/**
+ * HTTP status code for precondition required
+ */
+const HTTP_PRECONDITION_REQUIRED = 428;
+
+/**
+ * Default max anomaly score threshold
+ */
+const DEFAULT_MAX_ANOMALY_SCORE = 0.8;
+
+/**
  * Interface for the agentic service (to avoid circular import)
  */
 interface IAuthzAgenticService {
   processAgenticRequest(
-    principal: any,
-    resource: any,
+    principal: Principal,
+    resource: Resource,
     action: string,
     options: {
       includeAnalysis?: boolean;
@@ -120,7 +166,7 @@ interface IAuthzAgenticService {
     processingTimeMs: number;
   }>;
   checkRateLimit(principalId: string, options: RateLimitedMetadata): Promise<RateLimitData>;
-  checkThreat(principalId: string, resource: any, action: string, options: ThreatProtectedMetadata): Promise<ThreatData>;
+  checkThreat(principalId: string, resource: Resource, action: string, options: ThreatProtectedMetadata): Promise<ThreatData>;
 }
 
 /**
@@ -195,22 +241,22 @@ export class AuthzGuard implements CanActivate {
 
     // Get request context
     const contextType = context.getType();
-    let user: any;
-    let resourceData: any;
-    let request: any;
+    let user: { id: string; roles?: string[]; [key: string]: unknown } | undefined;
+    let resourceData: { id?: string; [key: string]: unknown } | undefined;
+    let request: AuthenticatedRequest | undefined;
 
     if (contextType === 'http') {
-      request = context.switchToHttp().getRequest();
+      request = context.switchToHttp().getRequest<AuthenticatedRequest>();
       user = request.user;
       resourceData = this.extractResourceData(request, metadata);
     } else if (contextType === 'ws') {
-      const client = context.switchToWs().getClient();
+      const client = context.switchToWs().getClient<WebSocketClient>();
       user = client.user || client.handshake?.user;
     } else if ((contextType as string) === 'graphql') {
       // GraphQL context
       const gqlContext = this.getGqlContext(context);
       user = gqlContext?.user;
-      request = gqlContext?.req || gqlContext;
+      request = gqlContext?.req || (gqlContext as unknown as AuthenticatedRequest);
       resourceData = this.extractResourceFromArgs(context, metadata);
     } else {
       // Unknown context type
@@ -294,7 +340,7 @@ export class AuthzGuard implements CanActivate {
 
       // Check anomaly protection
       if (anomalyProtection?.enabled && result.anomalyScore !== undefined) {
-        const maxScore = anomalyProtection.maxAnomalyScore ?? 0.8;
+        const maxScore = anomalyProtection.maxAnomalyScore ?? DEFAULT_MAX_ANOMALY_SCORE;
 
         if (result.anomalyScore > maxScore) {
           if (anomalyProtection.logHighAnomaly) {
@@ -348,10 +394,10 @@ export class AuthzGuard implements CanActivate {
    * Uses all 4 agents: GUARDIAN, ANALYST, ADVISOR, ENFORCER
    */
   private async processFullAgenticPipeline(
-    context: ExecutionContext,
-    request: any,
-    principal: any,
-    resource: any,
+    _context: ExecutionContext,
+    request: AuthenticatedRequest | undefined,
+    principal: Principal,
+    resource: Resource,
     metadata: AuthzMetadata,
     decoratorMetadata: {
       agenticCheck?: AgenticCheckMetadata;
@@ -411,7 +457,7 @@ export class AuthzGuard implements CanActivate {
         request.authzThreatInfo = threatResult;
       }
 
-      const threshold = threatProtected.anomalyThreshold ?? 0.8;
+      const threshold = threatProtected.anomalyThreshold ?? DEFAULT_MAX_ANOMALY_SCORE;
       if (threatResult.anomalyScore > threshold) {
         const action = threatProtected.onThreatDetected ?? 'block';
 
@@ -429,12 +475,12 @@ export class AuthzGuard implements CanActivate {
         } else if (action === 'require_mfa') {
           throw new HttpException(
             {
-              statusCode: 428,
+              statusCode: HTTP_PRECONDITION_REQUIRED,
               message: 'Additional verification required',
               requireMfa: true,
               anomalyScore: threatResult.anomalyScore,
             },
-            428, // Precondition Required
+            HTTP_PRECONDITION_REQUIRED,
           );
         }
       }
@@ -520,7 +566,10 @@ export class AuthzGuard implements CanActivate {
   /**
    * Extract resource data from HTTP request
    */
-  private extractResourceData(request: any, metadata: AuthzMetadata): any {
+  private extractResourceData(
+    request: AuthenticatedRequest,
+    metadata: AuthzMetadata,
+  ): { id?: string; [key: string]: unknown } {
     const { resourceIdParam = 'id', resourceFromBody } = metadata;
 
     // Try to get ID from params
@@ -537,12 +586,16 @@ export class AuthzGuard implements CanActivate {
   /**
    * Extract resource from GraphQL arguments
    */
-  private extractResourceFromArgs(context: ExecutionContext, metadata: AuthzMetadata): any {
+  private extractResourceFromArgs(
+    context: ExecutionContext,
+    metadata: AuthzMetadata,
+  ): { id?: string; [key: string]: unknown } {
     const args = this.getGqlArgs(context);
     const { resourceIdParam = 'id' } = metadata;
 
     // Look for ID in args
-    const id = args?.[resourceIdParam] || args?.input?.[resourceIdParam];
+    const id = (args?.[resourceIdParam] as string | undefined) ||
+      ((args?.input as Record<string, unknown> | undefined)?.[resourceIdParam] as string | undefined);
 
     return { id, ...args };
   }
@@ -550,18 +603,18 @@ export class AuthzGuard implements CanActivate {
   /**
    * Get GraphQL context (compatible with Apollo)
    */
-  private getGqlContext(context: ExecutionContext): any {
-    const args = context.getArgs();
+  private getGqlContext(context: ExecutionContext): GqlContext | undefined {
+    const args = context.getArgs<unknown[]>();
     // In GraphQL, context is typically the 3rd argument
-    return args[2];
+    return args[2] as GqlContext | undefined;
   }
 
   /**
    * Get GraphQL arguments
    */
-  private getGqlArgs(context: ExecutionContext): any {
-    const args = context.getArgs();
+  private getGqlArgs(context: ExecutionContext): Record<string, unknown> | undefined {
+    const args = context.getArgs<unknown[]>();
     // In GraphQL, args are typically the 2nd argument
-    return args[1];
+    return args[1] as Record<string, unknown> | undefined;
   }
 }

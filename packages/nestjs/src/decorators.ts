@@ -1,6 +1,11 @@
 import { SetMetadata, applyDecorators, UseGuards, createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { AuthzGuard } from './authz.guard';
 
+// Constants for default values
+const DEFAULT_ANOMALY_THRESHOLD = 0.8;
+const DEFAULT_MIN_CONFIDENCE = 0.7;
+const DEFAULT_MAX_RECOMMENDATIONS = 5;
+
 export const AUTHZ_METADATA_KEY = 'authz:metadata';
 export const AUTHZ_EXPLANATION_KEY = 'authz:explanation';
 export const ANOMALY_PROTECTED_KEY = 'authz:anomaly_protected';
@@ -194,7 +199,7 @@ export function AuthorizeWithExplanation(metadata: AgenticAuthzMetadata) {
  * ```
  */
 export function AnomalyProtected(options: AnomalyProtectionOptions = {}) {
-  const { maxAnomalyScore = 0.8, logHighAnomaly = true, onAnomaly = 'block' } = options;
+  const { maxAnomalyScore = DEFAULT_ANOMALY_THRESHOLD, logHighAnomaly = true, onAnomaly = 'block' } = options;
   return applyDecorators(
     SetMetadata(ANOMALY_PROTECTED_KEY, {
       enabled: true,
@@ -497,7 +502,7 @@ export function RequireAnalysis(options: RequireAnalysisOptions = {}) {
   return applyDecorators(
     SetMetadata(REQUIRE_ANALYSIS_KEY, {
       enabled: true,
-      minConfidence: options.minConfidence ?? 0.7,
+      minConfidence: options.minConfidence ?? DEFAULT_MIN_CONFIDENCE,
       includePatterns: options.includePatterns ?? true,
       includeHistory: options.includeHistory ?? true,
       context: options.context ?? {},
@@ -525,7 +530,7 @@ export function WithRecommendations(options: WithRecommendationsOptions = {}) {
       enabled: true,
       includePolicySuggestions: options.includePolicySuggestions ?? false,
       includePathToAllow: options.includePathToAllow ?? true,
-      maxRecommendations: options.maxRecommendations ?? 5,
+      maxRecommendations: options.maxRecommendations ?? DEFAULT_MAX_RECOMMENDATIONS,
       enableNaturalLanguage: options.enableNaturalLanguage ?? true,
     }),
   );
@@ -580,7 +585,7 @@ export function ThreatProtected(options: ThreatProtectedOptions = {}) {
   return applyDecorators(
     SetMetadata(THREAT_PROTECTED_KEY, {
       enabled: true,
-      anomalyThreshold: options.anomalyThreshold ?? 0.8,
+      anomalyThreshold: options.anomalyThreshold ?? DEFAULT_ANOMALY_THRESHOLD,
       threatTypes: options.threatTypes ?? [
         'permission_escalation',
         'velocity_spike',

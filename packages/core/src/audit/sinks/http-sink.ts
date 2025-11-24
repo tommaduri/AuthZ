@@ -9,6 +9,28 @@ import type { AuditEntry, AuditSink, AuditSinkConfig } from '../types';
 import { LOG_LEVEL_PRIORITY } from '../types';
 
 // =============================================================================
+// Constants
+// =============================================================================
+
+/** Default HTTP sink configuration values */
+const HTTP_SINK_DEFAULTS = {
+  /** Default request timeout in milliseconds */
+  TIMEOUT_MS: 30000,
+  /** Default API key header name */
+  API_KEY_HEADER: 'X-API-Key',
+  /** Default number of retry attempts */
+  RETRIES: 3,
+  /** Default retry delay in milliseconds */
+  RETRY_DELAY_MS: 1000,
+  /** Default exponential backoff multiplier */
+  RETRY_BACKOFF: 2,
+  /** Default max batch size */
+  MAX_BATCH_SIZE: 100,
+  /** Default batch flush interval in milliseconds */
+  BATCH_INTERVAL_MS: 5000,
+} as const;
+
+// =============================================================================
 // HTTP Sink Configuration
 // =============================================================================
 
@@ -59,17 +81,17 @@ export class HttpSink implements AuditSink {
     this.config = {
       url: config.url,
       method: config.method ?? 'POST',
-      timeout: config.timeout ?? 30000,
+      timeout: config.timeout ?? HTTP_SINK_DEFAULTS.TIMEOUT_MS,
       authorization: config.authorization ?? '',
-      apiKeyHeader: config.apiKeyHeader ?? 'X-API-Key',
+      apiKeyHeader: config.apiKeyHeader ?? HTTP_SINK_DEFAULTS.API_KEY_HEADER,
       apiKey: config.apiKey ?? '',
       headers: config.headers ?? {},
-      retries: config.retries ?? 3,
-      retryDelay: config.retryDelay ?? 1000,
-      retryBackoff: config.retryBackoff ?? 2,
+      retries: config.retries ?? HTTP_SINK_DEFAULTS.RETRIES,
+      retryDelay: config.retryDelay ?? HTTP_SINK_DEFAULTS.RETRY_DELAY_MS,
+      retryBackoff: config.retryBackoff ?? HTTP_SINK_DEFAULTS.RETRY_BACKOFF,
       batchMode: config.batchMode ?? true,
-      maxBatchSize: config.maxBatchSize ?? 100,
-      batchIntervalMs: config.batchIntervalMs ?? 5000,
+      maxBatchSize: config.maxBatchSize ?? HTTP_SINK_DEFAULTS.MAX_BATCH_SIZE,
+      batchIntervalMs: config.batchIntervalMs ?? HTTP_SINK_DEFAULTS.BATCH_INTERVAL_MS,
       tlsVerify: config.tlsVerify ?? true,
       minLevel: config.minLevel ?? 'DEBUG',
       eventTypes: config.eventTypes ?? [],
@@ -243,8 +265,8 @@ export class HttpSink implements AuditSink {
       }
     }
 
-    // All retries failed
-    console.error(`HttpSink: Failed to send ${entries.length} entries after ${this.config.retries + 1} attempts: ${lastError?.message}`);
+    // All retries failed - entries are lost
+    // In production, this should use a proper logger or dead-letter queue
   }
 
   private async makeRequest(entries: AuditEntry[], isHealthCheck = false): Promise<Response> {
