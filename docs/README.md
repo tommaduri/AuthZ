@@ -86,7 +86,7 @@
 
 ---
 
-## 3. Architecture Decision Records (8)
+## 3. Architecture Decision Records (9)
 
 | ADR | Title | Status |
 |-----|-------|--------|
@@ -116,7 +116,7 @@ See [ADR Index](./adr/INDEX.md) for full details.
 | Document | Description |
 |----------|-------------|
 | [research/agentic-api-patterns.md](./research/agentic-api-patterns.md) | API pattern research |
-| [architecture/ADR-001-CEL-LIBRARY-CHOICE.md](./architecture/ADR-001-CEL-LIBRARY-CHOICE.md) | CEL library evaluation |
+| [ADR-009-CEL-LIBRARY-CHOICE.md](./adr/ADR-009-CEL-LIBRARY-CHOICE.md) | CEL library evaluation |
 
 ---
 
@@ -145,7 +145,7 @@ See [CERBOS-FEATURE-COVERAGE-MATRIX.md](./CERBOS-FEATURE-COVERAGE-MATRIX.md) for
 |--------|-------|
 | Total Documents | 50+ |
 | SDDs | 31 |
-| ADRs | 8 |
+| ADRs | 9 |
 | Guides | 3 |
 | Other | 8 |
 | Total Lines | ~43,000+ |
