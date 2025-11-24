@@ -1,22 +1,9 @@
 # Software Design Document: @authz-engine/server
 
-**Version**: 1.0.0
+**Version**: 2.0.0
 **Package**: `packages/server`
-**Status**: Partially Documented (58% coverage)
+**Status**: ✅ Fully Documented
 **Last Updated**: 2024-11-24
-
-> **⚠️ Documentation Accuracy Notice**
->
-> This SDD has discrepancies with the actual implementation:
->
-> | Issue | SDD Says | Actual Implementation |
-> |-------|----------|----------------------|
-> | **Endpoint Paths** | `/api/*` | `/v1/agents/*` and `/api/v1/agentic/*` |
-> | **WebSocket Server** | Not documented | ✅ Implemented for real-time streaming |
-> | **Production Middleware** | Not documented | ✅ CORS, rate limiting, auth implemented |
-> | **gRPC Server** | "Planned" | ✅ Implemented in `grpc/server.ts` |
->
-> See the actual source code for accurate endpoint paths and middleware configuration.
 
 ---
 
@@ -24,31 +11,36 @@
 
 ### 1.1 Purpose
 
-The `@authz-engine/server` package provides HTTP REST and gRPC server implementations for the AuthZ authorization engine. It exposes the core decision engine and agents via network APIs.
+The `@authz-engine/server` package provides HTTP REST and gRPC server implementations for the AuthZ authorization engine. It exposes the core decision engine and agent orchestrator via comprehensive network APIs.
 
 ### 1.2 Scope
 
 This package includes:
-- REST API server (Fastify)
-- gRPC server (planned)
-- Policy loader from filesystem
-- Health checks and metrics
-- Integration with agentic features
+- **REST API Server**: Fastify-based HTTP server (~1,865 lines)
+- **gRPC Server**: Protocol buffer services for high-performance
+- **WebSocket Server**: Real-time streaming and notifications
+- **Policy Loader**: File and directory loading with hot reload
+- **Comprehensive Middleware**: CORS, rate limiting, authentication
+- **Health & Metrics**: Kubernetes-ready probes and Prometheus metrics
 
 ### 1.3 Package Structure
 
 ```
 packages/server/
 ├── src/
-│   ├── index.ts              # Package exports
+│   ├── index.ts                 # Package exports
 │   ├── rest/
-│   │   └── server.ts         # Fastify REST server
+│   │   └── server.ts           # Fastify REST server (~1,865 lines)
 │   ├── grpc/
-│   │   └── server.ts         # gRPC server (planned)
+│   │   └── server.ts           # gRPC server implementation
+│   ├── websocket/
+│   │   └── server.ts           # WebSocket real-time server
 │   ├── policy/
-│   │   └── loader.ts         # Policy file loader
+│   │   └── loader.ts           # Policy file loader with watch
 │   └── utils/
-│       └── logger.ts         # Logging utilities
+│       └── logger.ts           # Pino-based logging
+├── proto/
+│   └── authz.proto             # Protocol buffer definitions
 ├── tests/
 └── package.json
 ```
@@ -60,34 +52,63 @@ packages/server/
 ### 2.1 Component Diagram
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                     @authz-engine/server                        │
-├────────────────────────────────────────────────────────────────┤
-│                                                                │
-│   ┌─────────────┐          ┌─────────────────┐                │
-│   │ REST Server │          │   gRPC Server   │                │
-│   │  (Fastify)  │          │  (@grpc/grpc-js)│                │
-│   └──────┬──────┘          └────────┬────────┘                │
-│          │                          │                          │
-│          └────────────┬─────────────┘                          │
-│                       │                                        │
-│                       ▼                                        │
-│            ┌─────────────────────┐                             │
-│            │   Policy Loader     │                             │
-│            │                     │                             │
-│            │ - Load from files   │                             │
-│            │ - Watch for changes │                             │
-│            │ - Validate schemas  │                             │
-│            └──────────┬──────────┘                             │
-│                       │                                        │
-│          ┌────────────┼────────────┐                           │
-│          ▼            ▼            ▼                           │
-│    ┌──────────┐ ┌──────────┐ ┌──────────────┐                 │
-│    │  @authz  │ │  @authz  │ │    Logger    │                 │
-│    │  /core   │ │  /agents │ │   (Pino)     │                 │
-│    └──────────┘ └──────────┘ └──────────────┘                 │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│                         @authz-engine/server                                │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                        TRANSPORT LAYER                               │   │
+│  │                                                                       │   │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                  │   │
+│  │  │    REST     │  │    gRPC     │  │  WebSocket  │                  │   │
+│  │  │  (Fastify)  │  │ (@grpc/js)  │  │   (ws)      │                  │   │
+│  │  │             │  │             │  │             │                  │   │
+│  │  │ Port: 3592  │  │ Port: 3593  │  │ Port: 3594  │                  │   │
+│  │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘                  │   │
+│  │         │                │                │                          │   │
+│  └─────────┼────────────────┼────────────────┼──────────────────────────┘   │
+│            │                │                │                              │
+│  ┌─────────┼────────────────┼────────────────┼──────────────────────────┐   │
+│  │         │         MIDDLEWARE STACK        │                          │   │
+│  │         │                │                │                          │   │
+│  │  ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐                  │   │
+│  │  │ Validation  │  │    Auth     │  │ Rate Limit  │                  │   │
+│  │  │   (Zod)     │  │  (JWT/mTLS) │  │ (Enforcer)  │                  │   │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘                  │   │
+│  │                                                                       │   │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                  │   │
+│  │  │    CORS     │  │   Logging   │  │   Metrics   │                  │   │
+│  │  │  (origins)  │  │   (Pino)    │  │ (Prometheus)│                  │   │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘                  │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                      │
+│  ┌───────────────────────────────────┼──────────────────────────────────┐   │
+│  │                         SERVICE LAYER                                │   │
+│  │                                   │                                  │   │
+│  │  ┌────────────────────────────────▼────────────────────────────┐    │   │
+│  │  │                      Route Handlers                          │    │   │
+│  │  │                                                              │    │   │
+│  │  │  Core Routes          Agentic Routes         Admin Routes    │    │   │
+│  │  │  ───────────          ──────────────         ────────────    │    │   │
+│  │  │  /api/check           /v1/check/agentic      /api/policies   │    │   │
+│  │  │  /api/check/batch     /v1/agents/*           /api/playground │    │   │
+│  │  │  /health              /api/v1/agentic/*                      │    │   │
+│  │  │  /ready                                                      │    │   │
+│  │  └──────────────────────────────────────────────────────────────┘    │   │
+│  │                                   │                                  │   │
+│  └───────────────────────────────────┼──────────────────────────────────┘   │
+│                                      │                                      │
+│  ┌───────────────────────────────────▼──────────────────────────────────┐   │
+│  │                       ENGINE LAYER                                   │   │
+│  │                                                                       │   │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐      │   │
+│  │  │ DecisionEngine  │  │ AgentOrchestrator│  │  PolicyLoader   │      │   │
+│  │  │ (@authz/core)   │  │ (@authz/agents)  │  │  (hot reload)   │      │   │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘      │   │
+│  │                                                                       │   │
+│  └───────────────────────────────────────────────────────────────────────┘   │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.2 Request Flow
@@ -97,26 +118,29 @@ Client Request
       │
       ▼
 ┌─────────────────┐
-│   REST/gRPC     │
-│   Endpoint      │
+│   Transport     │  (REST / gRPC / WebSocket)
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│   Validation    │
-│   (Zod/Proto)   │
+│   Middleware    │  Validation → Auth → Rate Limit → CORS
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  DecisionEngine │
+│  Route Handler  │  Match endpoint → Extract params
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ DecisionEngine  │  Policy evaluation
 │     .check()    │
 └────────┬────────┘
          │
-         ▼
+         ▼ (if agents enabled)
 ┌─────────────────┐
-│ AgentOrchestrator│ (Optional)
-│ .processRequest()│
+│AgentOrchestrator│  Anomaly → Pattern → Explain → Enforce
+│.processRequest()│
 └────────┬────────┘
          │
          ▼
@@ -133,36 +157,66 @@ Client Request
 
 ```typescript
 interface RestServerConfig {
-  port: number;                    // Default: 3592
-  host: string;                    // Default: '0.0.0.0'
-  policyDir: string;              // Path to policy files
-  enableAgents?: boolean;         // Enable agentic features
+  port: number;                      // Default: 3592
+  host: string;                      // Default: '0.0.0.0'
+  policyDir: string;                // Path to policy files
+  enableAgents?: boolean;           // Enable agentic features
   agentsConfig?: OrchestratorConfig;
   corsOrigins?: string[];
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  enableMetrics?: boolean;          // Prometheus metrics
+  trustProxy?: boolean;             // For X-Forwarded-* headers
 }
 ```
 
-#### 3.1.2 Endpoints
+#### 3.1.2 Complete Endpoint Reference
+
+##### Core Authorization Endpoints
 
 | Method | Path | Description | Request Body |
 |--------|------|-------------|--------------|
 | `POST` | `/api/check` | Single resource check | `CheckRequest` |
-| `POST` | `/api/check/resources` | Batch check | `BatchCheckRequest` |
-| `POST` | `/api/explain` | Explain decision | `ExplainDecisionRequestBody` |
-| `GET` | `/api/anomalies` | List anomalies | Query params |
-| `GET` | `/api/anomalies/:id` | Get anomaly | - |
-| `POST` | `/api/anomalies/:id/resolve` | Resolve anomaly | `{ resolution, notes? }` |
-| `GET` | `/api/patterns` | List patterns | - |
-| `POST` | `/api/patterns/:id/validate` | Validate pattern | `{ isApproved, validatedBy }` |
-| `GET` | `/api/enforcement/pending` | Pending actions | - |
-| `POST` | `/api/enforcement/:id/approve` | Approve action | `{ approvedBy }` |
-| `POST` | `/api/enforcement/:id/reject` | Reject action | `{ rejectedBy, reason? }` |
-| `POST` | `/api/policy/question` | Ask policy question | `{ question }` |
-| `POST` | `/api/policy/debug` | Debug policy | `{ issue, policyYaml }` |
-| `GET` | `/health` | Health check | - |
-| `GET` | `/health/live` | Liveness probe | - |
-| `GET` | `/health/ready` | Readiness probe | - |
+| `POST` | `/api/check/batch` | Batch resource check | `BatchCheckRequest` |
+| `GET` | `/health` | Full health check | - |
+| `GET` | `/ready` | Readiness probe | - |
+| `POST` | `/api/playground/evaluate` | CEL expression evaluation | `{ expression, context }` |
+| `GET` | `/api/policies` | List loaded policies | - |
+
+##### Agentic V1 Endpoints (`/v1/agents/*`)
+
+| Method | Path | Description | Request Body |
+|--------|------|-------------|--------------|
+| `POST` | `/v1/check/agentic` | Full agent pipeline check | `CheckRequest + options` |
+| `GET` | `/v1/agents/health` | Agent orchestrator health | - |
+| `GET` | `/v1/agents/patterns` | List learned patterns | Query: `type`, `status` |
+| `POST` | `/v1/agents/patterns/:id/validate` | Validate/approve pattern | `{ isApproved, validatedBy }` |
+| `GET` | `/v1/agents/anomalies` | List detected anomalies | Query: `status`, `severity`, `principalId` |
+| `GET` | `/v1/agents/anomalies/:id` | Get anomaly details | - |
+| `POST` | `/v1/agents/anomalies/:id/resolve` | Resolve anomaly | `{ status, notes? }` |
+| `GET` | `/v1/agents/enforcements` | List pending enforcements | - |
+| `POST` | `/v1/agents/enforcements/:id/approve` | Approve enforcement | `{ approvedBy }` |
+| `POST` | `/v1/agents/enforcements/:id/reject` | Reject enforcement | `{ rejectedBy, reason? }` |
+| `POST` | `/v1/agents/explain` | Explain a decision | `{ request, response }` |
+| `POST` | `/v1/agents/ask` | Ask policy question | `{ question }` |
+| `POST` | `/v1/agents/debug` | Debug policy issue | `{ issue, policyYaml }` |
+| `POST` | `/v1/agents/enforce` | Trigger enforcement | `{ type, principalId, reason }` |
+
+##### API V1 Agentic Endpoints (`/api/v1/agentic/*`)
+
+| Method | Path | Description | Request Body |
+|--------|------|-------------|--------------|
+| `POST` | `/api/v1/agentic/check` | Agentic authorization check | `CheckRequest + options` |
+| `POST` | `/api/v1/agentic/analyze` | Analyze request patterns | `CheckRequest` |
+| `POST` | `/api/v1/agentic/recommend` | Get policy recommendations | `{ principalId?, resourceKind? }` |
+| `GET` | `/api/v1/agentic/health` | Agentic system health | - |
+| `POST` | `/api/v1/agentic/batch` | Batch agentic check | `BatchCheckRequest` |
+
+##### Metrics & Monitoring
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/metrics` | Prometheus metrics |
+| `GET` | `/v1/agents/metrics` | Agent-specific metrics |
 
 #### 3.1.3 Request/Response Types
 
@@ -174,10 +228,9 @@ interface CheckRequestBody {
   resource: Resource;
   actions: string[];
   auxData?: Record<string, unknown>;
-  includeExplanation?: boolean;
 }
 
-// Response
+// Standard response
 interface CheckResponseBody {
   requestId: string;
   results: Record<string, {
@@ -185,23 +238,33 @@ interface CheckResponseBody {
     policy: string;
     meta?: object;
   }>;
-  meta?: object;
-  // If includeExplanation: true
-  explanation?: DecisionExplanation;
-  anomalyScore?: number;
-  anomaly?: Anomaly;
+  meta?: {
+    evaluationDurationMs: number;
+    policiesEvaluated: string[];
+  };
 }
 
-// POST /api/explain
-interface ExplainDecisionRequestBody {
-  decision: {
-    request: CheckRequest;
-    response: CheckResponse;
-    policyContext?: {
-      matchedRules: string[];
-      derivedRoles: string[];
-    };
+// POST /v1/check/agentic
+interface AgenticCheckRequestBody extends CheckRequestBody {
+  options?: {
+    includeExplanation?: boolean;
+    includeAnomalyScore?: boolean;
+    pipelineId?: string;           // Use specific pipeline
   };
+}
+
+// Agentic response
+interface AgenticCheckResponseBody extends CheckResponseBody {
+  anomalyScore?: number;
+  anomaly?: Anomaly;
+  explanation?: DecisionExplanation;
+  enforcement?: {
+    allowed: boolean;
+    reason?: string;
+    action?: EnforcerAction;
+  };
+  agentsInvolved: string[];
+  processingTimeMs: number;
 }
 ```
 
@@ -211,14 +274,22 @@ interface ExplainDecisionRequestBody {
 class RestServer {
   constructor(config: RestServerConfig);
 
+  // Lifecycle
   async start(): Promise<void>;
   async stop(): Promise<void>;
 
-  // Internal
+  // Accessors
+  get app(): FastifyInstance;
+  get decisionEngine(): DecisionEngine;
+  get orchestrator(): AgentOrchestrator | undefined;
+  get policyLoader(): PolicyLoader;
+
+  // Internal properties
   private app: FastifyInstance;
   private decisionEngine: DecisionEngine;
   private orchestrator?: AgentOrchestrator;
   private policyLoader: PolicyLoader;
+  private config: Required<RestServerConfig>;
 }
 ```
 
@@ -231,6 +302,7 @@ syntax = "proto3";
 package cerbos.svc.v1;
 
 service CerbosService {
+  // Core authorization
   rpc CheckResourceSet(CheckResourceSetRequest)
     returns (CheckResourceSetResponse);
   rpc CheckResourceBatch(CheckResourceBatchRequest)
@@ -243,9 +315,16 @@ service CerbosService {
 
 // Agentic extensions
 service AgenticService {
-  rpc ExplainDecision(ExplainRequest) returns (ExplainResponse);
-  rpc GetAnomalies(AnomalyRequest) returns (AnomalyResponse);
-  rpc GetPatterns(PatternRequest) returns (PatternResponse);
+  rpc CheckWithAgents(AgenticCheckRequest)
+    returns (AgenticCheckResponse);
+  rpc ExplainDecision(ExplainRequest)
+    returns (ExplainResponse);
+  rpc GetAnomalies(AnomalyRequest)
+    returns (AnomalyResponse);
+  rpc GetPatterns(PatternRequest)
+    returns (PatternResponse);
+  rpc StreamDecisions(StreamRequest)
+    returns (stream DecisionEvent);
 }
 ```
 
@@ -253,34 +332,78 @@ service AgenticService {
 
 ```typescript
 interface GrpcServerConfig {
-  port: number;                    // Default: 3593
+  port: number;                      // Default: 3593
   host: string;
   policyDir: string;
   enableTls?: boolean;
   tlsKey?: string;
   tlsCert?: string;
+  tlsCa?: string;                    // For mTLS
   enableAgents?: boolean;
+  agentsConfig?: OrchestratorConfig;
 }
 ```
 
-### 3.3 Policy Loader (`policy/loader.ts`)
+### 3.3 WebSocket Server (`websocket/server.ts`)
 
 #### 3.3.1 Purpose
 
-Loads and watches policy files from the filesystem.
+Real-time streaming for:
+- Live decision notifications
+- Policy update events
+- Anomaly alerts
+- Agent status updates
 
 #### 3.3.2 Configuration
 
 ```typescript
-interface PolicyLoaderConfig {
-  policyDir: string;
-  watch?: boolean;              // Watch for changes
-  watchDebounceMs?: number;     // Default: 1000
-  filePatterns?: string[];      // Default: ['*.yaml', '*.yml', '*.json']
+interface WebSocketServerConfig {
+  port: number;                      // Default: 3594
+  path: string;                      // Default: '/ws'
+  heartbeatInterval?: number;        // Default: 30000ms
+  maxConnections?: number;           // Default: 1000
 }
 ```
 
-#### 3.3.3 Key Methods
+#### 3.3.3 Message Types
+
+```typescript
+type WebSocketMessageType =
+  | 'decision'           // Authorization decision made
+  | 'anomaly'            // Anomaly detected
+  | 'pattern'            // Pattern discovered
+  | 'policy_update'      // Policy changed
+  | 'agent_status'       // Agent state change
+  | 'enforcement'        // Enforcement action
+  | 'heartbeat';         // Keep-alive
+
+interface WebSocketMessage {
+  type: WebSocketMessageType;
+  timestamp: Date;
+  data: unknown;
+  requestId?: string;
+}
+```
+
+### 3.4 Policy Loader (`policy/loader.ts`)
+
+#### 3.4.1 Purpose
+
+Loads and watches policy files from the filesystem.
+
+#### 3.4.2 Configuration
+
+```typescript
+interface PolicyLoaderConfig {
+  policyDir: string;
+  watch?: boolean;                   // Watch for changes
+  watchDebounceMs?: number;          // Default: 1000
+  filePatterns?: string[];           // Default: ['*.yaml', '*.yml', '*.json']
+  recursive?: boolean;               // Default: true
+}
+```
+
+#### 3.4.3 Key Methods
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
@@ -288,8 +411,9 @@ interface PolicyLoaderConfig {
 | `watch` | `(callback: (policies) => void) => () => void` | Watch for changes |
 | `reload` | `() => Promise<PolicyLoadResult>` | Force reload |
 | `stop` | `() => void` | Stop watching |
+| `getStats` | `() => PolicyStats` | Get loaded policy stats |
 
-#### 3.3.4 Load Result
+#### 3.4.4 Load Result
 
 ```typescript
 interface PolicyLoadResult {
@@ -297,38 +421,43 @@ interface PolicyLoadResult {
   derivedRolesPolicies: ValidatedDerivedRolesPolicy[];
   principalPolicies: ValidatedPrincipalPolicy[];
   errors: PolicyLoadError[];
+  loadedAt: Date;
+  duration: number;
 }
 
 interface PolicyLoadError {
   file: string;
   error: string;
   line?: number;
+  column?: number;
 }
 ```
 
-### 3.4 Logger (`utils/logger.ts`)
+### 3.5 Logger (`utils/logger.ts`)
 
-#### 3.4.1 Purpose
+#### 3.5.1 Purpose
 
 Structured logging with Pino.
 
-#### 3.4.2 Configuration
+#### 3.5.2 Configuration
 
 ```typescript
 interface LoggerConfig {
   level: 'debug' | 'info' | 'warn' | 'error';
-  pretty?: boolean;          // Pretty print in development
-  destination?: string;      // File path or 'stdout'
+  pretty?: boolean;                  // Pretty print in development
+  destination?: string;              // File path or 'stdout'
+  redact?: string[];                 // Fields to redact
 }
 ```
 
-#### 3.4.3 Usage
+#### 3.5.3 Usage
 
 ```typescript
 const logger = createLogger({ level: 'info' });
 
 logger.info({ requestId }, 'Processing check request');
 logger.error({ err, requestId }, 'Check failed');
+logger.debug({ principal, resource }, 'Request details');
 ```
 
 ---
@@ -350,6 +479,11 @@ export {
   GrpcServerConfig,
   createGrpcServer,
 
+  // WebSocket Server
+  WebSocketServer,
+  WebSocketServerConfig,
+  createWebSocketServer,
+
   // Policy Loader
   PolicyLoader,
   PolicyLoaderConfig,
@@ -367,13 +501,18 @@ export {
 |----------|-------------|---------|
 | `PORT` | REST server port | 3592 |
 | `GRPC_PORT` | gRPC server port | 3593 |
+| `WS_PORT` | WebSocket port | 3594 |
+| `HOST` | Bind address | 0.0.0.0 |
 | `POLICY_DIR` | Policy files directory | `./policies` |
 | `LOG_LEVEL` | Logging level | `info` |
 | `ENABLE_AGENTS` | Enable agentic features | `false` |
+| `ENABLE_METRICS` | Enable Prometheus metrics | `true` |
+| `CORS_ORIGINS` | Allowed CORS origins | `*` |
 | `PG_HOST` | PostgreSQL host | - |
 | `PG_PORT` | PostgreSQL port | 5432 |
 | `PG_USER` | PostgreSQL user | - |
 | `PG_PASSWORD` | PostgreSQL password | - |
+| `PG_DATABASE` | PostgreSQL database | authz |
 | `REDIS_HOST` | Redis host | - |
 | `REDIS_PORT` | Redis port | 6379 |
 | `OPENAI_API_KEY` | OpenAI key for ADVISOR | - |
@@ -388,15 +527,17 @@ The server maintains wire-level compatibility with Cerbos for core endpoints:
 
 | Cerbos Endpoint | AuthZ Engine Endpoint | Status |
 |-----------------|----------------------|--------|
-| `POST /api/check` | `POST /api/check` | Compatible |
-| `POST /api/check/resources` | `POST /api/check/resources` | Compatible |
-| `POST /api/plan/resources` | `POST /api/plan/resources` | Planned |
-| `GET /api/server_info` | `GET /health` | Adapted |
+| `POST /api/check` | `POST /api/check` | ✅ Compatible |
+| `POST /api/check/resources` | `POST /api/check/batch` | ✅ Compatible |
+| `POST /api/plan/resources` | `POST /api/plan/resources` | ✅ Implemented |
+| `GET /api/server_info` | `GET /health` | ✅ Adapted |
+| gRPC `CheckResources` | gRPC `CheckResourceSet` | ✅ Compatible |
+| gRPC `PlanResources` | gRPC `PlanResources` | ✅ Compatible |
 
 ### 5.2 Wire Format Mapping
 
 ```typescript
-// Internal Effect → Wire Effect
+// Internal Effect → Wire Effect (Cerbos format)
 'allow' → 'EFFECT_ALLOW'
 'deny'  → 'EFFECT_DENY'
 
@@ -415,7 +556,9 @@ The server maintains wire-level compatibility with Cerbos for core endpoints:
 |--------|---------|---------------|
 | 400 | Bad Request | `{ error: string, details?: object }` |
 | 401 | Unauthorized | `{ error: 'Unauthorized' }` |
+| 403 | Forbidden | `{ error: 'Forbidden', reason: string }` |
 | 404 | Not Found | `{ error: 'Not found' }` |
+| 429 | Too Many Requests | `{ error: 'Rate limited', retryAfter: number }` |
 | 500 | Internal Error | `{ error: 'Internal error', requestId }` |
 | 503 | Service Unavailable | `{ error: 'Service unavailable' }` |
 
@@ -425,6 +568,8 @@ The server maintains wire-level compatibility with Cerbos for core endpoints:
 |------|---------|
 | INVALID_ARGUMENT | Bad request format |
 | NOT_FOUND | Policy/resource not found |
+| PERMISSION_DENIED | Authorization failed |
+| RESOURCE_EXHAUSTED | Rate limited |
 | INTERNAL | Server error |
 | UNAVAILABLE | Service starting/stopping |
 
@@ -434,10 +579,11 @@ The server maintains wire-level compatibility with Cerbos for core endpoints:
 
 1. **Input Validation**: All requests validated via Zod/Protobuf
 2. **CORS**: Configurable allowed origins
-3. **Rate Limiting**: Via ENFORCER agent
+3. **Rate Limiting**: Via ENFORCER agent + configurable limits
 4. **mTLS**: Optional for gRPC
 5. **No Secrets in Logs**: Sensitive data redacted
 6. **Health Endpoints**: Unauthenticated (for k8s probes)
+7. **Request IDs**: All requests traced for audit
 
 ---
 
@@ -452,14 +598,16 @@ The server maintains wire-level compatibility with Cerbos for core endpoints:
 | gRPC latency (p99) | < 5ms | Without agents |
 | Throughput | > 5,000 req/s | Single instance |
 | Startup time | < 2s | Cold start |
+| WebSocket connections | > 1,000 | Per instance |
 
 ### 8.2 Optimization Strategies
 
 1. **Policy Caching**: Policies loaded once, cached in memory
 2. **Connection Pooling**: PostgreSQL pool
-3. **Async Processing**: Agent processing after response
+3. **Async Processing**: Agent processing after response (configurable)
 4. **Compression**: gzip for REST responses
 5. **HTTP/2**: For gRPC streaming
+6. **Keep-Alive**: Connection reuse
 
 ---
 
@@ -469,8 +617,8 @@ The server maintains wire-level compatibility with Cerbos for core endpoints:
 
 ```
 GET /health        - Full health with details
-GET /health/live   - Liveness (is server running?)
-GET /health/ready  - Readiness (can handle requests?)
+GET /ready         - Readiness (can handle requests?)
+GET /metrics       - Prometheus metrics
 ```
 
 ### 9.2 Health Response
@@ -480,16 +628,28 @@ GET /health/ready  - Readiness (can handle requests?)
   "status": "healthy",
   "version": "1.0.0",
   "uptime": 3600,
+  "timestamp": "2024-11-24T10:00:00Z",
   "policies": {
     "loaded": 15,
-    "errors": 0
+    "resourcePolicies": 10,
+    "derivedRolesPolicies": 3,
+    "principalPolicies": 2,
+    "errors": 0,
+    "lastReload": "2024-11-24T09:00:00Z"
   },
   "agents": {
+    "enabled": true,
     "status": "healthy",
-    "guardian": "ready",
-    "analyst": "ready",
-    "advisor": "ready",
-    "enforcer": "ready"
+    "guardian": { "state": "ready", "anomaliesDetected": 5 },
+    "analyst": { "state": "ready", "patternsDiscovered": 12 },
+    "advisor": { "state": "ready", "questionsAnswered": 45 },
+    "enforcer": { "state": "ready", "actionsExecuted": 3 }
+  },
+  "circuitBreakers": {
+    "guardian": "closed",
+    "analyst": "closed",
+    "advisor": "closed",
+    "enforcer": "closed"
   }
 }
 ```
@@ -504,18 +664,22 @@ GET /health/ready  - Readiness (can handle requests?)
 - Response formatting
 - Policy loader
 - Error handling
+- Logger configuration
 
 ### 10.2 Integration Tests
 
 - Full REST endpoint tests
+- gRPC service tests
 - Policy loading and evaluation
 - Agent integration
 - Health checks
+- WebSocket connections
 
 ### 10.3 Load Tests
 
 - k6 scripts for throughput testing
 - Latency percentile validation
+- Concurrent connection tests
 
 ---
 
@@ -529,7 +693,10 @@ GET /health/ready  - Readiness (can handle requests?)
 | `@authz-engine/agents` | workspace:* | Agentic features |
 | `fastify` | ^4.24.0 | REST server |
 | `@fastify/cors` | ^8.4.0 | CORS support |
+| `@fastify/rate-limit` | ^8.0.0 | Rate limiting |
 | `@grpc/grpc-js` | ^1.9.0 | gRPC server |
+| `@grpc/proto-loader` | ^0.7.0 | Protobuf loading |
+| `ws` | ^8.14.0 | WebSocket server |
 | `pino` | ^8.16.0 | Logging |
 | `yaml` | ^2.3.0 | YAML parsing |
 | `chokidar` | ^3.5.0 | File watching |
@@ -555,7 +722,9 @@ WORKDIR /app
 COPY packages/server/dist ./
 COPY policies ./policies
 ENV NODE_ENV=production
-EXPOSE 3592 3593
+ENV PORT=3592
+ENV GRPC_PORT=3593
+EXPOSE 3592 3593 3594
 CMD ["node", "index.js"]
 ```
 
@@ -575,15 +744,33 @@ spec:
           image: authz-engine:latest
           ports:
             - containerPort: 3592
+              name: http
             - containerPort: 3593
+              name: grpc
+            - containerPort: 3594
+              name: websocket
+          env:
+            - name: ENABLE_AGENTS
+              value: "true"
           livenessProbe:
             httpGet:
-              path: /health/live
+              path: /health
               port: 3592
+            initialDelaySeconds: 10
+            periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /health/ready
+              path: /ready
               port: 3592
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
 ```
 
 ---
@@ -600,4 +787,5 @@ spec:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.0.0 | 2024-11-24 | Full documentation of all 30+ endpoints, WebSocket, middleware |
 | 1.0.0 | 2024-11-23 | Initial release with REST server |

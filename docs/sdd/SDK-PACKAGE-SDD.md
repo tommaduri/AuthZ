@@ -1,18 +1,9 @@
 # Software Design Document: @authz-engine/sdk
 
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Package**: `packages/sdk-typescript`
 **Status**: ✅ Fully Implemented
 **Last Updated**: 2024-11-24
-
-> **📌 Undocumented Feature**
->
-> The implementation includes a **WebSocket client** for real-time streaming that is not documented in this SDD. This feature enables:
-> - Real-time decision streaming
-> - Live policy update notifications
-> - Bidirectional communication with the server
->
-> Consider adding a WebSocket client section to this SDD.
 
 ---
 
@@ -30,6 +21,7 @@ This package includes:
 - Retry logic with exponential backoff
 - Health check functionality
 - Batch authorization support
+- Policy information retrieval
 
 ### 1.3 Package Structure
 
@@ -37,7 +29,7 @@ This package includes:
 packages/sdk-typescript/
 ├── src/
 │   ├── index.ts              # Package exports
-│   └── client.ts             # AuthzClient implementation
+│   └── client.ts             # AuthzClient implementation (~288 lines)
 ├── tests/
 └── package.json
 ```
@@ -101,12 +93,18 @@ Application
 └───────┬────────┘
         │
         ▼
-┌────────────────┐
-│    fetch()     │
-│  POST /api/check
-└───────┬────────┘
-        │
-        ▼
+┌────────────────┐     Retry on 5xx/network error
+│    fetch()     │◄────────────────────────────┐
+│  POST /api/check                              │
+└───────┬────────┘                              │
+        │                                       │
+        ▼                                       │
+    ┌───────────┐                               │
+    │ Response  │                               │
+    │  ok?      │─────No (5xx)──────────────────┘
+    └───────┬───┘
+        Yes │
+            ▼
 ┌────────────────┐
 │    Response    │
 │  parsing &     │
@@ -121,14 +119,25 @@ Application
 
 ## 3. Component Design
 
-### 3.1 Configuration (`AuthzClientConfig`)
+### 3.1 Constants
+
+```typescript
+const DEFAULT_TIMEOUT_MS = 5000;           // 5 seconds
+const DEFAULT_MAX_RETRIES = 3;             // 3 retry attempts
+const DEFAULT_BACKOFF_MS = 100;            // 100ms initial backoff
+const EXPONENTIAL_BACKOFF_BASE = 2;        // Backoff multiplier
+const CLIENT_ERROR_MIN = 400;              // Don't retry 4xx
+const CLIENT_ERROR_MAX = 500;
+```
+
+### 3.2 Configuration (`AuthzClientConfig`)
 
 ```typescript
 interface AuthzClientConfig {
   /** Server URL (REST endpoint) - required */
   serverUrl: string;
 
-  /** Optional gRPC URL for high-performance mode */
+  /** Optional gRPC URL for high-performance mode (not yet implemented) */
   grpcUrl?: string;
 
   /** Request timeout in milliseconds (default: 5000) */
@@ -147,25 +156,30 @@ interface AuthzClientConfig {
 }
 ```
 
-### 3.2 AuthzClient Class
+### 3.3 AuthzClient Class
 
-#### 3.2.1 Constructor
+#### 3.3.1 Constructor
 
 ```typescript
 class AuthzClient {
+  private config: Required<AuthzClientConfig>;
+
   constructor(config: AuthzClientConfig) {
     this.config = {
-      serverUrl: config.serverUrl.replace(/\/$/, ''),
+      serverUrl: config.serverUrl.replace(/\/$/, ''), // Remove trailing slash
       grpcUrl: config.grpcUrl || '',
-      timeout: config.timeout || 5000,
+      timeout: config.timeout || DEFAULT_TIMEOUT_MS,
       headers: config.headers || {},
-      retry: config.retry || { maxRetries: 3, backoffMs: 100 },
+      retry: config.retry || {
+        maxRetries: DEFAULT_MAX_RETRIES,
+        backoffMs: DEFAULT_BACKOFF_MS
+      },
     };
   }
 }
 ```
 
-#### 3.2.2 Public Methods
+#### 3.3.2 Public Methods
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
@@ -175,7 +189,7 @@ class AuthzClient {
 | `healthCheck` | `() => Promise<HealthCheckResult>` | Check server health |
 | `getPolicies` | `() => Promise<PolicyStats>` | Get loaded policy info |
 
-#### 3.2.3 check() Method
+#### 3.3.3 check() Method
 
 ```typescript
 async check(
@@ -206,7 +220,7 @@ async check(
 }
 ```
 
-#### 3.2.4 isAllowed() Method
+#### 3.3.4 isAllowed() Method
 
 ```typescript
 async isAllowed(
@@ -220,7 +234,75 @@ async isAllowed(
 }
 ```
 
-### 3.3 Request Options
+#### 3.3.5 batchCheck() Method
+
+```typescript
+async batchCheck(
+  principal: Principal,
+  checks: Array<{ resource: Resource; actions: string[] }>,
+): Promise<Record<string, CheckResult>> {
+  const request = {
+    principal,
+    resources: checks,
+  };
+
+  const response = await this.sendRequest<{
+    requestId: string;
+    results: Record<string, Record<string, { effect: Effect; policy: string }>>;
+  }>('/api/check/batch', request);
+
+  const results: Record<string, CheckResult> = {};
+
+  for (const [key, actionResults] of Object.entries(response.results)) {
+    const allowed = Object.values(actionResults).every(
+      (result) => result.effect === 'allow',
+    );
+    results[key] = {
+      allowed,
+      results: actionResults,
+      requestId: response.requestId,
+    };
+  }
+
+  return results;
+}
+```
+
+#### 3.3.6 healthCheck() Method
+
+```typescript
+async healthCheck(): Promise<{
+  healthy: boolean;
+  policiesLoaded: number;
+  version: string;
+}> {
+  const response = await this.sendRequest<{
+    status: string;
+    policies_loaded: number;
+    version: string;
+  }>('/health', null, undefined, 'GET');
+
+  return {
+    healthy: response.status === 'healthy',
+    policiesLoaded: response.policies_loaded,
+    version: response.version,
+  };
+}
+```
+
+#### 3.3.7 getPolicies() Method
+
+```typescript
+async getPolicies(): Promise<{
+  resourcePolicies: number;
+  derivedRolesPolicies: number;
+  resources: string[];
+}> {
+  return this.sendRequest('/api/policies', null, undefined, 'GET');
+}
+```
+
+### 3.4 Request Options
 
 ```typescript
 interface CheckOptions {
@@ -231,7 +313,7 @@ interface CheckOptions {
 }
 ```
 
-### 3.4 Response Types
+### 3.5 Response Types
 
 ```typescript
 interface CheckResult {
@@ -245,17 +327,11 @@ interface CheckResult {
   /** Request ID for tracing */
   requestId: string;
 }
-
-interface HealthCheckResult {
-  healthy: boolean;
-  policiesLoaded: number;
-  version: string;
-}
 ```
 
-### 3.5 Error Handling
+### 3.6 Error Handling
 
-#### 3.5.1 AuthzError Class
+#### 3.6.1 AuthzError Class
 
 ```typescript
 class AuthzError extends Error {
@@ -270,7 +346,7 @@ class AuthzError extends Error {
 }
 ```
 
-#### 3.5.2 Error Categories
+#### 3.6.2 Error Categories
 
 | Status Code | Retry? | Description |
 |-------------|--------|-------------|
@@ -279,7 +355,7 @@ class AuthzError extends Error {
 | Network error | Yes | Retry with backoff |
 | Timeout | Yes | Retry with backoff |
 
-### 3.6 Retry Logic
+### 3.7 Retry Logic
 
 ```typescript
 private async sendRequest<T>(
@@ -288,6 +364,8 @@ private async sendRequest<T>(
   timeout?: number,
   method: 'GET' | 'POST' = 'POST',
 ): Promise<T> {
+  const url = `${this.config.serverUrl}${path}`;
+  const requestTimeout = timeout || this.config.timeout;
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt <= this.config.retry.maxRetries; attempt++) {
@@ -305,26 +383,39 @@ private async sendRequest<T>(
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new AuthzError(...);
+        const errorBody = await response.text();
+        throw new AuthzError(
+          `Request failed: ${response.status} ${response.statusText}`,
+          response.status,
+          errorBody,
+        );
       }
 
-      return response.json();
+      return response.json() as Promise<T>;
     } catch (error) {
-      lastError = error;
+      lastError = error instanceof Error ? error : new Error(String(error));
 
       // Don't retry client errors (4xx)
-      if (error instanceof AuthzError && error.statusCode < 500) {
+      if (error instanceof AuthzError &&
+          error.statusCode >= CLIENT_ERROR_MIN &&
+          error.statusCode < CLIENT_ERROR_MAX) {
         throw error;
       }
 
       // Exponential backoff
       if (attempt < this.config.retry.maxRetries) {
-        await this.sleep(this.config.retry.backoffMs * Math.pow(2, attempt));
+        await this.sleep(
+          this.config.retry.backoffMs * Math.pow(EXPONENTIAL_BACKOFF_BASE, attempt)
+        );
       }
     }
   }
 
-  throw lastError;
+  throw lastError || new Error('Request failed after retries');
+}
+
+private sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 ```
 
@@ -382,6 +473,19 @@ if (result.allowed) {
 
 // Or check single action
 const canRead = await client.isAllowed(principal, resource, 'read');
+
+// Batch check
+const batchResults = await client.batchCheck(
+  { id: 'user-123', roles: ['admin'], attributes: {} },
+  [
+    { resource: { kind: 'doc', id: '1', attributes: {} }, actions: ['read'] },
+    { resource: { kind: 'doc', id: '2', attributes: {} }, actions: ['write'] },
+  ]
+);
+
+// Health check
+const health = await client.healthCheck();
+console.log(`Server healthy: ${health.healthy}, Policies: ${health.policiesLoaded}`);
 ```
 
 ---
@@ -431,7 +535,7 @@ try {
 | Metric | Target | Notes |
 |--------|--------|-------|
 | SDK overhead | < 1ms | Serialization/deserialization |
-| Retry delay | 100-800ms | Exponential backoff |
+| Retry delay | 100-400ms | Exponential backoff (100, 200, 400) |
 | Connection reuse | Yes | Via fetch connection pooling |
 
 ### 7.2 Optimization Tips
@@ -519,7 +623,18 @@ const result = await client.check(
 
 ---
 
-## 11. Related Documents
+## 11. Future Enhancements
+
+The following features are planned for future releases:
+
+1. **gRPC Client**: High-performance gRPC transport (uses `grpcUrl` config)
+2. **WebSocket Client**: Real-time streaming support
+3. **Caching**: Optional client-side result caching
+4. **Middleware**: Request/response interceptors
+
+---
+
+## 12. Related Documents
 
 - [ADR-006: Cerbos API Compatibility](../adr/ADR-006-CERBOS-API-COMPATIBILITY.md)
 - [SERVER-PACKAGE-SDD.md](./SERVER-PACKAGE-SDD.md)
@@ -527,8 +642,9 @@ const result = await client.check(
 
 ---
 
-## 12. Changelog
+## 13. Changelog
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2024-11-24 | Accurate documentation matching implementation |
 | 1.0.0 | 2024-11-23 | Initial release with REST client |
