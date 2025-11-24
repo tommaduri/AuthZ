@@ -120,7 +120,16 @@ See [ADR Index](./adr/INDEX.md) for full details.
 
 ---
 
-## 6. Research & Analysis
+## 6. Planning & Tracking
+
+| Document | Description |
+|----------|-------------|
+| [SDD-FEATURE-MAPPING.md](./planning/SDD-FEATURE-MAPPING.md) | Cross-reference of 43 SDDs with 271 feature matrix items |
+| [PHASE1-IMPLEMENTATION-PLAN.md](./planning/PHASE1-IMPLEMENTATION-PLAN.md) | Phase 1 implementation details |
+
+---
+
+## 7. Research & Analysis
 
 | Document | Description |
 |----------|-------------|
@@ -129,7 +138,7 @@ See [ADR Index](./adr/INDEX.md) for full details.
 
 ---
 
-## 7. Feature Coverage
+## 8. Feature Coverage
 
 | Category | Features | SDD Coverage |
 |----------|----------|--------------|
