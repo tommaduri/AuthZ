@@ -1,7 +1,7 @@
 # Architecture Decision Records Index
 
-**Last Updated**: 2025-11-23
-**Total ADRs**: 6
+**Last Updated**: 2025-11-24
+**Total ADRs**: 9
 
 ---
 
@@ -26,6 +26,9 @@
 | [ADR-004](./ADR-004-MEMORY-FIRST-DEVELOPMENT.md) | Memory-first Development | Implemented | [CORE-PACKAGE-SDD](../sdd/CORE-PACKAGE-SDD.md) |
 | [ADR-005](./ADR-005-AGENTIC-AUTHORIZATION.md) | Agentic Authorization | Implemented | [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md) |
 | [ADR-006](./ADR-006-CERBOS-API-COMPATIBILITY.md) | Cerbos API Compatibility | Implemented | [CERBOS-FEATURE-PARITY-SDD](../sdd/CERBOS-FEATURE-PARITY-SDD.md) |
+| [ADR-007](./ADR-007-NATIVE-AGENTIC-FRAMEWORK.md) | Native Agentic Framework | Implemented | [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md) |
+| [ADR-008](./ADR-008-HYBRID-GO-TYPESCRIPT-ARCHITECTURE.md) | Hybrid Go/TypeScript Architecture | Accepted | [CORE-ARCHITECTURE-SDD](../sdd/CORE-ARCHITECTURE-SDD.md) |
+| [ADR-009](./ADR-009-CEL-LIBRARY-CHOICE.md) | CEL Library Choice (cel-js) | Implemented | [CEL-EVALUATOR-SDD](../sdd/CEL-EVALUATOR-SDD.md) |
 
 ---
 
@@ -61,6 +64,21 @@
 **Rationale**: Easy migration, ecosystem compatibility, proven design.
 **Implementation**: [CERBOS-FEATURE-PARITY-SDD](../sdd/CERBOS-FEATURE-PARITY-SDD.md), 271 features tracked
 
+### ADR-007: Native Agentic Framework
+**Decision**: Build native agentic capabilities without external AI dependencies.
+**Rationale**: No external LLM calls, deterministic behavior, low latency.
+**Implementation**: [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md)
+
+### ADR-008: Hybrid Go/TypeScript Architecture
+**Decision**: High-performance Go core with TypeScript orchestration layer.
+**Rationale**: Go for speed (sub-ms decisions), TypeScript for ecosystem integration.
+**Implementation**: [CORE-ARCHITECTURE-SDD](../sdd/CORE-ARCHITECTURE-SDD.md)
+
+### ADR-009: CEL Library Choice
+**Decision**: Use cel-js library for CEL expression evaluation.
+**Rationale**: TypeScript native, MIT licensed, good performance, Cerbos compatible syntax.
+**Implementation**: [CEL-EVALUATOR-SDD](../sdd/CEL-EVALUATOR-SDD.md)
+
 ---
 
 ## ADR to SDD Mapping
@@ -75,6 +93,9 @@ This table shows how each ADR drives specific implementation work documented in 
 | ADR-004 (Memory-first) | [CORE-PACKAGE-SDD](../sdd/CORE-PACKAGE-SDD.md) | [STORAGE-DRIVERS-SDD](../sdd/STORAGE-DRIVERS-SDD.md), [POLICY-TESTING-SDD](../sdd/POLICY-TESTING-SDD.md) |
 | ADR-005 (Agentic) | [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md) | [OBSERVABILITY-SDD](../sdd/OBSERVABILITY-SDD.md), [COMPLIANCE-SECURITY-SDD](../sdd/COMPLIANCE-SECURITY-SDD.md) |
 | ADR-006 (Cerbos API) | [CERBOS-FEATURE-PARITY-SDD](../sdd/CERBOS-FEATURE-PARITY-SDD.md) | [PLAN-RESOURCES-API-SDD](../sdd/PLAN-RESOURCES-API-SDD.md), [SCHEMA-VALIDATION-SDD](../sdd/SCHEMA-VALIDATION-SDD.md), [JWT-AUXDATA-SDD](../sdd/JWT-AUXDATA-SDD.md) |
+| ADR-007 (Native Agentic) | [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md) | [OBSERVABILITY-SDD](../sdd/OBSERVABILITY-SDD.md) |
+| ADR-008 (Hybrid Architecture) | [CORE-ARCHITECTURE-SDD](../sdd/CORE-ARCHITECTURE-SDD.md) | [SERVER-PACKAGE-SDD](../sdd/SERVER-PACKAGE-SDD.md) |
+| ADR-009 (cel-js) | [CEL-EVALUATOR-SDD](../sdd/CEL-EVALUATOR-SDD.md) | [CORE-PACKAGE-SDD](../sdd/CORE-PACKAGE-SDD.md) |
 
 ---
 
@@ -139,6 +160,11 @@ Complete list of Software Design Documents implementing these decisions:
 
 ### Agentic Features
 - ADR-005: Agentic Authorization Architecture
+- ADR-007: Native Agentic Framework
+
+### Architecture
+- ADR-008: Hybrid Go/TypeScript Architecture
+- ADR-009: CEL Library Choice (cel-js)
 
 ---
 
@@ -146,8 +172,8 @@ Complete list of Software Design Documents implementing these decisions:
 
 | Level | Description | ADRs |
 |-------|-------------|------|
-| **High** | Fundamental architecture, hard to change | ADR-001, ADR-002, ADR-005, ADR-006 |
-| **Medium** | Significant but reversible with effort | ADR-003, ADR-004 |
+| **High** | Fundamental architecture, hard to change | ADR-001, ADR-002, ADR-005, ADR-006, ADR-008 |
+| **Medium** | Significant but reversible with effort | ADR-003, ADR-004, ADR-007, ADR-009 |
 | **Low** | Easily changed, localized impact | None currently |
 
 ---
@@ -155,7 +181,7 @@ Complete list of Software Design Documents implementing these decisions:
 ## Related Documents
 
 - [SDD Framework](../sdd/SDD-FRAMEWORK.md) - Documentation standards
-- [Documentation Index](../INDEX.md) - All documentation
+- [Documentation Index](../README.md) - All documentation
 - [Feature Coverage Matrix](../CERBOS-FEATURE-COVERAGE-MATRIX.md) - All 271 features
 - [Agentic Vision](../AGENTIC_AUTHZ_VISION.md) - Project vision
 - [Phase 1 Implementation Plan](../PHASE1-IMPLEMENTATION-PLAN.md) - Implementation roadmap
