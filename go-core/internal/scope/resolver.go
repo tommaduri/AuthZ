@@ -127,7 +127,8 @@ func (r *Resolver) MatchScope(pattern, scope string) bool {
 	regexPattern := regexp.QuoteMeta(pattern)
 
 	// Handle double star wildcard (matches multiple segments including none)
-	regexPattern = strings.ReplaceAll(regexPattern, `\.\*\*`, `(\\..*)?`)
+	// Note: QuoteMeta converts . to \. so we replace \.\*\* with (\..*)?
+	regexPattern = strings.ReplaceAll(regexPattern, `\.\*\*`, `(\..*)?`)
 	regexPattern = strings.ReplaceAll(regexPattern, `\*\*`, `.*`)
 
 	// Handle single star wildcard (matches single segment)
