@@ -112,7 +112,15 @@ See [ADR Index](./adr/INDEX.md) for full details.
 
 ---
 
-## 5. Research & Analysis
+## 5. Implementation Reports
+
+| Document | Description |
+|----------|-------------|
+| [CLI-IMPLEMENTATION-REPORT.md](./reports/CLI-IMPLEMENTATION-REPORT.md) | CLI package implementation details |
+
+---
+
+## 6. Research & Analysis
 
 | Document | Description |
 |----------|-------------|
@@ -121,7 +129,7 @@ See [ADR Index](./adr/INDEX.md) for full details.
 
 ---
 
-## 6. Feature Coverage
+## 7. Feature Coverage
 
 | Category | Features | SDD Coverage |
 |----------|----------|--------------|
@@ -148,7 +156,8 @@ See [CERBOS-FEATURE-COVERAGE-MATRIX.md](./CERBOS-FEATURE-COVERAGE-MATRIX.md) for
 | SDDs | 31 |
 | ADRs | 9 |
 | Guides | 4 |
-| Other | 8 |
+| Reports | 1 |
+| Other | 7 |
 | Total Lines | ~43,000+ |
 
 ---

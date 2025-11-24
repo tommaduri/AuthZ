@@ -71,7 +71,7 @@ Successfully implemented a comprehensive CLI tool for the AuthZ Engine authoriza
 - Multiple test case support
 - Result reporting
 
-**Lines of Code:** 315
+**Lines of Code:** 416
 
 ### 5. Server Management Commands ✓
 
@@ -95,7 +95,7 @@ Successfully implemented a comprehensive CLI tool for the AuthZ Engine authoriza
 - Configuration reloading
 - Server state management
 
-**Lines of Code:** 201
+**Lines of Code:** 224
 
 ### 6. Test Execution Command ✓
 
@@ -212,13 +212,13 @@ Successfully implemented a comprehensive CLI tool for the AuthZ Engine authoriza
 ### Source Code Statistics
 
 ```
-Total Source Lines:     910
+Total Source Lines:     1,034
 Total Test Lines:       340
 Total Documentation:    1,300+
 Configuration Files:    3
 
 Files Created:          25
-Lines of Code:          2,550+
+Lines of Code:          2,674+
 ```
 
 ### Command Implementation
@@ -226,12 +226,12 @@ Lines of Code:          2,550+
 | Command | Subcommand | Lines | Status |
 |---------|-----------|-------|--------|
 | check | - | 122 | Complete |
-| policy | lint | 165 | Complete |
+| policy | lint | 266 | Complete |
 | policy | validate | 28 | Complete |
 | policy | test | 28 | Complete |
-| server | status | 50 | Complete |
-| server | health | 42 | Complete |
-| server | reload | 20 | Complete |
+| server | status | 65 | Complete |
+| server | health | 55 | Complete |
+| server | reload | 30 | Complete |
 | test | run | 234 | Complete |
 
 ---
@@ -644,7 +644,7 @@ See `/packages/cli/INSTALLATION.md` for complete instructions.
 This implementation provides a complete, production-ready CLI for the AuthZ Engine with:
 
 - **8 Commands** for authorization, policy management, testing, and server control
-- **1,250 lines** of well-structured, documented source code
+- **1,034 lines** of well-structured, documented source code
 - **340 lines** of comprehensive test coverage
 - **1,300+ lines** of detailed documentation
 - **25 files** organized in a clean structure
@@ -683,5 +683,6 @@ The CLI is ready for immediate use and can be extended with additional commands 
 ---
 
 Generated: November 23, 2025
+Updated: November 24, 2025
 Package: @authz-engine/cli v0.1.0
 Location: /packages/cli/
