@@ -56,13 +56,13 @@
 | Allowlist model | ✅ | ❌ | Gap | P2 | |
 | Conditional actions | ✅ | ❌ | Gap | P2 | |
 | **Exported Variables** | | | | | |
-| Variable definitions | ✅ | ❌ | Gap | P1 | Reusable expressions |
-| Import mechanism | ✅ | ❌ | Gap | P1 | |
-| Local variables in policies | ✅ | 🔶 | Partial | P1 | Basic support |
+| Variable definitions | ✅ | ✅ | Complete | P1 | Phase 5 (2025-11-24) - ExportVariables |
+| Import mechanism | ✅ | ✅ | Complete | P1 | Phase 5 - Multi-import with resolution |
+| Local variables in policies | ✅ | ✅ | Complete | P1 | Phase 5 - Local overrides with precedence |
 | **Exported Constants** | | | | | |
-| Constant definitions | ✅ | ❌ | Gap | P2 | |
-| Import mechanism | ✅ | ❌ | Gap | P2 | |
-| Local constants in policies | ✅ | ❌ | Gap | P2 | |
+| Constant definitions | ✅ | ✅ | Complete | P2 | Phase 5 (2025-11-24) - ExportConstants |
+| Import mechanism | ✅ | ✅ | Complete | P2 | Phase 5 - Unified import resolution |
+| Local constants in policies | ✅ | ✅ | Complete | P2 | Phase 5 - Static value support |
 | **Scoped Policies** | | | | | |
 | Scope field | ✅ | ✅ | Complete | P1 | Phase 2 (2025-11-24) |
 | Scope hierarchy evaluation | ✅ | ✅ | Complete | P1 | a.b.c → a.b → a - Phase 2 |
@@ -98,8 +98,8 @@
 | `request.principal` / `P` | ✅ | ✅ | Complete | P0 | P, R, A shortcuts added Phase 4 |
 | `request.resource` / `R` | ✅ | ✅ | Complete | P0 | |
 | `request.auxData` / `A` | ✅ | ✅ | Complete | P1 | A shortcut added Phase 4 |
-| `variables` / `V` | ✅ | 🔶 | Partial | P1 | Local only, import pending Phase 5 |
-| `constants` / `C` | ✅ | ❌ | Gap | P2 | |
+| `variables` / `V` | ✅ | ✅ | Complete | P1 | Phase 5 - Import + local with caching |
+| `constants` / `C` | ✅ | ✅ | Complete | P2 | Phase 5 - Static values |
 | `globals` / `G` | ✅ | ❌ | Gap | P2 | |
 | `runtime.effectiveDerivedRoles` | ✅ | 🔶 | Partial | P1 | |
 | **Basic Operators** | | | | | |
