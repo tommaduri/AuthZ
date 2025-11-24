@@ -23,6 +23,11 @@ COPY packages/nestjs/package.json ./packages/nestjs/
 COPY packages/memory/package.json ./packages/memory/
 COPY packages/consensus/package.json ./packages/consensus/
 COPY packages/platform/package.json ./packages/platform/
+COPY packages/neural/package.json ./packages/neural/
+COPY packages/swarm/package.json ./packages/swarm/
+COPY packages/grpc-client/package.json ./packages/grpc-client/
+COPY packages/playground/package.json ./packages/playground/
+COPY packages/cli/package.json ./packages/cli/
 
 # Install all dependencies (including devDependencies for build)
 RUN pnpm install --frozen-lockfile
@@ -90,8 +95,17 @@ COPY --from=builder --chown=authz:authz /app/packages/sdk-typescript/dist ./pack
 COPY --from=builder --chown=authz:authz /app/packages/nestjs/package.json ./packages/nestjs/
 COPY --from=builder --chown=authz:authz /app/packages/nestjs/dist ./packages/nestjs/dist
 COPY --from=builder --chown=authz:authz /app/packages/memory/package.json ./packages/memory/
+COPY --from=builder --chown=authz:authz /app/packages/memory/dist ./packages/memory/dist
 COPY --from=builder --chown=authz:authz /app/packages/consensus/package.json ./packages/consensus/
+COPY --from=builder --chown=authz:authz /app/packages/consensus/dist ./packages/consensus/dist
 COPY --from=builder --chown=authz:authz /app/packages/platform/package.json ./packages/platform/
+COPY --from=builder --chown=authz:authz /app/packages/platform/dist ./packages/platform/dist
+COPY --from=builder --chown=authz:authz /app/packages/neural/package.json ./packages/neural/
+COPY --from=builder --chown=authz:authz /app/packages/neural/dist ./packages/neural/dist
+COPY --from=builder --chown=authz:authz /app/packages/swarm/package.json ./packages/swarm/
+COPY --from=builder --chown=authz:authz /app/packages/swarm/dist ./packages/swarm/dist
+COPY --from=builder --chown=authz:authz /app/packages/grpc-client/package.json ./packages/grpc-client/
+COPY --from=builder --chown=authz:authz /app/packages/grpc-client/dist ./packages/grpc-client/dist
 
 # Create directories for policies and logs
 RUN mkdir -p /app/policies /app/logs \
