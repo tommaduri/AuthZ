@@ -15,7 +15,7 @@
 | Integrate with NestJS | [NESTJS-PACKAGE-SDD](./sdd/NESTJS-PACKAGE-SDD.md) |
 | Use the SDK | [SDK-PACKAGE-SDD](./sdd/SDK-PACKAGE-SDD.md) |
 | Understand the agents | [AGENTS-PACKAGE-SDD](./sdd/AGENTS-PACKAGE-SDD.md) |
-| See API reference | [api-reference.md](./api-reference.md) |
+| See API reference | [api-reference.md](./api/api-reference.md) |
 
 ---
 
@@ -24,8 +24,8 @@
 | Document | Description | Status |
 |----------|-------------|--------|
 | [AGENTIC_AUTHZ_VISION.md](./AGENTIC_AUTHZ_VISION.md) | Project vision and roadmap | ✅ Updated |
-| [SDD-ENTERPRISE-AUTHZ-ENGINE.md](./SDD-ENTERPRISE-AUTHZ-ENGINE.md) | Master enterprise SDD | ✅ Complete |
-| [PHASE1-IMPLEMENTATION-PLAN.md](./PHASE1-IMPLEMENTATION-PLAN.md) | Phase 1 implementation details | ✅ Complete |
+| [SDD-ENTERPRISE-AUTHZ-ENGINE.md](./sdd/SDD-ENTERPRISE-AUTHZ-ENGINE.md) | Master enterprise SDD | ✅ Complete |
+| [PHASE1-IMPLEMENTATION-PLAN.md](./planning/PHASE1-IMPLEMENTATION-PLAN.md) | Phase 1 implementation details | ✅ Complete |
 
 ---
 
@@ -105,9 +105,10 @@ See [ADR Index](./adr/INDEX.md) for full details.
 
 | Document | Description |
 |----------|-------------|
-| [integration-guide.md](./integration-guide.md) | General integration guide |
-| [agentic-integration-guide.md](./agentic-integration-guide.md) | Agentic features integration |
-| [api-reference.md](./api-reference.md) | REST API reference |
+| [integration-guide.md](./guides/integration-guide.md) | General integration guide |
+| [agentic-integration-guide.md](./guides/agentic-integration-guide.md) | Agentic features integration |
+| [TELEMETRY.md](./guides/TELEMETRY.md) | OpenTelemetry distributed tracing |
+| [api-reference.md](./api/api-reference.md) | REST API reference |
 
 ---
 
@@ -146,7 +147,7 @@ See [CERBOS-FEATURE-COVERAGE-MATRIX.md](./CERBOS-FEATURE-COVERAGE-MATRIX.md) for
 | Total Documents | 50+ |
 | SDDs | 31 |
 | ADRs | 9 |
-| Guides | 3 |
+| Guides | 4 |
 | Other | 8 |
 | Total Lines | ~43,000+ |
 
