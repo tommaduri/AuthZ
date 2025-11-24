@@ -711,7 +711,7 @@ rules:
 
         for (const d of bucketDecisions) {
           d.actions.forEach(a => allActions.add(a));
-          const anyDenied = Object.values(d.results).some(r => !r.allowed);
+          const anyDenied = Object.values(d.results).some(r => r.effect === 'deny');
           if (anyDenied) denialCount++;
         }
 
@@ -844,7 +844,7 @@ rules:
         }
 
         // Track denials
-        const anyDenied = Object.values(decision.results).some(r => !r.allowed);
+        const anyDenied = Object.values(decision.results).some(r => r.effect === 'deny');
         if (anyDenied) {
           totalDenials++;
           // Check for privilege escalation patterns (admin/write denied)
@@ -990,7 +990,7 @@ rules:
         accessByHour.set(hour, (accessByHour.get(hour) || 0) + 1);
         accessByDayOfWeek.set(day, (accessByDayOfWeek.get(day) || 0) + 1);
 
-        const anyDenied = Object.values(decision.results).some(r => !r.allowed);
+        const anyDenied = Object.values(decision.results).some(r => r.effect === 'deny');
         if (anyDenied) totalDenials++;
       }
 
@@ -1469,7 +1469,7 @@ rules:
 
     for (const d of decisions) {
       principalTotal.set(d.principal.id, (principalTotal.get(d.principal.id) || 0) + 1);
-      const anyDenied = Object.values(d.results).some(r => !r.allowed);
+      const anyDenied = Object.values(d.results).some(r => r.effect === 'deny');
       if (anyDenied) {
         principalDenials.set(d.principal.id, (principalDenials.get(d.principal.id) || 0) + 1);
       }

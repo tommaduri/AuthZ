@@ -191,6 +191,7 @@ export const DEFAULT_DYNAMIC_CONFIG: DynamicConfig = {
       minSampleSize: 50,
       confidenceThreshold: 0.8,
       learningEnabled: true,
+      patternDiscoveryInterval: '0 * * * *', // Every hour
     },
     advisor: {
       llmProvider: 'openai',
@@ -589,7 +590,7 @@ export class ConfigManager extends EventEmitter {
         ? this.changeHistory[this.changeHistory.length - 1].newVersion
         : '0.0.0',
       newVersion: this.config.version,
-      changedPaths: Array.isArray(changedPaths) ? changedPaths : [changedPaths.join('.')],
+      changedPaths: changedPaths,
       source,
     };
 

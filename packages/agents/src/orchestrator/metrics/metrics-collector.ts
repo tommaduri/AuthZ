@@ -146,7 +146,7 @@ export const DEFAULT_METRICS_CONFIG: MetricsConfig = {
 export class MetricsCollector {
   private config: MetricsConfig;
   private latencies: Map<AgentType, number[]> = new Map();
-  private requestCounts: Map<AgentType, { total: number; success: number; failed: number; timeout: number }> = new Map();
+  private requestCounts: Map<AgentType, { total: number; successful: number; failed: number; timeout: number }> = new Map();
   private auditTrail: AuditTrailEntry[] = [];
   private spans: Map<string, SpanData> = new Map();
   private activeSpans: Map<string, SpanData> = new Map();
@@ -161,7 +161,7 @@ export class MetricsCollector {
     const agentTypes: AgentType[] = ['guardian', 'analyst', 'advisor', 'enforcer'];
     for (const agentType of agentTypes) {
       this.latencies.set(agentType, []);
-      this.requestCounts.set(agentType, { total: 0, success: 0, failed: 0, timeout: 0 });
+      this.requestCounts.set(agentType, { total: 0, successful: 0, failed: 0, timeout: 0 });
     }
   }
 
@@ -207,7 +207,7 @@ export class MetricsCollector {
       counts.timeout++;
       counts.failed++;
     } else if (success) {
-      counts.success++;
+      counts.successful++;
     } else {
       counts.failed++;
     }
@@ -452,7 +452,7 @@ export class MetricsCollector {
 
     for (const counts of this.requestCounts.values()) {
       totalRequests += counts.total;
-      totalSuccess += counts.success;
+      totalSuccess += counts.successful;
     }
 
     for (const latencies of this.latencies.values()) {
@@ -493,7 +493,7 @@ export class MetricsCollector {
 
     for (const counts of this.requestCounts.values()) {
       counts.total = 0;
-      counts.success = 0;
+      counts.successful = 0;
       counts.failed = 0;
       counts.timeout = 0;
     }

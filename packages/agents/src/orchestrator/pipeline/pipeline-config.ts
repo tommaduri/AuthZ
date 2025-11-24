@@ -7,7 +7,8 @@
  * - Parallel vs sequential modes
  */
 
-import type { AgentType, Priority } from '../../types/agent.types.js';
+import type { AgentType, Priority, Anomaly, DecisionExplanation } from '../../types/agent.types.js';
+import type { CheckResponse } from '@authz-engine/core';
 
 /**
  * Execution mode for the pipeline
@@ -139,6 +140,24 @@ export interface StepResult {
   skipReason?: string;
   /** Retry count if step was retried */
   retryCount?: number;
+  /** Whether this step was required */
+  required?: boolean;
+}
+
+/**
+ * Aggregated result data from pipeline execution
+ */
+export interface PipelineResultData {
+  /** Response from authorization check */
+  response?: CheckResponse;
+  /** Anomaly score from analyst agent */
+  anomalyScore?: number;
+  /** Detected anomaly details */
+  anomaly?: Anomaly;
+  /** Explanation of the decision */
+  explanation?: DecisionExplanation;
+  /** Enforcement action taken */
+  enforcement?: { allowed: boolean; reason?: string; [key: string]: unknown };
 }
 
 /**
@@ -156,7 +175,7 @@ export interface PipelineResult {
   /** Individual step results */
   steps: StepResult[];
   /** Final aggregated result */
-  result?: unknown;
+  result?: PipelineResultData;
   /** Error if pipeline failed */
   error?: Error;
   /** Execution metadata */
