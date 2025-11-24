@@ -33,3 +33,6 @@ export * from './quota';
 
 // Policy storage
 export * from './storage';
+
+// Exported variables
+export * from './variables';
