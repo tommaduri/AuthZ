@@ -1,0 +1,45 @@
+schemaVersion: 2.0.0
+
+metadataTest:
+  exposedPorts: ["3592", "3593"]
+  workdir: "/app"
+  user: "authz"
+  env:
+    - key: NODE_ENV
+      value: production
+    - key: REST_PORT
+      value: "3592"
+    - key: GRPC_PORT
+      value: "3593"
+
+fileExistenceTests:
+  - name: "Server entry point exists"
+    path: "/app/packages/server/dist/index.js"
+    shouldExist: true
+  - name: "Core package exists"
+    path: "/app/packages/core/dist"
+    shouldExist: true
+  - name: "Policies directory exists"
+    path: "/app/policies"
+    shouldExist: true
+  - name: "Package.json exists"
+    path: "/app/package.json"
+    shouldExist: true
+
+fileContentTests:
+  - name: "Package.json contains authz-engine"
+    path: "/app/package.json"
+    expectedContents: ["authz-engine"]
+
+commandTests:
+  - name: "Node is installed"
+    command: "node"
+    args: ["--version"]
+    expectedOutput: ["v20"]
+  - name: "pnpm is installed"
+    command: "pnpm"
+    args: ["--version"]
+    expectedOutput: ["8"]
+  - name: "User is authz"
+    command: "whoami"
+    expectedOutput: ["authz"]

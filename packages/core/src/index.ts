@@ -12,3 +12,6 @@ export * from './engine';
 
 // OpenTelemetry tracing
 export * from './telemetry';
+
+// Audit logging
+export * from './audit';

@@ -1,0 +1,260 @@
+# =============================================================================
+# AuthZ Engine - Development Docker Compose
+# Full stack with all services for local development
+# =============================================================================
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # AuthZ Server (TypeScript) - Main authorization engine
+  # ---------------------------------------------------------------------------
+  authz-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: runner
+    container_name: authz-server
+    ports:
+      - "3592:3592"  # REST API
+      - "3593:3593"  # gRPC
+    volumes:
+      - ../policies:/app/policies:ro
+      - authz-logs:/app/logs
+    environment:
+      - NODE_ENV=development
+      - POLICY_DIR=/app/policies
+      - REST_PORT=3592
+      - GRPC_PORT=3593
+      - WATCH_POLICIES=true
+      - LOG_LEVEL=debug
+      - LOG_FORMAT=json
+      # Agentic features
+      - AGENTIC_ENABLED=true
+      - ANOMALY_THRESHOLD=0.7
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4}
+      - AUTO_ENFORCE_ENABLED=false
+      # Database connections
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=authz_engine
+      - DB_USER=authz
+      - DB_PASSWORD=authz_dev_password
+      # Redis
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # Tracing
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=authz-server
+      # LLM API Keys (from host environment)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3592/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - authz-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # AuthZ Go Core - High-performance decision engine
+  # ---------------------------------------------------------------------------
+  authz-go-core:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.go-core
+      args:
+        - VERSION=${VERSION:-dev}
+        - BUILD_TIME=${BUILD_TIME:-unknown}
+        - GIT_COMMIT=${GIT_COMMIT:-unknown}
+    container_name: authz-go-core
+    ports:
+      - "50051:50051"  # gRPC
+      - "8080:8080"    # HTTP (health/metrics)
+    volumes:
+      - ../policies:/policies:ro
+    environment:
+      - GRPC_PORT=50051
+      - HTTP_PORT=8080
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - CACHE_ENABLED=true
+      - CACHE_SIZE=100000
+      - CACHE_TTL=5m
+      - WORKERS=16
+      - POLICY_DIR=/policies
+      # Redis cache (optional)
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - authz-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Redis - Caching and event bus
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: authz-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --tcp-backlog 511
+      --timeout 0
+      --tcp-keepalive 300
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - authz-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL - Audit logs and decision history
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: authz-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=authz_engine
+      - POSTGRES_USER=authz
+      - POSTGRES_PASSWORD=authz_dev_password
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authz -d authz_engine"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - authz-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Jaeger - Distributed tracing
+  # ---------------------------------------------------------------------------
+  jaeger:
+    image: jaegertracing/all-in-one:1.54
+    container_name: authz-jaeger
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+      - "14268:14268"  # Jaeger HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - LOG_LEVEL=info
+    networks:
+      - authz-network
+    restart: unless-stopped
+    profiles:
+      - tracing
+      - full
+
+  # ---------------------------------------------------------------------------
+  # Prometheus - Metrics collection (optional)
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.49.0
+    container_name: authz-prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - authz-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+      - full
+
+  # ---------------------------------------------------------------------------
+  # Grafana - Dashboards (optional)
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.3.0
+    container_name: authz-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - authz-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+      - full
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  authz-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  redis-data:
+    driver: local
+  postgres-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  authz-logs:
+    driver: local

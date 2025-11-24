@@ -4,6 +4,17 @@ export default defineWorkspace([
   {
     extends: './vitest.config.ts',
     test: {
+      name: 'integration',
+      root: '.',
+      include: ['tests/**/*.test.ts'],
+      environment: 'node',
+      testTimeout: 30000,
+      hookTimeout: 30000,
+    },
+  },
+  {
+    extends: './vitest.config.ts',
+    test: {
       name: 'core',
       root: './packages/core',
       include: ['tests/**/*.test.ts'],

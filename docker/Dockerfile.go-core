@@ -1,0 +1,105 @@
+# =============================================================================
+# AuthZ Engine Go Core - Production Docker Image
+# Ultra-minimal distroless container with static binary
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Builder
+# -----------------------------------------------------------------------------
+FROM golang:1.22-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    git \
+    ca-certificates \
+    tzdata \
+    make \
+    upx
+
+WORKDIR /build
+
+# Copy go mod files first for dependency caching
+COPY go-core/go.mod go-core/go.sum ./
+
+# Download dependencies
+RUN go mod download && go mod verify
+
+# Copy source code
+COPY go-core/ ./
+
+# Build version information
+ARG VERSION=dev
+ARG BUILD_TIME
+ARG GIT_COMMIT
+
+# Build static binary with optimizations
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
+    -trimpath \
+    -o /build/authz-server \
+    ./cmd/authz-server
+
+# Compress binary (optional, reduces size by ~60%)
+RUN upx --best --lzma /build/authz-server || true
+
+# -----------------------------------------------------------------------------
+# Stage 2: Production Runtime (Distroless)
+# -----------------------------------------------------------------------------
+FROM gcr.io/distroless/static-debian12:nonroot AS runner
+
+# Copy CA certificates for HTTPS
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copy timezone data
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+
+# Copy binary
+COPY --from=builder /build/authz-server /authz-server
+
+# Create policies directory (will be mounted)
+# Note: distroless doesn't have shell, directories are created via mount
+
+# Environment variables
+ENV GRPC_PORT=50051 \
+    HTTP_PORT=8080 \
+    LOG_LEVEL=info \
+    LOG_FORMAT=json \
+    CACHE_ENABLED=true \
+    CACHE_SIZE=100000 \
+    CACHE_TTL=5m \
+    WORKERS=16 \
+    SHUTDOWN_TIMEOUT=30s
+
+# Expose ports
+EXPOSE 50051 8080
+
+# Labels
+LABEL org.opencontainers.image.title="AuthZ Engine Go Core" \
+      org.opencontainers.image.description="High-performance Go authorization engine with CEL" \
+      org.opencontainers.image.vendor="AuthZ Engine" \
+      org.opencontainers.image.version="${VERSION:-0.1.0}"
+
+# Health check (uses grpc_health_probe in k8s, wget in compose)
+# Note: distroless has no shell, health checks done via orchestrator
+
+# Run as non-root (distroless:nonroot has uid 65532)
+USER 65532:65532
+
+# Entrypoint
+ENTRYPOINT ["/authz-server"]
+
+# Default arguments
+CMD ["--grpc-port=50051", "--http-port=8080", "--log-level=info", "--log-format=json"]
+
+# =============================================================================
+# Alternative: Scratch-based image (even smaller, ~5MB)
+# Uncomment below and comment out distroless section if preferred
+# =============================================================================
+# FROM scratch AS runner-scratch
+#
+# COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+# COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+# COPY --from=builder /build/authz-server /authz-server
+#
+# USER 65532:65532
+# ENTRYPOINT ["/authz-server"]

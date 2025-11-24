@@ -20,6 +20,7 @@ import {
 } from '../telemetry/spans';
 import type { Span } from '@opentelemetry/api';
 import { addSpanAttributes, setSpanError } from '../telemetry/index';
+import type { AuditLogger, DecisionEvent } from '../audit';
 
 /**
  * Decision Engine
@@ -27,15 +28,41 @@ import { addSpanAttributes, setSpanError } from '../telemetry/index';
  * The core authorization decision engine that evaluates policies
  * against requests and produces authorization decisions.
  */
+export interface DecisionEngineConfig {
+  /** Optional audit logger for recording decisions */
+  auditLogger?: AuditLogger;
+  /** Enable audit logging (default: true if auditLogger is provided) */
+  auditEnabled?: boolean;
+}
+
 export class DecisionEngine {
   private celEvaluator: CelEvaluator;
   private resourcePolicies: Map<string, ValidatedResourcePolicy[]>;
   private derivedRolesPolicies: ValidatedDerivedRolesPolicy[];
+  private auditLogger?: AuditLogger;
+  private auditEnabled: boolean;
 
-  constructor() {
+  constructor(config: DecisionEngineConfig = {}) {
     this.celEvaluator = new CelEvaluator();
     this.resourcePolicies = new Map();
     this.derivedRolesPolicies = [];
+    this.auditLogger = config.auditLogger;
+    this.auditEnabled = config.auditEnabled ?? (config.auditLogger !== undefined);
+  }
+
+  /**
+   * Set the audit logger for this engine
+   */
+  setAuditLogger(logger: AuditLogger | undefined): void {
+    this.auditLogger = logger;
+    this.auditEnabled = logger !== undefined;
+  }
+
+  /**
+   * Enable or disable audit logging
+   */
+  setAuditEnabled(enabled: boolean): void {
+    this.auditEnabled = enabled;
   }
 
   /**
@@ -122,6 +149,9 @@ export class DecisionEngine {
       // Record decision outcome in span
       recordDecisionOutcome(span, response);
       span.end();
+
+      // Log decision to audit logger
+      this.logDecision(request, response, requestId);
 
       return response;
     } catch (error) {
@@ -298,6 +328,46 @@ export class DecisionEngine {
       derivedRolesPolicies: this.derivedRolesPolicies.length,
       resources: Array.from(this.resourcePolicies.keys()),
     };
+  }
+
+  /**
+   * Log authorization decision to audit logger
+   */
+  private logDecision(request: CheckRequest, response: CheckResponse, requestId: string): void {
+    if (!this.auditEnabled || !this.auditLogger) {
+      return;
+    }
+
+    const decisionEvent: DecisionEvent = {
+      request: {
+        requestId,
+        principal: {
+          id: request.principal.id,
+          roles: request.principal.roles,
+        },
+        resource: {
+          kind: request.resource.kind,
+          id: request.resource.id,
+        },
+        actions: request.actions,
+      },
+      response: {
+        results: Object.fromEntries(
+          Object.entries(response.results).map(([action, result]) => [
+            action,
+            {
+              effect: result.effect,
+              policy: result.policy,
+              rule: result.meta?.matchedRule,
+            },
+          ])
+        ),
+        durationMs: response.meta?.evaluationDurationMs ?? 0,
+        policiesEvaluated: response.meta?.policiesEvaluated ?? [],
+      },
+    };
+
+    this.auditLogger.logDecision(decisionEvent, requestId);
   }
 }
 

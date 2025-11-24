@@ -2,48 +2,229 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (skip actual publish)'
+        required: false
+        default: 'false'
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PNPM_VERSION: 8.15.0
+  NODE_VERSION: 20
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+  id-token: write
 
 jobs:
-  release:
-    name: Release
+  validate:
+    name: Validate Release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
-      pull-requests: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v2
-        with:
-          version: 8
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="0.0.0-dev"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - uses: actions/setup-node@v4
+          if [[ "$VERSION" == *"-"* ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "Version: $VERSION"
+
+  build:
+    name: Build Release
+    runs-on: ubuntu-latest
+    needs: [validate]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          node-version: 20
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
-      - run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - run: pnpm build
+      - name: Build all packages
+        run: pnpm build
 
-      - run: pnpm test
+      - name: Run tests
+        run: pnpm test
 
-      - name: Create Release Pull Request or Publish
-        id: changesets
-        uses: changesets/action@v1
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          publish: pnpm release
-          version: pnpm version
-          commit: 'chore: release packages'
-          title: 'chore: release packages'
+          name: release-dist
+          path: |
+            packages/*/dist
+            packages/*/package.json
+          retention-days: 7
+
+  changelog:
+    name: Generate Changelog
+    runs-on: ubuntu-latest
+    needs: [validate]
+    outputs:
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        uses: orhun/git-cliff-action@v3
+        with:
+          config: .github/cliff.toml
+          args: --latest --strip header
+        continue-on-error: true
+
+      - name: Fallback changelog
+        if: steps.changelog.outcome == 'failure'
+        id: fallback
+        run: |
+          echo "changelog=Release v${{ needs.validate.outputs.version }}" >> $GITHUB_OUTPUT
+
+  github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, build, changelog]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-dist
+          path: dist-packages
+
+      - name: Create release archive
+        run: |
+          tar -czvf authz-engine-${{ needs.validate.outputs.version }}.tar.gz dist-packages/
+          zip -r authz-engine-${{ needs.validate.outputs.version }}.zip dist-packages/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: AuthZ Engine v${{ needs.validate.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          body: |
+            ## AuthZ Engine v${{ needs.validate.outputs.version }}
+
+            ${{ needs.changelog.outputs.changelog || 'See commit history for changes.' }}
+
+            ### Installation
+
+            ```bash
+            npm install @authz-engine/core@${{ needs.validate.outputs.version }}
+            npm install @authz-engine/server@${{ needs.validate.outputs.version }}
+            npm install @authz-engine/sdk-typescript@${{ needs.validate.outputs.version }}
+            ```
+
+            ### Docker
+
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ needs.validate.outputs.version }}
+            ```
+          draft: false
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+          files: |
+            authz-engine-${{ needs.validate.outputs.version }}.tar.gz
+            authz-engine-${{ needs.validate.outputs.version }}.zip
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: [validate, build, github-release]
+    if: ${{ github.event.inputs.dry_run != 'true' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Publish packages
+        run: |
+          if [ "${{ needs.validate.outputs.prerelease }}" == "true" ]; then
+            pnpm publish -r --access public --tag next --no-git-checks || true
+          else
+            pnpm publish -r --access public --no-git-checks || true
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true
+
+  notify:
+    name: Notify Release
+    runs-on: ubuntu-latest
+    needs: [validate, github-release, publish-npm]
+    if: always()
+    steps:
+      - name: Release notification summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** v${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Prerelease:** ${{ needs.validate.outputs.prerelease }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitHub Release:** ${{ needs.github-release.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **npm Publish:** ${{ needs.publish-npm.result }}" >> $GITHUB_STEP_SUMMARY
