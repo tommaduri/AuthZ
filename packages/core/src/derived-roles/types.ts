@@ -3,7 +3,7 @@
  */
 
 import type { Principal, Resource } from '../types';
-import type { ValidatedDerivedRolesPolicy } from '../policy/schema';
+// ValidatedDerivedRolesPolicy import removed - unused (TypeScript error TS6133)
 
 /**
  * Configuration for DerivedRolesResolver

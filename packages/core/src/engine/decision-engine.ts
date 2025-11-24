@@ -14,7 +14,7 @@ import type { ValidatedResourcePolicy, ValidatedDerivedRolesPolicy, ValidatedPri
 import { ScopeResolver } from '../scope';
 import { PrincipalPolicyEvaluator } from '../principal/principal-policy-evaluator';
 import { matchesActionPattern } from '../utils/pattern-matching';
-import { DerivedRolesResolver, DerivedRolesCache } from '../derived-roles';
+import { DerivedRolesResolver } from '../derived-roles'; // Removed DerivedRolesCache - unused (TypeScript error TS6133)
 import {
   createAuthzCheckSpan,
   createCelEvaluateSpan,

@@ -13,8 +13,9 @@ export * from './scope';
 // Principal policy evaluation
 export * from './principal';
 
-// Derived roles
-export * from './derived-roles';
+// Derived roles (explicit re-export to avoid DerivedRoleDefinition duplicate with types.ts)
+export { DerivedRolesResolver, DerivedRolesCache, DerivedRolesValidator, CircularDependencyError } from './derived-roles';
+export type { DerivedRolesResolverConfig, DerivedRoleDefinition, DerivedRoleEvaluationResult, DerivedRoleEvaluationTrace, DerivedRoleEvaluationContext } from './derived-roles';
 
 // Decision engine
 export * from './engine';
