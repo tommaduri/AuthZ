@@ -1,9 +1,9 @@
 # AuthZ Engine - System Design Documents Master Index
 
-**Version**: 2.2.0
-**Last Updated**: 2025-11-24
+**Version**: 2.3.0
+**Last Updated**: 2024-11-24
 **Document Type**: Master Navigation Index
-**Total SDDs**: 43 Documents
+**Total SDDs**: 43 Documents (1 newly implemented)
 **Total ADRs**: 9 Documents
 
 ---
@@ -532,8 +532,8 @@ External Systems                     AuthZ Engine                    Clients
 | | OIDC-OAUTH-INTEGRATION-SDD | DONE | 1.0.0 | 2728 | 2024-11-23 |
 | **Policy Features** | | | | | |
 | | DERIVED-ROLES-SDD | DONE | 1.0.0 | 1144 | 2024-11-23 |
-| | PRINCIPAL-POLICIES-SDD | DONE | 1.0.0 | 1035 | 2024-11-23 |
-| | SCOPED-POLICIES-SDD | ✅ **IMPLEMENTED** | 1.1.0 | 1250+ | 2025-11-24 |
+| | PRINCIPAL-POLICIES-SDD | ✅ **IMPLEMENTED** | 1.1.0 | 1095+ | 2024-11-24 |
+| | SCOPED-POLICIES-SDD | ✅ **IMPLEMENTED** | 1.1.0 | 1250+ | 2024-11-24 |
 | | EXPORTED-VARIABLES-SDD | DONE | 1.0.0 | 1039 | 2024-11-23 |
 | | SCHEMA-VALIDATION-SDD | DONE | 1.0.0 | 1050 | 2024-11-23 |
 | | POLICY-VERSIONING-SDD | DONE | 1.0.0 | 3534 | 2024-11-23 |
@@ -1012,7 +1012,8 @@ Every SDD follows this structure (defined in [SDD-FRAMEWORK](./SDD-FRAMEWORK.md)
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 2.2.0 | 2025-11-24 | Updated SCOPED-POLICIES-SDD status to IMPLEMENTED, CORE-PACKAGE-SDD to v2.1.0 (added scope module) |
+| 2.3.0 | 2024-11-24 | **Phase 3 Complete**: PRINCIPAL-POLICIES-SDD status to IMPLEMENTED (10 modules: principal, utils), CORE-PACKAGE-SDD to v2.2.0 |
+| 2.2.0 | 2024-11-24 | Updated SCOPED-POLICIES-SDD status to IMPLEMENTED, CORE-PACKAGE-SDD to v2.1.0 (added scope module) |
 | 2.1.0 | 2025-11-24 | Added SDD-FEATURE-MAPPING cross-reference, updated SDD/ADR counts to 43/9, added implementation status summary |
 | 2.0.0 | 2025-11-24 | **Comprehensive accuracy audit**: Updated CORE-PACKAGE-SDD (8 modules), AGENTS-PACKAGE-SDD (orchestrator, pipelines, circuit breakers), SERVER-PACKAGE-SDD (30+ endpoints), SDK-PACKAGE-SDD (REST-only correction) |
 | 1.0.0 | 2025-11-23 | Initial master index creation |

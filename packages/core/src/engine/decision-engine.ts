@@ -10,8 +10,10 @@ import type {
   ScopedCheckResponse,
   ScopeResolutionInfo,
 } from '../types';
-import type { ValidatedResourcePolicy, ValidatedDerivedRolesPolicy } from '../policy/schema';
+import type { ValidatedResourcePolicy, ValidatedDerivedRolesPolicy, ValidatedPrincipalPolicy } from '../policy/schema';
 import { ScopeResolver } from '../scope';
+import { PrincipalPolicyEvaluator } from '../principal/principal-policy-evaluator';
+import { matchesActionPattern } from '../utils/pattern-matching';
 import {
   createAuthzCheckSpan,
   createCelEvaluateSpan,
@@ -26,90 +28,8 @@ import type { Span } from '@opentelemetry/api';
 import { addSpanAttributes, setSpanError } from '../telemetry/index';
 import type { AuditLogger, DecisionEvent } from '../audit';
 
-/**
- * Matches an action against a pattern with wildcard support.
- *
- * Wildcard Specification:
- * - Action patterns use `:` as delimiter
- * - `prefix:*` matches any action starting with `prefix:` (greedy - matches all remaining segments)
- * - `*:suffix` matches any action ending with `:suffix`
- * - `prefix:*:suffix` matches actions with prefix and suffix (middle * matches single segment)
- * - `*` alone matches any single action
- * - `*:*` matches any action with exactly two segments
- *
- * @param pattern - The pattern to match against (may contain wildcards)
- * @param action - The action to check
- * @returns true if the action matches the pattern
- */
-export function matchesActionPattern(pattern: string, action: string): boolean {
-  // Handle exact match
-  if (pattern === action) return true;
-
-  // Handle universal wildcard
-  if (pattern === '*') return true;
-
-  // Split by ':' delimiter
-  const patternParts = pattern.split(':');
-  const actionParts = action.split(':');
-
-  // Check if pattern ends with a trailing wildcard (greedy matching)
-  const lastPatternPart = patternParts[patternParts.length - 1];
-  const hasTrailingWildcard = lastPatternPart === '*';
-
-  // If pattern ends with *, it can match multiple remaining segments (greedy)
-  if (hasTrailingWildcard && patternParts.length <= actionParts.length) {
-    // Match all segments before the trailing wildcard exactly
-    for (let i = 0; i < patternParts.length - 1; i++) {
-      const patternPart = patternParts[i];
-      const actionPart = actionParts[i];
-
-      if (patternPart === '*') {
-        // Middle wildcard matches single non-empty segment
-        if (actionPart === '') {
-          return false;
-        }
-        continue;
-      }
-
-      if (patternPart !== actionPart) {
-        return false;
-      }
-    }
-
-    // Trailing wildcard matches remaining segments (must have at least one non-empty)
-    // For "prefix:*" matching "prefix:", we need at least one char after prefix:
-    const remainingParts = actionParts.slice(patternParts.length - 1);
-    // Check that there's something to match (at least one non-empty remaining part)
-    return remainingParts.length > 0 && remainingParts.some(part => part !== '');
-  }
-
-  // Different segment counts - no match when no trailing wildcard
-  if (patternParts.length !== actionParts.length) {
-    return false;
-  }
-
-  // Match segment by segment
-  for (let i = 0; i < patternParts.length; i++) {
-    const patternPart = patternParts[i];
-    const actionPart = actionParts[i];
-
-    // Wildcard matches any non-empty segment
-    if (patternPart === '*') {
-      // Empty segment should not match wildcard (e.g., "prefix:" with empty after colon)
-      if (actionPart === '') {
-        return false;
-      }
-      continue;
-    }
-
-    // Exact segment match required
-    if (patternPart !== actionPart) {
-      return false;
-    }
-  }
-
-  return true;
-}
+// Re-export matchesActionPattern for backwards compatibility
+export { matchesActionPattern } from '../utils/pattern-matching';
 
 /**
  * Decision Engine
@@ -132,6 +52,7 @@ export class DecisionEngine {
   private auditEnabled: boolean;
   private scopedResourcePolicies: Map<string, ValidatedResourcePolicy[]>;
   private scopeResolver: ScopeResolver;
+  private principalPolicyEvaluator: PrincipalPolicyEvaluator;
 
   constructor(config: DecisionEngineConfig = {}) {
     this.celEvaluator = new CelEvaluator();
@@ -141,6 +62,9 @@ export class DecisionEngine {
     this.auditEnabled = config.auditEnabled ?? (config.auditLogger !== undefined);
     this.scopedResourcePolicies = new Map();
     this.scopeResolver = new ScopeResolver();
+    this.principalPolicyEvaluator = new PrincipalPolicyEvaluator({
+      celEvaluator: this.celEvaluator,
+    });
   }
 
   /**
@@ -178,12 +102,20 @@ export class DecisionEngine {
   }
 
   /**
+   * Load principal policies
+   */
+  loadPrincipalPolicies(policies: ValidatedPrincipalPolicy[]): void {
+    this.principalPolicyEvaluator.loadPolicies(policies);
+  }
+
+  /**
    * Clear all loaded policies
    */
   clearPolicies(): void {
     this.resourcePolicies.clear();
     this.derivedRolesPolicies = [];
     this.scopedResourcePolicies.clear();
+    this.principalPolicyEvaluator.clearPolicies();
   }
 
   /**
@@ -343,6 +275,11 @@ export class DecisionEngine {
 
   /**
    * Check authorization for a request
+   *
+   * Evaluation order:
+   * 1. Evaluate principal policies first
+   * 2. Evaluate resource policies
+   * 3. Apply deny-override combining (ANY deny = deny)
    */
   check(request: CheckRequest, parentSpan?: Span): CheckResponse {
     const startTime = Date.now();
@@ -361,28 +298,83 @@ export class DecisionEngine {
       recordDerivedRoles(derivedRolesSpan, derivedRoles);
       derivedRolesSpan.end();
 
-      // Get policies for this resource
-      const policies = this.resourcePolicies.get(request.resource.kind) || [];
+      // Get resource policies for this resource
+      const resourcePolicies = this.resourcePolicies.get(request.resource.kind) || [];
       addSpanAttributes(span, {
-        'authz.num_policies': policies.length,
+        'authz.num_resource_policies': resourcePolicies.length,
+        'authz.num_principal_policies': this.principalPolicyEvaluator.getStats().totalPolicies,
       });
 
       // Evaluate each action
       for (const action of request.actions) {
-        const result = this.evaluateAction(
+        // Step 1: Evaluate principal policies first
+        const singleActionRequest: CheckRequest = {
+          ...request,
+          actions: [action],
+        };
+        const principalResult = this.principalPolicyEvaluator.evaluate(singleActionRequest);
+
+        // Step 2: Evaluate resource policies
+        const resourceResult = this.evaluateAction(
           action,
           request.principal,
           request.resource,
           derivedRoles,
-          policies,
+          resourcePolicies,
           request.auxData,
           span,
         );
 
-        results[action] = result;
+        // Step 3: Apply deny-override combining
+        // Explicit deny from ANY policy type = deny
+        // Allow from ANY policy type = allow (unless explicitly denied)
+        // Default: deny
+        let finalResult: ActionResult;
 
-        if (result.policy && !policiesEvaluated.includes(result.policy)) {
-          policiesEvaluated.push(result.policy);
+        // Check if either policy explicitly denies
+        const principalExplicitlyDenies = principalResult?.effect === 'deny';
+        const resourceExplicitlyDenies =
+          resourceResult.effect === 'deny' && resourceResult.policy !== 'default-deny';
+
+        // Check if either policy allows
+        const principalAllows = principalResult?.effect === 'allow';
+        const resourceAllows = resourceResult.effect === 'allow';
+
+        if (principalExplicitlyDenies) {
+          // Principal policy explicitly denies
+          finalResult = {
+            effect: 'deny',
+            policy: principalResult.policy,
+            meta: {
+              matchedRule: principalResult.rule,
+              effectiveDerivedRoles: derivedRoles,
+            },
+          };
+        } else if (resourceExplicitlyDenies) {
+          // Resource policy explicitly denies
+          finalResult = resourceResult;
+        } else if (principalAllows) {
+          // Principal policy allows (and no explicit deny)
+          finalResult = {
+            effect: 'allow',
+            policy: principalResult.policy,
+            meta: {
+              matchedRule: principalResult.rule,
+              effectiveDerivedRoles: derivedRoles,
+            },
+          };
+        } else if (resourceAllows) {
+          // Resource policy allows (and no explicit deny)
+          finalResult = resourceResult;
+        } else {
+          // Default deny
+          finalResult = resourceResult;
+        }
+
+        results[action] = finalResult;
+
+        if (finalResult.policy && !policiesEvaluated.includes(finalResult.policy)) {
+          policiesEvaluated.push(finalResult.policy);
         }
       }
 
@@ -571,11 +563,13 @@ export class DecisionEngine {
   getStats(): {
     resourcePolicies: number;
     derivedRolesPolicies: number;
+    principalPolicies: number;
     resources: string[];
   } {
     return {
       resourcePolicies: Array.from(this.resourcePolicies.values()).flat().length,
       derivedRolesPolicies: this.derivedRolesPolicies.length,
+      principalPolicies: this.principalPolicyEvaluator.getStats().totalPolicies,
       resources: Array.from(this.resourcePolicies.keys()),
     };
   }

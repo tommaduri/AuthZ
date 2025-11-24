@@ -74,14 +74,57 @@ export const DerivedRolesPolicySchema = z.object({
 // Principal Policy Schema
 // =============================================================================
 
+/**
+ * Output expression configuration for rules.
+ * Allows defining expressions to evaluate when rules are activated or conditions aren't met.
+ */
+const OutputExpressionSchema = z.object({
+  /** Expression to evaluate when rule is activated */
+  whenRuleActivated: z.string().optional(),
+  /** Expression to evaluate when condition is not met */
+  whenConditionNotMet: z.string().optional(),
+});
+
+/**
+ * Enhanced action rule with name and output support.
+ */
 const PrincipalRuleActionSchema = z.object({
+  /** Action this rule applies to (supports wildcards: *, action:*, etc.) */
   action: z.string(),
+  /** Effect of the rule */
   effect: EffectSchema,
+  /** Optional name for the rule (for debugging/auditing) */
+  name: z.string().optional(),
+  /** Optional condition expression */
   condition: PolicyConditionSchema.optional(),
+  /** Optional output expressions */
+  output: OutputExpressionSchema.optional(),
+});
+
+/**
+ * Policy variable definition.
+ */
+const PolicyVariableSchema = z.object({
+  /** Variable name */
+  name: z.string().min(1, 'Variable name is required'),
+  /** CEL expression for the variable value */
+  expression: z.string().min(1, 'Variable expression is required'),
+});
+
+/**
+ * Variables configuration for policies.
+ */
+const PolicyVariablesSchema = z.object({
+  /** Imported variable sets (referenced by name) */
+  import: z.array(z.string()).optional(),
+  /** Local variable definitions */
+  local: z.array(PolicyVariableSchema).optional(),
 });
 
 const PrincipalRuleSchema = z.object({
+  /** Resource this rule applies to (supports wildcards) */
   resource: z.string(),
+  /** Actions for this resource */
   actions: z.array(PrincipalRuleActionSchema),
 });
 
@@ -90,8 +133,13 @@ export const PrincipalPolicySchema = z.object({
   kind: z.literal('PrincipalPolicy'),
   metadata: PolicyMetadataSchema,
   spec: z.object({
+    /** Principal pattern (exact ID or wildcard: *, service-*, *@domain.com) */
     principal: z.string().min(1, 'Principal is required'),
+    /** Policy version for tracking changes */
     version: z.string(),
+    /** Optional variables (imported and local) */
+    variables: PolicyVariablesSchema.optional(),
+    /** Resource-specific rules */
     rules: z.array(PrincipalRuleSchema),
   }),
 });

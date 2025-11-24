@@ -10,6 +10,9 @@ export * from './cel';
 // Scope resolution
 export * from './scope';
 
+// Principal policy evaluation
+export * from './principal';
+
 // Decision engine
 export * from './engine';
 
