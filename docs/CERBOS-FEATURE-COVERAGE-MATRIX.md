@@ -38,16 +38,18 @@
 | Derived role matching | ✅ | ✅ | Complete | P0 | |
 | Conditions | ✅ | ✅ | Complete | P0 | CEL expressions |
 | **Derived Roles** | | | | | |
-| Basic derived roles | ✅ | ✅ | Complete | P0 | |
+| Basic derived roles | ✅ | ✅ | Complete | P0 | Phase 4 (2025-11-24) |
 | Parent role matching | ✅ | ✅ | Complete | P0 | |
-| Wildcard parent roles (`*`) | ✅ | ❌ | Gap | P1 | Match any role |
+| Wildcard parent roles (`*`) | ✅ | ✅ | Complete | P1 | `*`, `prefix:*`, `*:suffix` - Phase 4 |
+| Circular dependency detection | ✅ | ✅ | Complete | P0 | Kahn's algorithm - Phase 4 |
 | Conditional activation | ✅ | ✅ | Complete | P0 | |
 | Multiple definitions per set | ✅ | ✅ | Complete | P0 | |
 | **Principal Policies** | | | | | |
-| Basic principal policy | ✅ | ❌ | Gap | P1 | User-specific overrides |
-| Wildcard resources | ✅ | ❌ | Gap | P1 | |
-| Action-level rules | ✅ | ❌ | Gap | P1 | |
-| Conditional overrides | ✅ | ❌ | Gap | P1 | |
+| Basic principal policy | ✅ | ✅ | Complete | P1 | Phase 3 (2025-11-24) |
+| Wildcard resources | ✅ | ✅ | Complete | P1 | Pattern matching - Phase 3 |
+| Action-level rules | ✅ | ✅ | Complete | P1 | Named action rules - Phase 3 |
+| Conditional overrides | ✅ | ✅ | Complete | P1 | CEL conditions - Phase 3 |
+| Output expressions | ✅ | ✅ | Complete | P1 | whenRuleActivated, whenConditionNotMet - Phase 3 |
 | **Role Policies** | | | | | |
 | Basic role policy | ✅ | ❌ | Gap | P2 | Custom roles |
 | Parent role inheritance | ✅ | ❌ | Gap | P2 | |
@@ -62,11 +64,12 @@
 | Import mechanism | ✅ | ❌ | Gap | P2 | |
 | Local constants in policies | ✅ | ❌ | Gap | P2 | |
 | **Scoped Policies** | | | | | |
-| Scope field | ✅ | ❌ | Gap | P1 | Hierarchical scopes |
-| Scope hierarchy evaluation | ✅ | ❌ | Gap | P1 | a.b.c → a.b → a |
-| Override parent mode | ✅ | ❌ | Gap | P1 | |
-| Require parental consent mode | ✅ | ❌ | Gap | P1 | |
-| Scope in requests | ✅ | ❌ | Gap | P1 | |
+| Scope field | ✅ | ✅ | Complete | P1 | Phase 2 (2025-11-24) |
+| Scope hierarchy evaluation | ✅ | ✅ | Complete | P1 | a.b.c → a.b → a - Phase 2 |
+| Scope matching | ✅ | ✅ | Complete | P1 | Hierarchical resolution - Phase 2 |
+| Scope in requests | ✅ | ✅ | Complete | P1 | Context-aware evaluation - Phase 2 |
+| Override parent mode | ✅ | 🔶 | Partial | P1 | Basic support, needs scopePermissions |
+| Require parental consent mode | ✅ | ❌ | Gap | P1 | Future enhancement |
 | **Policy Outputs** | | | | | |
 | Rule activation output | ✅ | ❌ | Gap | P2 | |
 | Condition not met output | ✅ | ❌ | Gap | P2 | |
@@ -92,10 +95,10 @@
 | Feature | Cerbos | AuthZ Engine | Status | Priority | Notes |
 |---------|--------|--------------|--------|----------|-------|
 | **Top-Level Identifiers** | | | | | |
-| `request.principal` / `P` | ✅ | ✅ | Complete | P0 | |
+| `request.principal` / `P` | ✅ | ✅ | Complete | P0 | P, R, A shortcuts added Phase 4 |
 | `request.resource` / `R` | ✅ | ✅ | Complete | P0 | |
-| `request.auxData` | ✅ | 🔶 | Partial | P1 | JWT support needed |
-| `variables` / `V` | ✅ | 🔶 | Partial | P1 | Local only |
+| `request.auxData` / `A` | ✅ | ✅ | Complete | P1 | A shortcut added Phase 4 |
+| `variables` / `V` | ✅ | 🔶 | Partial | P1 | Local only, import pending Phase 5 |
 | `constants` / `C` | ✅ | ❌ | Gap | P2 | |
 | `globals` / `G` | ✅ | ❌ | Gap | P2 | |
 | `runtime.effectiveDerivedRoles` | ✅ | 🔶 | Partial | P1 | |
@@ -440,8 +443,8 @@
 
 | Category | Total Features | Implemented | Partial | Not Started | Completion |
 |----------|---------------|-------------|---------|-------------|------------|
-| Policy Types | 40 | 13 | 3 | 24 | 33% |
-| CEL Functions | 55 | 18 | 4 | 33 | 33% |
+| Policy Types | 40 | 20 | 3 | 17 | 50% |
+| CEL Functions | 55 | 21 | 2 | 32 | 38% |
 | API Endpoints | 25 | 10 | 7 | 8 | 40% |
 | Storage/Config | 28 | 6 | 4 | 18 | 21% |
 | SDK Features | 16 | 10 | 3 | 3 | 63% |
@@ -449,7 +452,14 @@
 | Observability | 22 | 1 | 1 | 20 | 5% |
 | Deployment/CLI | 18 | 3 | 4 | 11 | 17% |
 | Advanced Features | 47 | 13 | 1 | 26 | 28% |
-| **TOTAL** | **271** | **74** | **28** | **162** | **27%** |
+| **TOTAL** | **271** | **84** | **26** | **154** | **31%** |
+
+**Phase Progress:**
+- ✅ Phase 1: Core Foundation (Complete)
+- ✅ Phase 2: Scoped Policies (Complete - 2025-11-24)
+- ✅ Phase 3: Principal Policies (Complete - 2025-11-24)
+- ✅ Phase 4: Derived Roles Enhancement (Complete - 2025-11-24)
+- ⏳ Phase 5: Exported Variables (Next)
 
 *Note: 7 SDK languages marked as N/A (out of scope for TypeScript-only project)*
 
@@ -457,10 +467,15 @@
 
 | Priority | Features | Implemented | Gap | Coverage |
 |----------|----------|-------------|-----|----------|
-| P0 (Critical) | 62 | 56 | 6 | 90% |
-| P1 (High) | 86 | 14 | 72 | 16% |
-| P2 (Medium) | 90 | 4 | 86 | 4% |
+| P0 (Critical) | 62 | 59 | 3 | 95% |
+| P1 (High) | 86 | 22 | 64 | 26% |
+| P2 (Medium) | 90 | 3 | 87 | 3% |
 | P3 (Low) | 33 | 0 | 33 | 0% |
+
+**Recent Improvements (Phases 2-4):**
+- P0 coverage: 90% → **95%** (+5%)
+- P1 coverage: 16% → **26%** (+10%)
+- Overall: 27% → **31%** (+4%)
 
 ### 10.3 Estimated Effort for Full Parity
 
@@ -552,6 +567,7 @@
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.0 | 2025-11-24 | **Phases 2-4 Complete**: Updated derived roles (wildcards, circular deps), principal policies (pattern matching, outputs), scoped policies (hierarchy). Policy Types: 33%→50%, P0: 90%→95%, P1: 16%→26%, Overall: 27%→31% |
 | 1.2.1 | 2025-11-24 | Cross-referenced with SDD-INDEX, updated SDD/ADR counts |
 | 1.2.0 | 2025-11-23 | Added Advanced Features section (WASM, multi-tenancy, AI/agents, compliance). Total: 224→271 |
 | 1.1.0 | 2025-11-23 | Added Policy Testing, Observability, Deployment/CLI sections. Total: 159→224 |

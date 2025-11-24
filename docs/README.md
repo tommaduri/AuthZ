@@ -35,11 +35,11 @@
 
 | Document | Package | Lines | Status |
 |----------|---------|-------|--------|
-| [CORE-PACKAGE-SDD.md](./sdd/CORE-PACKAGE-SDD.md) | @authz-engine/core | ~800 | ✅ |
-| [AGENTS-PACKAGE-SDD.md](./sdd/AGENTS-PACKAGE-SDD.md) | @authz-engine/agents | ~900 | ✅ |
-| [SERVER-PACKAGE-SDD.md](./sdd/SERVER-PACKAGE-SDD.md) | @authz-engine/server | ~700 | ✅ |
-| [SDK-PACKAGE-SDD.md](./sdd/SDK-PACKAGE-SDD.md) | @authz-engine/sdk | ~600 | ✅ |
-| [NESTJS-PACKAGE-SDD.md](./sdd/NESTJS-PACKAGE-SDD.md) | @authz-engine/nestjs | ~650 | ✅ |
+| [CORE-PACKAGE-SDD.md](./sdd/CORE-PACKAGE-SDD.md) | @authz-engine/core | ~1250 | ✅ |
+| [AGENTS-PACKAGE-SDD.md](./sdd/AGENTS-PACKAGE-SDD.md) | @authz-engine/agents | ~1200 | ✅ |
+| [SERVER-PACKAGE-SDD.md](./sdd/SERVER-PACKAGE-SDD.md) | @authz-engine/server | ~950 | ✅ |
+| [SDK-PACKAGE-SDD.md](./sdd/SDK-PACKAGE-SDD.md) | @authz-engine/sdk | ~650 | ✅ |
+| [NESTJS-PACKAGE-SDD.md](./sdd/NESTJS-PACKAGE-SDD.md) | @authz-engine/nestjs | ~700 | ✅ |
 
 ### 2.2 Core Architecture SDDs
 
@@ -61,12 +61,12 @@
 
 ### 2.4 Policy Type SDDs
 
-| Document | Policy Type | Status |
-|----------|-------------|--------|
-| [SCOPED-POLICIES-SDD.md](./sdd/SCOPED-POLICIES-SDD.md) | Hierarchical scopes | ✅ |
-| [PRINCIPAL-POLICIES-SDD.md](./sdd/PRINCIPAL-POLICIES-SDD.md) | User-specific policies | ✅ |
-| [DERIVED-ROLES-SDD.md](./sdd/DERIVED-ROLES-SDD.md) | Dynamic roles (ReBAC) | ✅ |
-| [EXPORTED-VARIABLES-SDD.md](./sdd/EXPORTED-VARIABLES-SDD.md) | Shared variables | ✅ |
+| Document | Policy Type | Status | Phase |
+|----------|-------------|--------|-------|
+| [SCOPED-POLICIES-SDD.md](./sdd/SCOPED-POLICIES-SDD.md) | Hierarchical scopes | ✅ Implemented | Phase 2 |
+| [PRINCIPAL-POLICIES-SDD.md](./sdd/PRINCIPAL-POLICIES-SDD.md) | User-specific policies | ✅ Implemented | Phase 3 |
+| [DERIVED-ROLES-SDD.md](./sdd/DERIVED-ROLES-SDD.md) | Dynamic roles (ReBAC) | ✅ Implemented | Phase 4 |
+| [EXPORTED-VARIABLES-SDD.md](./sdd/EXPORTED-VARIABLES-SDD.md) | Shared variables | 📋 Specification | Phase 5 (Next) |
 
 ### 2.5 Infrastructure SDDs
 
@@ -167,7 +167,22 @@ See [CERBOS-FEATURE-COVERAGE-MATRIX.md](./CERBOS-FEATURE-COVERAGE-MATRIX.md) for
 | Guides | 4 |
 | Reports | 1 |
 | Other | 7 |
-| Total Lines | ~43,000+ |
+| Total Lines | ~45,000+ |
+
+---
+
+## Implementation Progress
+
+**Phases Complete**: 4 of 10
+- ✅ Phase 1: Core Foundation
+- ✅ Phase 2: Scoped Policies (2025-11-24)
+- ✅ Phase 3: Principal Policies (2025-11-24)
+- ✅ Phase 4: Derived Roles (2025-11-24)
+- 📋 Phase 5: Exported Variables (Next)
+
+**Test Coverage**: 529/530 tests (99.8%)
+**Cerbos Feature Parity**: 31% (84/271 features)
+**Core Modules**: 11 modules
 
 ---
 
