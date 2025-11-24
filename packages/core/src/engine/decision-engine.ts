@@ -8,6 +8,18 @@ import type {
   Effect,
 } from '../types';
 import type { ValidatedResourcePolicy, ValidatedDerivedRolesPolicy } from '../policy/schema';
+import {
+  createAuthzCheckSpan,
+  createCelEvaluateSpan,
+  createDerivedRolesSpan,
+  createPolicyMatchSpan,
+  recordDecisionOutcome,
+  recordPolicyMatch,
+  recordDerivedRoles,
+  recordCelEvaluationMetrics,
+} from '../telemetry/spans';
+import type { Span } from '@opentelemetry/api';
+import { addSpanAttributes, setSpanError } from '../telemetry/index';
 
 /**
  * Decision Engine
@@ -56,45 +68,67 @@ export class DecisionEngine {
   /**
    * Check authorization for a request
    */
-  check(request: CheckRequest): CheckResponse {
+  check(request: CheckRequest, parentSpan?: Span): CheckResponse {
     const startTime = Date.now();
     const requestId = request.requestId || `req-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-    const results: Record<string, ActionResult> = {};
-    const policiesEvaluated: string[] = [];
+    // Create root span for this check
+    const span = createAuthzCheckSpan({ ...request, requestId }, parentSpan);
 
-    // Compute derived roles for this principal
-    const derivedRoles = this.computeDerivedRoles(request.principal, request.resource, request.auxData);
+    try {
+      const results: Record<string, ActionResult> = {};
+      const policiesEvaluated: string[] = [];
 
-    // Get policies for this resource
-    const policies = this.resourcePolicies.get(request.resource.kind) || [];
+      // Compute derived roles for this principal
+      const derivedRolesSpan = createDerivedRolesSpan(span);
+      const derivedRoles = this.computeDerivedRoles(request.principal, request.resource, request.auxData);
+      recordDerivedRoles(derivedRolesSpan, derivedRoles);
+      derivedRolesSpan.end();
 
-    // Evaluate each action
-    for (const action of request.actions) {
-      const result = this.evaluateAction(
-        action,
-        request.principal,
-        request.resource,
-        derivedRoles,
-        policies,
-        request.auxData,
-      );
+      // Get policies for this resource
+      const policies = this.resourcePolicies.get(request.resource.kind) || [];
+      addSpanAttributes(span, {
+        'authz.num_policies': policies.length,
+      });
 
-      results[action] = result;
+      // Evaluate each action
+      for (const action of request.actions) {
+        const result = this.evaluateAction(
+          action,
+          request.principal,
+          request.resource,
+          derivedRoles,
+          policies,
+          request.auxData,
+          span,
+        );
 
-      if (result.policy && !policiesEvaluated.includes(result.policy)) {
-        policiesEvaluated.push(result.policy);
+        results[action] = result;
+
+        if (result.policy && !policiesEvaluated.includes(result.policy)) {
+          policiesEvaluated.push(result.policy);
+        }
       }
-    }
 
-    return {
-      requestId,
-      results,
-      meta: {
-        evaluationDurationMs: Date.now() - startTime,
-        policiesEvaluated,
-      },
-    };
+      const response: CheckResponse = {
+        requestId,
+        results,
+        meta: {
+          evaluationDurationMs: Date.now() - startTime,
+          policiesEvaluated,
+        },
+      };
+
+      // Record decision outcome in span
+      recordDecisionOutcome(span, response);
+      span.end();
+
+      return response;
+    } catch (error) {
+      setSpanError(span, error instanceof Error ? error : new Error(String(error)));
+      span.end();
+      throw error;
+    }
   }
 
   /**
@@ -148,6 +182,7 @@ export class DecisionEngine {
     derivedRoles: string[],
     policies: ValidatedResourcePolicy[],
     auxData?: Record<string, unknown>,
+    parentSpan?: Span,
   ): ActionResult {
     const allRoles = [...principal.roles, ...derivedRoles];
 
@@ -157,6 +192,8 @@ export class DecisionEngine {
     let matchedRule: string | undefined;
 
     for (const policy of policies) {
+      const policySpan = createPolicyMatchSpan(policy.metadata.name, parentSpan);
+
       for (const rule of policy.spec.rules) {
         // Check if action matches
         if (!rule.actions.includes(action) && !rule.actions.includes('*')) {
@@ -187,17 +224,32 @@ export class DecisionEngine {
             auxData,
           };
 
-          const conditionMet = this.celEvaluator.evaluateBoolean(
-            rule.condition.expression,
-            context,
-          );
+          const celSpan = createCelEvaluateSpan(rule.condition.expression, 'rule_condition', policySpan);
+          const startTime = Date.now();
 
-          if (!conditionMet) {
+          try {
+            const conditionMet = this.celEvaluator.evaluateBoolean(
+              rule.condition.expression,
+              context,
+            );
+
+            recordCelEvaluationMetrics(celSpan, Date.now() - startTime, conditionMet, true);
+            celSpan.end();
+
+            if (!conditionMet) {
+              continue;
+            }
+          } catch (error) {
+            setSpanError(celSpan, error instanceof Error ? error : new Error(String(error)));
+            celSpan.end();
             continue;
           }
         }
 
         // Rule matched!
+        recordPolicyMatch(policySpan, policy.metadata.name, rule.name, true);
+        policySpan.end();
+
         // Apply effect based on rule order and effect type
         // DENY takes precedence over ALLOW (deny-overrides combining algorithm)
         if (rule.effect === 'deny') {
@@ -218,6 +270,9 @@ export class DecisionEngine {
           matchedRule = rule.name;
         }
       }
+
+      recordPolicyMatch(policySpan, policy.metadata.name, undefined, false);
+      policySpan.end();
     }
 
     return {

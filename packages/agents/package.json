@@ -31,7 +31,9 @@
     "pg": "^8.11.3",
     "pino": "^8.16.2",
     "openai": "^4.20.1",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "@opentelemetry/api": "^1.7.0",
+    "@opentelemetry/sdk-trace-node": "^0.45.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

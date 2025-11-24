@@ -11,6 +11,7 @@
  */
 
 import type { CheckRequest, CheckResponse, ActionResult } from '@authz-engine/core';
+import { getTracer, getActiveSpan, createSpan, withSpan, addSpanAttributes, setSpanError } from '@authz-engine/core';
 import { GuardianAgent } from '../guardian/guardian-agent.js';
 import { AnalystAgent } from '../analyst/analyst-agent.js';
 import { AdvisorAgent } from '../advisor/advisor-agent.js';
@@ -289,7 +290,15 @@ export class AgentOrchestrator {
     const correlationId = options?.correlationId ?? `corr-${Date.now()}-${Math.random().toString(36).substring(2)}`;
     const requestId = request.requestId ?? `req-${Date.now()}`;
 
-    // Start tracing span
+    // Create OpenTelemetry span for orchestrator processing
+    const otelRootSpan = createSpan('orchestrator.processRequest', {
+      'orchestration.correlation_id': correlationId,
+      'orchestration.request_id': requestId,
+      'orchestration.principal_id': request.principal.id,
+      'orchestration.resource_kind': request.resource.kind,
+    });
+
+    // Start tracing span (metrics collector)
     const rootSpan = this.metricsCollector.startSpan(
       'orchestrator.processRequest',
       'guardian',
@@ -379,6 +388,15 @@ export class AgentOrchestrator {
     } catch (error) {
       const processingTimeMs = Date.now() - startTime;
 
+      // Record error in OpenTelemetry span
+      setSpanError(otelRootSpan, error instanceof Error ? error : new Error(String(error)));
+      addSpanAttributes(otelRootSpan, {
+        'orchestration.error_type': error instanceof Error ? error.name : 'unknown',
+        'orchestration.processing_time_ms': processingTimeMs,
+        'orchestration.success': false,
+      });
+      otelRootSpan.end();
+
       // End span with error
       this.metricsCollector.endSpan(rootSpan.spanId, 'error', error as Error);
 
@@ -400,6 +418,15 @@ export class AgentOrchestrator {
         processingTimeMs,
         agentsInvolved: [],
       };
+    } finally {
+      // Ensure OpenTelemetry span is ended if not already
+      if (otelRootSpan) {
+        try {
+          otelRootSpan.end();
+        } catch {
+          // Ignore errors on span cleanup
+        }
+      }
     }
   }
 

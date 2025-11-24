@@ -1,7 +1,7 @@
-import Fastify, { FastifyInstance } from 'fastify';
+import Fastify, { FastifyInstance, FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
-import { DecisionEngine } from '@authz-engine/core';
-import type { CheckRequest, CheckResponse, ActionResult, Principal, Resource } from '@authz-engine/core';
+import { DecisionEngine, extractTraceContext, injectTraceContext, createSpan } from '@authz-engine/core';
+import type { CheckRequest, CheckResponse, ActionResult, Principal, Resource, Span } from '@authz-engine/core';
 import { Logger } from '../utils/logger';
 import type { AgentOrchestrator } from '@authz-engine/agents';
 import type { LearnedPattern, Anomaly, EnforcerAction } from '@authz-engine/agents';
@@ -32,6 +32,17 @@ export class RestServer {
     if (this.orchestrator) {
       this.setupAgenticRoutes();
     }
+  }
+
+  /**
+   * Extract trace context from request headers
+   */
+  private extractTraceContextFromRequest(request: FastifyRequest): { traceId: string; parentSpanId?: string } {
+    const headers: Record<string, string | string[]> = {};
+    for (const [key, value] of Object.entries(request.headers)) {
+      headers[key] = value as string | string[];
+    }
+    return extractTraceContext(headers) as { traceId: string; parentSpanId?: string };
   }
 
   /**
@@ -67,10 +78,28 @@ export class RestServer {
 
     // Check authorization (Cerbos-compatible)
     this.server.post<{ Body: CheckRequestBody }>('/api/check', async (request, reply) => {
+      // Extract trace context from request headers
+      const traceContext = this.extractTraceContextFromRequest(request);
+      const span = createSpan('http.check', {
+        'http.method': 'POST',
+        'http.url': '/api/check',
+        'http.client_ip': request.ip,
+        'trace.id': traceContext.traceId,
+      });
+
+      // Inject trace context into response headers
+      const responseHeaders: Record<string, string> = {};
+      injectTraceContext(span, traceContext.traceId || 'unknown', responseHeaders);
+      Object.entries(responseHeaders).forEach(([key, value]) => {
+        reply.header(key, value);
+      });
+
       try {
         const body = request.body;
         const checkRequest = this.transformRequest(body);
-        const response = this.engine.check(checkRequest);
+        const response = this.engine.check(checkRequest, span);
+
+        span.end();
 
         return {
           requestId: response.requestId,
@@ -82,6 +111,7 @@ export class RestServer {
         };
       } catch (error) {
         this.logger.error('Check failed', error);
+        span.end();
         reply.status(400).send({
           error: error instanceof Error ? error.message : 'Invalid request',
         });

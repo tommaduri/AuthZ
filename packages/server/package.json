@@ -35,7 +35,10 @@
     "pino-pretty": "^10.2.3",
     "chokidar": "^3.5.3",
     "yaml": "^2.3.4",
-    "glob": "^10.3.10"
+    "glob": "^10.3.10",
+    "@opentelemetry/api": "^1.7.0",
+    "@opentelemetry/sdk-trace-node": "^0.45.0",
+    "@opentelemetry/exporter-trace-http": "^0.45.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

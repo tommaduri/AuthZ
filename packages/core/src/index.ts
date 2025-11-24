@@ -9,3 +9,6 @@ export * from './cel';
 
 // Decision engine
 export * from './engine';
+
+// OpenTelemetry tracing
+export * from './telemetry';

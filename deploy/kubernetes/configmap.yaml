@@ -1,0 +1,184 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authz-config
+  namespace: authz-system
+  labels:
+    app: authz-engine
+    config: server
+data:
+  # Server Configuration
+  log-level: "info"
+  log-format: "json"
+  grpc-port: "50051"
+  http-port: "8080"
+
+  # Cache Configuration
+  cache-enabled: "true"
+  cache-size: "100000"
+  cache-ttl: "5m"
+
+  # Concurrency
+  workers: "16"
+
+  # Policies
+  policy-dir: "/policies"
+
+  # Database Configuration
+  postgres-host: "authz-postgres"
+  postgres-port: "5432"
+  postgres-db: "authz_engine"
+  postgres-max-connections: "20"
+  postgres-pool-timeout: "30s"
+
+  # Redis Configuration
+  redis-host: "authz-redis"
+  redis-port: "6379"
+  redis-db: "0"
+  redis-max-retries: "3"
+  redis-pool-size: "10"
+
+  # Feature Flags
+  feature-flags.async-decisions: "true"
+  feature-flags.policy-validation: "true"
+  feature-flags.audit-logging: "true"
+  feature-flags.metrics-export: "true"
+
+  # Server Configuration
+  server.readtimeout: "15s"
+  server.writetimeout: "15s"
+  server.idletimeout: "60s"
+  server.maxheadersize: "1048576"
+
+  # Graceful Shutdown
+  shutdown-timeout: "30s"
+  graceful-shutdown-delay: "5s"
+
+  # Monitoring and Observability
+  metrics.enabled: "true"
+  metrics.port: "8080"
+  metrics.path: "/metrics"
+  health.path: "/health"
+  readiness.path: "/ready"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authz-policies
+  namespace: authz-system
+  labels:
+    app: authz-engine
+    config: policies
+data:
+  # Default policies will be mounted as files
+  # This ConfigMap will be updated with actual policy files
+  # Policies are typically YAML or JSON files
+
+  # Example policy structure (replace with actual policies)
+  policies.default: |
+    version: "1.0"
+    metadata:
+      name: "default-policy"
+      description: "Default authorization policies"
+    rules: []
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authz-logging
+  namespace: authz-system
+  labels:
+    app: authz-engine
+    config: logging
+data:
+  # Logging configuration can be extended here
+  # JSON logging format is used by default
+  logformat: "json"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: authz-secrets
+  namespace: authz-system
+  labels:
+    app: authz-engine
+type: Opaque
+stringData:
+  # Database credentials (should be replaced with actual secrets)
+  postgres-user: "authz"
+  postgres-password: "REPLACE_WITH_SECURE_PASSWORD"
+
+  # Optional: API keys and tokens
+  api-key: "REPLACE_WITH_API_KEY"
+  jwt-secret: "REPLACE_WITH_JWT_SECRET"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authz-init-config
+  namespace: authz-system
+  labels:
+    app: authz-engine
+    config: init
+data:
+  init-script.sh: |
+    #!/bin/bash
+    set -e
+
+    echo "Initializing AuthZ Engine..."
+
+    # Wait for PostgreSQL to be ready
+    echo "Waiting for PostgreSQL..."
+    until nc -z authz-postgres 5432; do
+      echo "PostgreSQL is unavailable - sleeping"
+      sleep 2
+    done
+    echo "PostgreSQL is up"
+
+    # Wait for Redis to be ready
+    echo "Waiting for Redis..."
+    until redis-cli -h authz-redis -p 6379 ping; do
+      echo "Redis is unavailable - sleeping"
+      sleep 2
+    done
+    echo "Redis is up"
+
+    echo "All dependencies are ready"
+    exit 0
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authz-healthcheck
+  namespace: authz-system
+  labels:
+    app: authz-engine
+    config: healthcheck
+data:
+  health-check.sh: |
+    #!/bin/sh
+    set -e
+
+    # Check gRPC health
+    if command -v grpcurl >/dev/null 2>&1; then
+      grpcurl -plaintext localhost:50051 list > /dev/null 2>&1 || exit 1
+    fi
+
+    # Check HTTP health endpoint
+    wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+    exit 0
+
+  readiness-check.sh: |
+    #!/bin/sh
+    set -e
+
+    # Check readiness endpoint
+    wget --no-verbose --tries=1 --spider http://localhost:8080/ready || exit 1
+
+    exit 0

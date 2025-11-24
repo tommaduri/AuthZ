@@ -1,0 +1,51 @@
+# Test fixtures for policy testing
+# Used with: authz policy test examples/policy.yaml --fixtures examples/fixtures.yaml
+
+fixtures:
+  - name: Admin user
+    principal: user:alice
+    roles:
+      - admin
+    attributes:
+      department: engineering
+      level: senior
+
+  - name: Regular user
+    principal: user:bob
+    roles:
+      - user
+    attributes:
+      department: marketing
+      level: junior
+
+  - name: Service account
+    principal: service:api
+    roles:
+      - service
+    attributes:
+      type: api
+      trusted: true
+
+  - name: Guest user
+    principal: user:guest
+    roles: []
+    attributes:
+      temporary: true
+
+resources:
+  - id: document:123
+    type: document
+    attributes:
+      owner: user:alice
+      sensitivity: public
+
+  - id: document:456
+    type: document
+    attributes:
+      owner: user:alice
+      sensitivity: confidential
+
+  - id: system:config
+    type: system
+    attributes:
+      critical: true

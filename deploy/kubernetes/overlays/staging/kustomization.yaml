@@ -1,0 +1,70 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  name: authz-engine-staging
+
+namespace: authz-staging
+
+bases:
+  - ../../base
+
+namePrefix: staging-
+
+commonLabels:
+  environment: staging
+
+commonAnnotations:
+  environment: staging
+  owner: devops-team
+
+# Staging-specific configurations
+replicas:
+  - name: authz-engine
+    count: 2
+
+images:
+  - name: authz-engine
+    newTag: v1.0.0-rc1
+
+# ConfigMap patches for staging
+configMapGenerator:
+  - name: authz-config
+    behavior: merge
+    literals:
+      - log-level=info
+      - log-format=json
+      - cache-enabled=true
+      - cache-size=50000
+      - workers=8
+
+# HPA patches - conservative for staging
+patches:
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: authz-engine-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 5
+
+# Resource limits for staging (between dev and prod)
+resources:
+  - ../../namespace.yaml
+  - ../../deployment.yaml
+  - ../../service.yaml
+  - ../../configmap.yaml
+  - ../../hpa.yaml
+  - ../../pdb.yaml
+
+vars:
+  - name: ENVIRONMENT
+    literal: staging
+  - name: NAMESPACE
+    objref:
+      kind: Namespace
+      name: authz-staging
+    fieldref:
+      fieldpath: metadata.name

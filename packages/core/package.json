@@ -28,7 +28,9 @@
     "cel-js": "^0.4.0",
     "yaml": "^2.3.4",
     "ajv": "^8.12.0",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "@opentelemetry/api": "^1.7.0",
+    "@opentelemetry/sdk-trace-node": "^0.45.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
