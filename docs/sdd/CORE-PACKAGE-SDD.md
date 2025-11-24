@@ -1,9 +1,24 @@
 # Software Design Document: @authz-engine/core
 
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Package**: `packages/core`
-**Status**: Implemented
-**Last Updated**: 2024-11-23
+**Status**: Partially Documented (45% coverage)
+**Last Updated**: 2024-11-24
+
+> **⚠️ Documentation Gap Notice**
+>
+> This SDD documents only the core policy evaluation features. The following **implemented features are NOT YET DOCUMENTED** in this SDD:
+>
+> | Feature | Location | Status |
+> |---------|----------|--------|
+> | **Telemetry/OpenTelemetry** | `src/telemetry/` | ✅ Implemented, needs SDD section |
+> | **Audit Logging** | `src/audit/` | ✅ Implemented, needs SDD section |
+> | **Rate Limiting** | `src/rate-limiting/` | ✅ Implemented, needs SDD section |
+> | **Quota Management** | `src/quota/` | ✅ Implemented, needs SDD section |
+> | **Storage Layer** | `src/storage/` | ✅ Implemented, needs SDD section |
+> | **Policy Parser** | `src/policy/parser.ts` | ✅ Implemented, partial docs |
+>
+> See [IMPLEMENTATION-STATUS.md](../IMPLEMENTATION-STATUS.md) for full feature inventory.
 
 ---
 

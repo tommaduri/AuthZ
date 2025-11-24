@@ -133,6 +133,8 @@ docs/
 | Status | Icon | Description |
 |--------|------|-------------|
 | **Complete** | DONE | Fully specified and reviewed |
+| **Implemented+** | ✅ IMPL+ | Code implemented, SDD may have undocumented features |
+| **Partial** | ⚠️ PARTIAL | SDD is incomplete - % indicates coverage |
 | **Draft** | DRAFT | Initial specification, under development |
 | **Review** | REVIEW | Awaiting technical review |
 | **Planned** | PLANNED | Not yet written, placeholder |
@@ -497,26 +499,35 @@ External Systems                     AuthZ Engine                    Clients
 
 ## 5. SDD Status Matrix
 
+> **⚠️ Important Clarification**
+>
+> The "Status" column refers to the **documentation status**, not implementation status.
+> - **DONE/SPEC**: Specification document is complete
+> - **DRAFT**: Specification is work-in-progress
+> - **IMPLEMENTED**: Both spec AND code are complete
+>
+> For actual implementation status, see [IMPLEMENTATION-STATUS.md](../IMPLEMENTATION-STATUS.md)
+
 ### 5.1 Complete Status Overview
 
 | Category | Document | Status | Version | Lines | Last Updated |
 |----------|----------|--------|---------|-------|--------------|
 | **Core Foundation** | | | | | |
-| | CORE-ARCHITECTURE-SDD | DONE | 0.1.0 | 732 | 2024-11-23 |
-| | CORE-PACKAGE-SDD | DONE | 0.1.0 | 521 | 2024-11-23 |
+| | CORE-ARCHITECTURE-SDD | SPEC | 0.1.0 | 732 | 2024-11-23 |
+| | CORE-PACKAGE-SDD | ⚠️ PARTIAL (45%) | 1.1.0 | 521 | 2024-11-24 |
 | | CEL-EVALUATOR-SDD | DONE | 0.1.0 | 546 | 2024-11-23 |
 | | TYPES-REFERENCE-SDD | DONE | 0.1.0 | 685 | 2024-11-23 |
-| | GO-CORE-SDD | DONE | 1.0.0 | 1050 | 2024-11-23 |
+| | GO-CORE-SDD | DRAFT | 1.0.0 | 1050 | 2024-11-23 |
 | **Agents** | | | | | |
-| | AGENTS-PACKAGE-SDD | DONE | 0.1.0 | 741 | 2024-11-23 |
+| | AGENTS-PACKAGE-SDD | ✅ IMPL+ | 2.0.0 | 741 | 2024-11-24 |
 | | NATIVE-AGENTIC-FRAMEWORK-SDD | DONE | 1.0.0 | 1158 | 2024-11-23 |
 | **Server & API** | | | | | |
-| | SERVER-PACKAGE-SDD | DONE | 0.1.0 | 590 | 2024-11-23 |
+| | SERVER-PACKAGE-SDD | ⚠️ PARTIAL (58%) | 1.0.0 | 590 | 2024-11-24 |
 | | PLAN-RESOURCES-API-SDD | DONE | 1.0.0 | 667 | 2024-11-23 |
 | | RBAC-ADMIN-API-SDD | DONE | 1.0.0 | 3718 | 2024-11-23 |
 | **SDK & Integrations** | | | | | |
-| | SDK-PACKAGE-SDD | DONE | 0.1.0 | 525 | 2024-11-23 |
-| | NESTJS-PACKAGE-SDD | DONE | 0.1.0 | 703 | 2024-11-23 |
+| | SDK-PACKAGE-SDD | ✅ IMPL+ | 1.0.0 | 525 | 2024-11-24 |
+| | NESTJS-PACKAGE-SDD | ✅ IMPL+ | 1.0.0 | 703 | 2024-11-24 |
 | | MULTI-LANGUAGE-SDK-SDD | DONE | 1.0.0 | 3460 | 2024-11-23 |
 | | OIDC-OAUTH-INTEGRATION-SDD | DONE | 1.0.0 | 2728 | 2024-11-23 |
 | **Policy Features** | | | | | |
@@ -541,7 +552,7 @@ External Systems                     AuthZ Engine                    Clients
 | | COMPLIANCE-SECURITY-SDD | DONE | 1.0.0 | 1107 | 2024-11-23 |
 | | CERBOS-FEATURE-PARITY-SDD | SPEC | 1.0.0 | 952 | 2024-11-23 |
 | **Production Operations** | | | | | |
-| | GRPC-CLIENT-SDD | PLANNED | - | - | - |
+| | GRPC-CLIENT-SDD | ✅ IMPL (92%) | 1.0.0 | 980+ | 2024-11-24 |
 | | CACHING-STRATEGY-SDD | PLANNED | - | - | - |
 | | DISASTER-RECOVERY-SDD | PLANNED | - | - | - |
 | | AUDIT-LOGGING-SDD | PLANNED | - | - | - |

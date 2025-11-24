@@ -2,8 +2,21 @@
 
 **Version**: 1.0.0
 **Package**: `packages/server`
-**Status**: Implemented
-**Last Updated**: 2024-11-23
+**Status**: Partially Documented (58% coverage)
+**Last Updated**: 2024-11-24
+
+> **⚠️ Documentation Accuracy Notice**
+>
+> This SDD has discrepancies with the actual implementation:
+>
+> | Issue | SDD Says | Actual Implementation |
+> |-------|----------|----------------------|
+> | **Endpoint Paths** | `/api/*` | `/v1/agents/*` and `/api/v1/agentic/*` |
+> | **WebSocket Server** | Not documented | ✅ Implemented for real-time streaming |
+> | **Production Middleware** | Not documented | ✅ CORS, rate limiting, auth implemented |
+> | **gRPC Server** | "Planned" | ✅ Implemented in `grpc/server.ts` |
+>
+> See the actual source code for accurate endpoint paths and middleware configuration.
 
 ---
 

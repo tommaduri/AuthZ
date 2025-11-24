@@ -2,8 +2,19 @@
 
 **Version**: 1.0.0
 **Package**: `packages/nestjs`
-**Status**: Implemented
-**Last Updated**: 2024-11-23
+**Status**: ✅ Fully Implemented (with undocumented features)
+**Last Updated**: 2024-11-24
+
+> **📌 Undocumented Feature: AuthzAgenticService**
+>
+> The implementation includes an **AuthzAgenticService** that provides:
+> - Direct access to agentic features (GUARDIAN, ANALYST, ADVISOR, ENFORCER)
+> - Programmatic anomaly detection
+> - Pattern learning integration
+> - Decision explanation generation
+>
+> This service is exported but not documented in this SDD. Additional agentic decorators
+> beyond those listed may also exist in the implementation.
 
 ---
 

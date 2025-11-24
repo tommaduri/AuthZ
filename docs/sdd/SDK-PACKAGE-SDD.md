@@ -2,8 +2,17 @@
 
 **Version**: 1.0.0
 **Package**: `packages/sdk-typescript`
-**Status**: Implemented
-**Last Updated**: 2024-11-23
+**Status**: ✅ Fully Implemented
+**Last Updated**: 2024-11-24
+
+> **📌 Undocumented Feature**
+>
+> The implementation includes a **WebSocket client** for real-time streaming that is not documented in this SDD. This feature enables:
+> - Real-time decision streaming
+> - Live policy update notifications
+> - Bidirectional communication with the server
+>
+> Consider adding a WebSocket client section to this SDD.
 
 ---
 
