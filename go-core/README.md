@@ -40,27 +40,54 @@ go build ./cmd/server
 ./server --port 8080 --policy-dir ./examples
 ```
 
-## Phase 5: Vector Store (DESIGN COMPLETE - NEW)
+## Phase 5: Vector Store + Agent Identity + MCP/A2A (✅ ALL DECISIONS APPROVED)
 
-High-performance vector database for anomaly detection, policy similarity analysis, and risk assessment:
+**Status**: ✅ **All 3 Technology Decisions MADE** (2024-11-25)
+**Timeline**: 8-10 weeks
+**See**:
+- [ADR-010: Vector Store Production Strategy](../docs/adr/ADR-010-VECTOR-STORE-PRODUCTION-STRATEGY.md)
+- [ADR-011: MCP/A2A Protocol Integration](../docs/adr/ADR-011-MCP-A2A-PROTOCOL-INTEGRATION.md)
+- [ADR-012: Agent Identity Lifecycle](../docs/adr/ADR-012-AGENT-IDENTITY-LIFECYCLE.md)
 
-- **HNSW Indexing**: Hierarchical Navigable Small World graphs for O(log n) search
-- **Reference**: Inspired by [ruvector](https://github.com/ruvnet/ruvector) architecture
-- **Performance Target**: <1ms p99 search latency, <800MB per 1M vectors
-- **Integration**: Async embedding generation, zero impact on authorization checks
-- **Use Cases**: Anomaly detection, policy recommendations, risk scoring
-- **Implementation**: 4-phase roadmap (8-10 weeks)
-  - Phase 1: In-Memory HNSW (2-3 weeks)
-  - Phase 2: PostgreSQL + pgvector (2-3 weeks)
-  - Phase 3: Product Quantization (1-2 weeks)
-  - Phase 4: Advanced Features (2-3 weeks)
+**Approved Technologies:**
+- **Vector Store**: fogfish/hnsw with in-memory store (3-6 weeks)
+- **Agent Identity**: Separate Agent type with lifecycle management (2-3 weeks)
+- **MCP/A2A**: Agent-to-agent authorization with delegation chains (3-4 weeks)
 
-**Documentation**:
-- [GO-VECTOR-STORE-SDD.md](../docs/sdd/GO-VECTOR-STORE-SDD.md) - Complete technical specification (~3000 lines)
-- [GO-VECTOR-STORE-ARCHITECTURE.md](../docs/GO-VECTOR-STORE-ARCHITECTURE.md) - Integration architecture (~1500 lines)
-- [GO-VECTOR-STORE-DEVELOPMENT-PLAN.md](../docs/GO-VECTOR-STORE-DEVELOPMENT-PLAN.md) - 8-10 week roadmap (~1200 lines)
+### Implementation Plan (Parallel Tracks)
 
-**Status**: Design complete, ready for Phase 1 implementation. See ADR-010 for strategic context.
+**Track A: Vector Store** (Weeks 1-6)
+- High-performance vector database for anomaly detection
+- Technology: fogfish/hnsw (Go-native HNSW library)
+- Storage: In-memory initially, PostgreSQL optional
+- Performance Target: <1ms p50, <5ms p99 search latency
+- Integration: Async embedding generation (zero hot-path impact)
+
+**Track B: Agent Identity + MCP/A2A** (Weeks 1-7)
+- Agent lifecycle management (registration, credentials, status)
+- Separate Agent type (distinct from Principal authorization subject)
+- MCP/A2A protocol for agent-to-agent authorization
+- Delegation chain validation (Agent A → Agent B → Agent C)
+- Avatar Connex integration support
+
+**Integration & Testing** (Weeks 8-10)
+- Combined system testing
+- End-to-end scenarios
+- Production hardening
+- Documentation
+
+### Technical Scope Alignment
+
+**Last Compared**: 2024-11-25
+**Decision Update**: 2024-11-25
+
+| Aspect | External Technical Scope | Our Implementation | Alignment |
+|--------|-------------------------|-------------------|-----------||
+| **Vector Library** | fogfish/hnsw | ✅ fogfish/hnsw | ✅ **ALIGNED** |
+| **Agent Identity** | Agent type with lifecycle | ✅ Separate Agent type | ✅ **ALIGNED** |
+| **MCP/A2A Protocol** | P0 requirement | ✅ P0 implementation | ✅ **ALIGNED** |
+| **Performance** | Sub-millisecond | <1ms p50, <5ms p99 target | ✅ ALIGNED |
+| **Authorization** | Sub-millisecond | **<10µs** (100x better) | ✅ **EXCEEDS** |
 
 ## Phase 4: Derived Roles (COMPLETE)
 

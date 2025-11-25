@@ -1,0 +1,1176 @@
+# github.com/authz-engine/go-core/internal/vector
+internal/vector/hnsw_adapter.go:47:13: invalid composite literal type "github.com/kshard/vector".Surface[[]float32]
+# github.com/authz-engine/go-core/internal/delegation_test [github.com/authz-engine/go-core/internal/delegation.test]
+internal/delegation/validator_test.go:340:19: cannot use map[string]interface{}{…} (value of type map[string]interface{}) as []types.Credential value in struct literal
+internal/delegation/validator_test.go:349:19: cannot use map[string]interface{}{…} (value of type map[string]interface{}) as []types.Credential value in struct literal
+internal/delegation/validator_test.go:390:19: cannot use map[string]interface{}{…} (value of type map[string]interface{}) as []types.Credential value in struct literal
+internal/delegation/validator_test.go:398:19: cannot use map[string]interface{}{…} (value of type map[string]interface{}) as []types.Credential value in struct literal
+# github.com/authz-engine/go-core/internal/vector [github.com/authz-engine/go-core/internal/vector.test]
+internal/vector/hnsw_adapter.go:47:13: invalid composite literal type "github.com/kshard/vector".Surface[[]float32]
+?   	github.com/authz-engine/go-core/api/proto/authz/v1	[no test files]
+# github.com/authz-engine/go-core/examples
+examples/policy_hot_reload_example.go:26:21: undefined: engine.NewEngine
+examples/policy_hot_reload_example.go:67:19: undefined: engine.NewEngine
+examples/policy_hot_reload_example.go:101:19: undefined: engine.NewEngine
+examples/policy_hot_reload_example.go:135:19: undefined: engine.NewEngine
+examples/policy_hot_reload_example.go:268:19: undefined: engine.NewEngine
+examples/policy_hot_reload_example.go:302:19: undefined: engine.NewEngine
+# github.com/authz-engine/go-core/cmd/authz-server
+cmd/authz-server/main.go:8:2: "net" imported and not used
+cmd/authz-server/main.go:116:3: cannot refer to unexported field cacheEnabled in struct literal of type server.Engine
+FAIL	github.com/authz-engine/go-core/cmd/authz-server [build failed]
+FAIL	github.com/authz-engine/go-core/examples [build failed]
+?   	github.com/authz-engine/go-core/internal/agent	[no test files]
+# github.com/authz-engine/go-core/tests/integration/phase5_test [github.com/authz-engine/go-core/tests/integration/phase5.test]
+tests/integration/phase5/agent_identity_integration_test.go:45:20: agentStore.Register undefined (type interface{} has no field or method Register)
+tests/integration/phase5/agent_identity_integration_test.go:56:11: undefined: memory
+tests/integration/phase5/agent_identity_integration_test.go:76:36: agentStore.Get undefined (type interface{} has no field or method Get)
+tests/integration/phase5/agent_identity_integration_test.go:81:19: agentStore.UpdateStatus undefined (type interface{} has no field or method UpdateStatus)
+tests/integration/phase5/agent_identity_integration_test.go:85:36: agentStore.Get undefined (type interface{} has no field or method Get)
+tests/integration/phase5/agent_identity_integration_test.go:118:20: agentStore.Register undefined (type interface{} has no field or method Register)
+tests/integration/phase5/agent_identity_integration_test.go:130:19: agentStore.AddCredential undefined (type interface{} has no field or method AddCredential)
+tests/integration/phase5/agent_identity_integration_test.go:134:34: agentStore.Get undefined (type interface{} has no field or method Get)
+tests/integration/phase5/agent_identity_integration_test.go:139:19: agentStore.RevokeCredential undefined (type interface{} has no field or method RevokeCredential)
+tests/integration/phase5/agent_identity_integration_test.go:143:32: agentStore.Get undefined (type interface{} has no field or method Get)
+tests/integration/phase5/agent_identity_integration_test.go:143:32: too many errors
+=== RUN   TestNewRedisCache
+=== RUN   TestNewRedisCache/valid_config_with_default_values
+    redis_test.go:61: NewRedisCache() error = <nil>, wantErr true
+=== RUN   TestNewRedisCache/nil_config_uses_defaults
+    redis_test.go:61: NewRedisCache() error = <nil>, wantErr true
+=== RUN   TestNewRedisCache/invalid_config_-_missing_host
+=== RUN   TestNewRedisCache/invalid_config_-_invalid_port
+--- FAIL: TestNewRedisCache (0.00s)
+    --- FAIL: TestNewRedisCache/valid_config_with_default_values (0.00s)
+    --- FAIL: TestNewRedisCache/nil_config_uses_defaults (0.00s)
+    --- PASS: TestNewRedisCache/invalid_config_-_missing_host (0.00s)
+    --- PASS: TestNewRedisCache/invalid_config_-_invalid_port (0.00s)
+=== RUN   TestRedisCacheSetGet
+=== RUN   TestRedisCacheSetGet/string_value
+=== RUN   TestRedisCacheSetGet/int_value
+    redis_test.go:135: expected 42, got 42
+=== RUN   TestRedisCacheSetGet/map_value
+--- FAIL: TestRedisCacheSetGet (0.00s)
+    --- PASS: TestRedisCacheSetGet/string_value (0.00s)
+    --- FAIL: TestRedisCacheSetGet/int_value (0.00s)
+    --- FAIL: TestRedisCacheSetGet/map_value (0.00s)
+panic: runtime error: comparing uncomparable type map[string]interface {} [recovered, repanicked]
+
+goroutine 35 [running]:
+testing.tRunner.func1.2({0x10269d840, 0x14000098d10})
+	/opt/homebrew/Cellar/go/1.25.4/libexec/src/testing/testing.go:1872 +0x190
+testing.tRunner.func1()
+	/opt/homebrew/Cellar/go/1.25.4/libexec/src/testing/testing.go:1875 +0x31c
+panic({0x10269d840?, 0x14000098d10?})
+	/opt/homebrew/Cellar/go/1.25.4/libexec/src/runtime/panic.go:783 +0x120
+github.com/authz-engine/go-core/internal/cache.TestRedisCacheSetGet.func1(0x14000118000)
+	/Users/tommaduri/Documents/GitHub/authz-engine/go-core/internal/cache/redis_test.go:134 +0x9c
+testing.tRunner(0x14000118000, 0x140000bcd40)
+	/opt/homebrew/Cellar/go/1.25.4/libexec/src/testing/testing.go:1934 +0xc8
+created by testing.(*T).Run in goroutine 28
+	/opt/homebrew/Cellar/go/1.25.4/libexec/src/testing/testing.go:1997 +0x364
+FAIL	github.com/authz-engine/go-core/internal/cache	0.360s
+=== RUN   TestEngine_Compile
+=== RUN   TestEngine_Compile/simple_boolean
+=== RUN   TestEngine_Compile/principal_role_check
+=== RUN   TestEngine_Compile/resource_attribute_access
+=== RUN   TestEngine_Compile/complex_condition
+=== RUN   TestEngine_Compile/invalid_syntax
+--- PASS: TestEngine_Compile (0.00s)
+    --- PASS: TestEngine_Compile/simple_boolean (0.00s)
+    --- PASS: TestEngine_Compile/principal_role_check (0.00s)
+    --- PASS: TestEngine_Compile/resource_attribute_access (0.00s)
+    --- PASS: TestEngine_Compile/complex_condition (0.00s)
+    --- PASS: TestEngine_Compile/invalid_syntax (0.00s)
+=== RUN   TestEngine_Evaluate
+=== RUN   TestEngine_Evaluate/admin_role_check_-_true
+=== RUN   TestEngine_Evaluate/admin_role_check_-_false
+=== RUN   TestEngine_Evaluate/owner_check
+=== RUN   TestEngine_Evaluate/visibility_check
+=== RUN   TestEngine_Evaluate/combined_admin_or_owner
+=== RUN   TestEngine_Evaluate/context_data_access
+--- PASS: TestEngine_Evaluate (0.00s)
+    --- PASS: TestEngine_Evaluate/admin_role_check_-_true (0.00s)
+    --- PASS: TestEngine_Evaluate/admin_role_check_-_false (0.00s)
+    --- PASS: TestEngine_Evaluate/owner_check (0.00s)
+    --- PASS: TestEngine_Evaluate/visibility_check (0.00s)
+    --- PASS: TestEngine_Evaluate/combined_admin_or_owner (0.00s)
+    --- PASS: TestEngine_Evaluate/context_data_access (0.00s)
+=== RUN   TestEngine_CachesProgramsCorrectly
+--- PASS: TestEngine_CachesProgramsCorrectly (0.00s)
+PASS
+ok  	github.com/authz-engine/go-core/internal/cel	(cached)
+FAIL	github.com/authz-engine/go-core/internal/delegation [build failed]
+=== RUN   TestNewDerivedRolesCache
+--- PASS: TestNewDerivedRolesCache (0.00s)
+=== RUN   TestCache_SetGet
+--- PASS: TestCache_SetGet (0.00s)
+=== RUN   TestCache_DifferentPrincipals
+--- PASS: TestCache_DifferentPrincipals (0.00s)
+=== RUN   TestCache_RoleSorting
+--- PASS: TestCache_RoleSorting (0.00s)
+=== RUN   TestCache_WithResource
+--- PASS: TestCache_WithResource (0.00s)
+=== RUN   TestCache_Clear
+--- PASS: TestCache_Clear (0.00s)
+=== RUN   TestCache_NilPrincipal
+--- PASS: TestCache_NilPrincipal (0.00s)
+=== RUN   TestCache_ThreadSafety
+--- PASS: TestCache_ThreadSafety (0.00s)
+=== RUN   TestCache_Immutability
+--- PASS: TestCache_Immutability (0.00s)
+=== RUN   TestNewDerivedRolesResolver
+--- PASS: TestNewDerivedRolesResolver (0.00s)
+=== RUN   TestResolve_NoDerivation
+--- PASS: TestResolve_NoDerivation (0.00s)
+=== RUN   TestResolve_SimpleDerivation
+--- PASS: TestResolve_SimpleDerivation (0.00s)
+=== RUN   TestResolve_WildcardMatching
+=== RUN   TestResolve_WildcardMatching/exact_match
+=== RUN   TestResolve_WildcardMatching/wildcard_*
+=== RUN   TestResolve_WildcardMatching/prefix_wildcard
+=== RUN   TestResolve_WildcardMatching/suffix_wildcard
+=== RUN   TestResolve_WildcardMatching/no_match
+--- PASS: TestResolve_WildcardMatching (0.00s)
+    --- PASS: TestResolve_WildcardMatching/exact_match (0.00s)
+    --- PASS: TestResolve_WildcardMatching/wildcard_* (0.00s)
+    --- PASS: TestResolve_WildcardMatching/prefix_wildcard (0.00s)
+    --- PASS: TestResolve_WildcardMatching/suffix_wildcard (0.00s)
+    --- PASS: TestResolve_WildcardMatching/no_match (0.00s)
+=== RUN   TestResolve_DependencyChain
+--- PASS: TestResolve_DependencyChain (0.00s)
+=== RUN   TestResolve_CircularDependency
+--- PASS: TestResolve_CircularDependency (0.00s)
+=== RUN   TestResolve_ConditionFalse
+--- PASS: TestResolve_ConditionFalse (0.00s)
+=== RUN   TestResolve_NilPrincipal
+--- PASS: TestResolve_NilPrincipal (0.00s)
+=== RUN   TestComplexHierarchy
+=== RUN   TestComplexHierarchy/junior_employee_-_no_derivation
+=== RUN   TestComplexHierarchy/mid-level_employee_-_team_lead_only
+=== RUN   TestComplexHierarchy/senior_employee_-_full_chain_to_senior_lead
+=== RUN   TestComplexHierarchy/veteran_employee_-_full_chain_to_director
+=== RUN   TestComplexHierarchy/engineering_manager_-_specialist_path
+=== RUN   TestComplexHierarchy/tech_director_-_full_cross-functional
+--- PASS: TestComplexHierarchy (0.00s)
+    --- PASS: TestComplexHierarchy/junior_employee_-_no_derivation (0.00s)
+    --- PASS: TestComplexHierarchy/mid-level_employee_-_team_lead_only (0.00s)
+    --- PASS: TestComplexHierarchy/senior_employee_-_full_chain_to_senior_lead (0.00s)
+    --- PASS: TestComplexHierarchy/veteran_employee_-_full_chain_to_director (0.00s)
+    --- PASS: TestComplexHierarchy/engineering_manager_-_specialist_path (0.00s)
+    --- PASS: TestComplexHierarchy/tech_director_-_full_cross-functional (0.00s)
+=== RUN   TestResourceContextDerivation
+--- PASS: TestResourceContextDerivation (0.00s)
+=== RUN   TestCacheIntegration
+--- PASS: TestCacheIntegration (0.00s)
+PASS
+ok  	github.com/authz-engine/go-core/internal/derived_roles	(cached)
+=== RUN   TestEngine_Check_SimpleAllow
+--- PASS: TestEngine_Check_SimpleAllow (0.00s)
+=== RUN   TestEngine_Check_SimpleDeny
+--- PASS: TestEngine_Check_SimpleDeny (0.00s)
+=== RUN   TestEngine_Check_CELCondition
+--- PASS: TestEngine_Check_CELCondition (0.00s)
+=== RUN   TestEngine_Check_MultipleActions
+--- PASS: TestEngine_Check_MultipleActions (0.00s)
+=== RUN   TestEngine_Check_CacheHit
+--- PASS: TestEngine_Check_CacheHit (0.00s)
+=== RUN   TestEngine_CheckBatch
+--- PASS: TestEngine_CheckBatch (0.00s)
+PASS
+ok  	github.com/authz-engine/go-core/internal/engine	(cached)
+=== RUN   TestLoader_LoadFromFile
+--- PASS: TestLoader_LoadFromFile (0.00s)
+=== RUN   TestLoader_LoadFromDirectory
+--- PASS: TestLoader_LoadFromDirectory (0.00s)
+=== RUN   TestLoader_CompileCELExpression
+=== RUN   TestLoader_CompileCELExpression/valid_simple_expression
+=== RUN   TestLoader_CompileCELExpression/valid_complex_expression
+=== RUN   TestLoader_CompileCELExpression/invalid_expression
+=== RUN   TestLoader_CompileCELExpression/non-boolean_result
+--- PASS: TestLoader_CompileCELExpression (0.00s)
+    --- PASS: TestLoader_CompileCELExpression/valid_simple_expression (0.00s)
+    --- PASS: TestLoader_CompileCELExpression/valid_complex_expression (0.00s)
+    --- PASS: TestLoader_CompileCELExpression/invalid_expression (0.00s)
+    --- PASS: TestLoader_CompileCELExpression/non-boolean_result (0.00s)
+=== RUN   TestLoader_EvaluateCELCondition
+    loader_test.go:162: Failed to evaluate condition: failed to evaluate CEL expression: no such overload
+--- FAIL: TestLoader_EvaluateCELCondition (0.00s)
+=== RUN   TestLoader_CacheSize
+--- PASS: TestLoader_CacheSize (0.00s)
+=== RUN   TestLoader_LoadWithCELConditions
+--- PASS: TestLoader_LoadWithCELConditions (0.00s)
+=== RUN   TestLoader_LoadInvalidCELCondition
+--- PASS: TestLoader_LoadInvalidCELCondition (0.00s)
+=== RUN   TestLoader_LoadFileNotFound
+--- PASS: TestLoader_LoadFileNotFound (0.00s)
+=== RUN   TestValidator_ValidatePolicy_Valid
+    validator_test.go:28: Expected no error for valid policy, got: invalid rule at index 0: invalid action format: read
+--- FAIL: TestValidator_ValidatePolicy_Valid (0.00s)
+=== RUN   TestValidator_ValidatePolicy_NilPolicy
+--- PASS: TestValidator_ValidatePolicy_NilPolicy (0.00s)
+=== RUN   TestValidator_ValidatePolicy_MissingName
+--- PASS: TestValidator_ValidatePolicy_MissingName (0.00s)
+=== RUN   TestValidator_ValidatePolicy_MissingResourceKind
+--- PASS: TestValidator_ValidatePolicy_MissingResourceKind (0.00s)
+=== RUN   TestValidator_ValidatePolicy_EmptyRules
+--- PASS: TestValidator_ValidatePolicy_EmptyRules (0.00s)
+=== RUN   TestValidator_ValidateRule_Valid
+    validator_test.go:109: Expected no error for valid rule, got: invalid action format: read
+--- FAIL: TestValidator_ValidateRule_Valid (0.00s)
+=== RUN   TestValidator_ValidateRule_MissingName
+--- PASS: TestValidator_ValidateRule_MissingName (0.00s)
+=== RUN   TestValidator_ValidateRule_EmptyActions
+--- PASS: TestValidator_ValidateRule_EmptyActions (0.00s)
+=== RUN   TestValidator_ValidateRule_InvalidEffect
+--- PASS: TestValidator_ValidateRule_InvalidEffect (0.00s)
+=== RUN   TestValidator_ValidateRule_InvalidCELCondition
+--- PASS: TestValidator_ValidateRule_InvalidCELCondition (0.00s)
+=== RUN   TestValidator_ValidateCELExpression_Valid
+=== RUN   TestValidator_ValidateCELExpression_Valid/simple_role_check
+=== RUN   TestValidator_ValidateCELExpression_Valid/resource_check
+=== RUN   TestValidator_ValidateCELExpression_Valid/complex_expression
+=== RUN   TestValidator_ValidateCELExpression_Valid/invalid_syntax
+=== RUN   TestValidator_ValidateCELExpression_Valid/non-boolean_result
+--- PASS: TestValidator_ValidateCELExpression_Valid (0.00s)
+    --- PASS: TestValidator_ValidateCELExpression_Valid/simple_role_check (0.00s)
+    --- PASS: TestValidator_ValidateCELExpression_Valid/resource_check (0.00s)
+    --- PASS: TestValidator_ValidateCELExpression_Valid/complex_expression (0.00s)
+    --- PASS: TestValidator_ValidateCELExpression_Valid/invalid_syntax (0.00s)
+    --- PASS: TestValidator_ValidateCELExpression_Valid/non-boolean_result (0.00s)
+=== RUN   TestValidator_ValidateRoles
+    validator_test.go:230: Expected no error for valid roles, got: invalid action format: read
+--- FAIL: TestValidator_ValidateRoles (0.00s)
+=== RUN   TestValidator_ValidateDerivedRoles
+    validator_test.go:246: Expected no error for valid derived roles, got: invalid action format: read
+--- FAIL: TestValidator_ValidateDerivedRoles (0.00s)
+=== RUN   TestValidator_InvalidIdentifiers
+=== RUN   TestValidator_InvalidIdentifiers/valid_name
+=== RUN   TestValidator_InvalidIdentifiers/valid-name
+=== RUN   TestValidator_InvalidIdentifiers/_leading_underscore
+=== RUN   TestValidator_InvalidIdentifiers/123invalid
+=== RUN   TestValidator_InvalidIdentifiers/-invalid
+=== RUN   TestValidator_InvalidIdentifiers/with_space
+=== RUN   TestValidator_InvalidIdentifiers/with@symbol
+--- PASS: TestValidator_InvalidIdentifiers (0.00s)
+    --- PASS: TestValidator_InvalidIdentifiers/valid_name (0.00s)
+    --- PASS: TestValidator_InvalidIdentifiers/valid-name (0.00s)
+    --- PASS: TestValidator_InvalidIdentifiers/_leading_underscore (0.00s)
+    --- PASS: TestValidator_InvalidIdentifiers/123invalid (0.00s)
+    --- PASS: TestValidator_InvalidIdentifiers/-invalid (0.00s)
+    --- PASS: TestValidator_InvalidIdentifiers/with_space (0.00s)
+    --- PASS: TestValidator_InvalidIdentifiers/with@symbol (0.00s)
+=== RUN   TestValidator_InvalidActions
+=== RUN   TestValidator_InvalidActions/read
+    validator_test.go:298: Expected isValidAction(read) = true, got false
+=== RUN   TestValidator_InvalidActions/read_all
+    validator_test.go:298: Expected isValidAction(read_all) = true, got false
+=== RUN   TestValidator_InvalidActions/namespace:read
+    validator_test.go:298: Expected isValidAction(namespace:read) = true, got false
+=== RUN   TestValidator_InvalidActions/*
+=== RUN   TestValidator_InvalidActions/123invalid
+=== RUN   TestValidator_InvalidActions/-invalid
+=== RUN   TestValidator_InvalidActions/with_space
+--- FAIL: TestValidator_InvalidActions (0.00s)
+    --- FAIL: TestValidator_InvalidActions/read (0.00s)
+    --- FAIL: TestValidator_InvalidActions/read_all (0.00s)
+    --- FAIL: TestValidator_InvalidActions/namespace:read (0.00s)
+    --- PASS: TestValidator_InvalidActions/* (0.00s)
+    --- PASS: TestValidator_InvalidActions/123invalid (0.00s)
+    --- PASS: TestValidator_InvalidActions/-invalid (0.00s)
+    --- PASS: TestValidator_InvalidActions/with_space (0.00s)
+=== RUN   TestValidator_DuplicateRules
+--- PASS: TestValidator_DuplicateRules (0.00s)
+=== RUN   TestValidator_ValidateRuleConsistency
+--- PASS: TestValidator_ValidateRuleConsistency (0.00s)
+=== RUN   TestValidator_MultipleValidPolicies
+    validator_test.go:391: Failed to validate policy policy-1: invalid rule at index 0: invalid action format: read
+    validator_test.go:391: Failed to validate policy policy-2: invalid rule at index 0: invalid action format: write
+--- FAIL: TestValidator_MultipleValidPolicies (0.00s)
+=== RUN   TestFileWatcher_Watch
+--- PASS: TestFileWatcher_Watch (0.00s)
+=== RUN   TestFileWatcher_DebounceChanges
+    watcher_test.go:136: Note: Event channel might not have been processed due to timing
+--- PASS: TestFileWatcher_DebounceChanges (0.36s)
+=== RUN   TestFileWatcher_FiltersPolicyFiles
+--- PASS: TestFileWatcher_FiltersPolicyFiles (0.00s)
+=== RUN   TestFileWatcher_IsWatching
+--- PASS: TestFileWatcher_IsWatching (0.10s)
+=== RUN   TestFileWatcher_DoubleStart
+--- PASS: TestFileWatcher_DoubleStart (0.00s)
+=== RUN   TestFileWatcher_Debounce
+--- PASS: TestFileWatcher_Debounce (0.00s)
+FAIL
+FAIL	github.com/authz-engine/go-core/internal/policy	1.026s
+=== RUN   TestBuildScopeChain
+=== RUN   TestBuildScopeChain/empty_scope
+=== RUN   TestBuildScopeChain/single_segment
+=== RUN   TestBuildScopeChain/two_segments
+=== RUN   TestBuildScopeChain/three_segments
+=== RUN   TestBuildScopeChain/with_hyphens
+=== RUN   TestBuildScopeChain/with_underscores
+=== RUN   TestBuildScopeChain/invalid_characters
+=== RUN   TestBuildScopeChain/empty_segment
+=== RUN   TestBuildScopeChain/exceeds_max_depth
+--- PASS: TestBuildScopeChain (0.00s)
+    --- PASS: TestBuildScopeChain/empty_scope (0.00s)
+    --- PASS: TestBuildScopeChain/single_segment (0.00s)
+    --- PASS: TestBuildScopeChain/two_segments (0.00s)
+    --- PASS: TestBuildScopeChain/three_segments (0.00s)
+    --- PASS: TestBuildScopeChain/with_hyphens (0.00s)
+    --- PASS: TestBuildScopeChain/with_underscores (0.00s)
+    --- PASS: TestBuildScopeChain/invalid_characters (0.00s)
+    --- PASS: TestBuildScopeChain/empty_segment (0.00s)
+    --- PASS: TestBuildScopeChain/exceeds_max_depth (0.00s)
+=== RUN   TestBuildScopeChainCaching
+--- PASS: TestBuildScopeChainCaching (0.00s)
+=== RUN   TestMatchScope
+=== RUN   TestMatchScope/exact_match
+=== RUN   TestMatchScope/no_match
+=== RUN   TestMatchScope/single_wildcard_matches_one_segment
+=== RUN   TestMatchScope/single_wildcard_does_not_match_multiple_segments
+=== RUN   TestMatchScope/wildcard_in_middle
+=== RUN   TestMatchScope/double_wildcard_matches_multiple_segments
+=== RUN   TestMatchScope/double_wildcard_matches_one_segment
+=== RUN   TestMatchScope/double_wildcard_matches_none
+=== RUN   TestMatchScope/double_wildcard_in_middle
+=== RUN   TestMatchScope/wildcard_does_not_match_empty
+=== RUN   TestMatchScope/pattern_longer_than_scope
+--- PASS: TestMatchScope (0.00s)
+    --- PASS: TestMatchScope/exact_match (0.00s)
+    --- PASS: TestMatchScope/no_match (0.00s)
+    --- PASS: TestMatchScope/single_wildcard_matches_one_segment (0.00s)
+    --- PASS: TestMatchScope/single_wildcard_does_not_match_multiple_segments (0.00s)
+    --- PASS: TestMatchScope/wildcard_in_middle (0.00s)
+    --- PASS: TestMatchScope/double_wildcard_matches_multiple_segments (0.00s)
+    --- PASS: TestMatchScope/double_wildcard_matches_one_segment (0.00s)
+    --- PASS: TestMatchScope/double_wildcard_matches_none (0.00s)
+    --- PASS: TestMatchScope/double_wildcard_in_middle (0.00s)
+    --- PASS: TestMatchScope/wildcard_does_not_match_empty (0.00s)
+    --- PASS: TestMatchScope/pattern_longer_than_scope (0.00s)
+=== RUN   TestMatchScopeWithoutWildcards
+=== RUN   TestMatchScopeWithoutWildcards/exact_match_still_works
+=== RUN   TestMatchScopeWithoutWildcards/wildcard_is_treated_literally
+=== RUN   TestMatchScopeWithoutWildcards/wildcard_matches_literal_wildcard
+--- PASS: TestMatchScopeWithoutWildcards (0.00s)
+    --- PASS: TestMatchScopeWithoutWildcards/exact_match_still_works (0.00s)
+    --- PASS: TestMatchScopeWithoutWildcards/wildcard_is_treated_literally (0.00s)
+    --- PASS: TestMatchScopeWithoutWildcards/wildcard_matches_literal_wildcard (0.00s)
+=== RUN   TestValidateScope
+=== RUN   TestValidateScope/empty_scope_is_valid
+=== RUN   TestValidateScope/valid_single_segment
+=== RUN   TestValidateScope/valid_multiple_segments
+=== RUN   TestValidateScope/valid_with_hyphens
+=== RUN   TestValidateScope/valid_with_underscores
+=== RUN   TestValidateScope/invalid_with_special_characters
+=== RUN   TestValidateScope/invalid_with_space
+=== RUN   TestValidateScope/invalid_with_empty_segment
+=== RUN   TestValidateScope/invalid_exceeds_max_depth
+--- PASS: TestValidateScope (0.00s)
+    --- PASS: TestValidateScope/empty_scope_is_valid (0.00s)
+    --- PASS: TestValidateScope/valid_single_segment (0.00s)
+    --- PASS: TestValidateScope/valid_multiple_segments (0.00s)
+    --- PASS: TestValidateScope/valid_with_hyphens (0.00s)
+    --- PASS: TestValidateScope/valid_with_underscores (0.00s)
+    --- PASS: TestValidateScope/invalid_with_special_characters (0.00s)
+    --- PASS: TestValidateScope/invalid_with_space (0.00s)
+    --- PASS: TestValidateScope/invalid_with_empty_segment (0.00s)
+    --- PASS: TestValidateScope/invalid_exceeds_max_depth (0.00s)
+=== RUN   TestCustomMaxDepth
+=== RUN   TestCustomMaxDepth/within_max_depth
+=== RUN   TestCustomMaxDepth/exceeds_max_depth
+--- PASS: TestCustomMaxDepth (0.00s)
+    --- PASS: TestCustomMaxDepth/within_max_depth (0.00s)
+    --- PASS: TestCustomMaxDepth/exceeds_max_depth (0.00s)
+=== RUN   TestCustomAllowedChars
+=== RUN   TestCustomAllowedChars/valid_lowercase
+=== RUN   TestCustomAllowedChars/invalid_uppercase
+=== RUN   TestCustomAllowedChars/invalid_with_numbers
+--- PASS: TestCustomAllowedChars (0.00s)
+    --- PASS: TestCustomAllowedChars/valid_lowercase (0.00s)
+    --- PASS: TestCustomAllowedChars/invalid_uppercase (0.00s)
+    --- PASS: TestCustomAllowedChars/invalid_with_numbers (0.00s)
+=== RUN   TestCacheTTL
+--- PASS: TestCacheTTL (0.10s)
+=== RUN   TestClearCache
+--- PASS: TestClearCache (0.00s)
+=== RUN   TestConcurrentAccess
+--- PASS: TestConcurrentAccess (0.00s)
+=== RUN   TestCacheHitRate
+--- PASS: TestCacheHitRate (0.00s)
+=== RUN   TestComplexWildcardPatterns
+=== RUN   TestComplexWildcardPatterns/multiple_wildcards
+=== RUN   TestComplexWildcardPatterns/mixed_wildcards
+=== RUN   TestComplexWildcardPatterns/double_wildcard_at_start
+=== RUN   TestComplexWildcardPatterns/double_wildcard_matches_empty
+--- PASS: TestComplexWildcardPatterns (0.00s)
+    --- PASS: TestComplexWildcardPatterns/multiple_wildcards (0.00s)
+    --- PASS: TestComplexWildcardPatterns/mixed_wildcards (0.00s)
+    --- PASS: TestComplexWildcardPatterns/double_wildcard_at_start (0.00s)
+    --- PASS: TestComplexWildcardPatterns/double_wildcard_matches_empty (0.00s)
+=== RUN   TestDeepScopeChain
+--- PASS: TestDeepScopeChain (0.00s)
+PASS
+ok  	github.com/authz-engine/go-core/internal/scope	(cached)
+=== RUN   TestLoggingInterceptor_Unary
+--- PASS: TestLoggingInterceptor_Unary (0.00s)
+=== RUN   TestMetricsInterceptor_Unary
+--- PASS: TestMetricsInterceptor_Unary (0.00s)
+=== RUN   TestMetricsInterceptor_Concurrent
+--- PASS: TestMetricsInterceptor_Concurrent (0.00s)
+=== RUN   TestRecoveryInterceptor_Unary
+--- PASS: TestRecoveryInterceptor_Unary (0.00s)
+=== RUN   TestRateLimiter
+--- PASS: TestRateLimiter (0.20s)
+=== RUN   TestRateLimitInterceptor
+--- PASS: TestRateLimitInterceptor (0.00s)
+=== RUN   TestMetricsInterceptor_AvgDuration
+--- PASS: TestMetricsInterceptor_AvgDuration (0.04s)
+=== RUN   TestServer_Check_Allow
+--- PASS: TestServer_Check_Allow (0.00s)
+=== RUN   TestServer_Check_Deny
+--- PASS: TestServer_Check_Deny (0.00s)
+=== RUN   TestServer_CheckBatch
+--- PASS: TestServer_CheckBatch (0.00s)
+=== RUN   TestServer_NilEngine
+--- PASS: TestServer_NilEngine (0.00s)
+=== RUN   TestServer_DefaultConfig
+--- PASS: TestServer_DefaultConfig (0.00s)
+=== RUN   TestProtoToCheckRequest
+--- PASS: TestProtoToCheckRequest (0.00s)
+=== RUN   TestCheckResponseToProto
+--- PASS: TestCheckResponseToProto (0.00s)
+=== RUN   TestConvertStructToMap
+--- PASS: TestConvertStructToMap (0.00s)
+PASS
+ok  	github.com/authz-engine/go-core/internal/server	(cached)
+FAIL	github.com/authz-engine/go-core/internal/vector [build failed]
+=== RUN   TestNewMemoryBackend
+--- PASS: TestNewMemoryBackend (0.00s)
+=== RUN   TestMemoryBackend_Insert
+--- PASS: TestMemoryBackend_Insert (0.00s)
+=== RUN   TestMemoryBackend_Get
+--- PASS: TestMemoryBackend_Get (0.00s)
+=== RUN   TestMemoryBackend_Delete
+--- PASS: TestMemoryBackend_Delete (0.00s)
+=== RUN   TestMemoryBackend_GetByKey
+--- PASS: TestMemoryBackend_GetByKey (0.00s)
+=== RUN   TestMemoryBackend_GetKey
+--- PASS: TestMemoryBackend_GetKey (0.00s)
+=== RUN   TestMemoryBackend_MemoryUsage
+--- PASS: TestMemoryBackend_MemoryUsage (0.00s)
+=== RUN   TestMemoryBackend_UpdateExisting
+--- PASS: TestMemoryBackend_UpdateExisting (0.00s)
+=== RUN   TestMemoryBackend_Concurrent
+--- PASS: TestMemoryBackend_Concurrent (0.00s)
+PASS
+ok  	github.com/authz-engine/go-core/internal/vector/backends	(cached)
+=== RUN   TestAgent_ValidTypes
+=== RUN   TestAgent_ValidTypes/type_service
+=== RUN   TestAgent_ValidTypes/type_human
+=== RUN   TestAgent_ValidTypes/type_ai-agent
+=== RUN   TestAgent_ValidTypes/type_mcp-agent
+--- PASS: TestAgent_ValidTypes (0.00s)
+    --- PASS: TestAgent_ValidTypes/type_service (0.00s)
+    --- PASS: TestAgent_ValidTypes/type_human (0.00s)
+    --- PASS: TestAgent_ValidTypes/type_ai-agent (0.00s)
+    --- PASS: TestAgent_ValidTypes/type_mcp-agent (0.00s)
+=== RUN   TestAgent_ValidStatuses
+=== RUN   TestAgent_ValidStatuses/status_active
+=== RUN   TestAgent_ValidStatuses/status_suspended
+=== RUN   TestAgent_ValidStatuses/status_revoked
+=== RUN   TestAgent_ValidStatuses/status_expired
+--- PASS: TestAgent_ValidStatuses (0.00s)
+    --- PASS: TestAgent_ValidStatuses/status_active (0.00s)
+    --- PASS: TestAgent_ValidStatuses/status_suspended (0.00s)
+    --- PASS: TestAgent_ValidStatuses/status_revoked (0.00s)
+    --- PASS: TestAgent_ValidStatuses/status_expired (0.00s)
+=== RUN   TestAgent_IsActive
+=== RUN   TestAgent_IsActive/active_agent
+=== RUN   TestAgent_IsActive/suspended_agent
+=== RUN   TestAgent_IsActive/revoked_agent
+=== RUN   TestAgent_IsActive/expired_agent
+--- PASS: TestAgent_IsActive (0.00s)
+    --- PASS: TestAgent_IsActive/active_agent (0.00s)
+    --- PASS: TestAgent_IsActive/suspended_agent (0.00s)
+    --- PASS: TestAgent_IsActive/revoked_agent (0.00s)
+    --- PASS: TestAgent_IsActive/expired_agent (0.00s)
+=== RUN   TestAgent_IsExpired
+=== RUN   TestAgent_IsExpired/no_expiration
+=== RUN   TestAgent_IsExpired/expired_agent
+=== RUN   TestAgent_IsExpired/not_yet_expired
+--- PASS: TestAgent_IsExpired (0.00s)
+    --- PASS: TestAgent_IsExpired/no_expiration (0.00s)
+    --- PASS: TestAgent_IsExpired/expired_agent (0.00s)
+    --- PASS: TestAgent_IsExpired/not_yet_expired (0.00s)
+=== RUN   TestAgent_HasValidCredential
+=== RUN   TestAgent_HasValidCredential/no_credentials
+=== RUN   TestAgent_HasValidCredential/valid_credential
+=== RUN   TestAgent_HasValidCredential/expired_credential
+=== RUN   TestAgent_HasValidCredential/mixed_credentials_-_one_valid
+--- PASS: TestAgent_HasValidCredential (0.00s)
+    --- PASS: TestAgent_HasValidCredential/no_credentials (0.00s)
+    --- PASS: TestAgent_HasValidCredential/valid_credential (0.00s)
+    --- PASS: TestAgent_HasValidCredential/expired_credential (0.00s)
+    --- PASS: TestAgent_HasValidCredential/mixed_credentials_-_one_valid (0.00s)
+=== RUN   TestAgent_ToPrincipal
+--- PASS: TestAgent_ToPrincipal (0.00s)
+=== RUN   TestAgent_ToPrincipal_WithCustomRoles
+--- PASS: TestAgent_ToPrincipal_WithCustomRoles (0.00s)
+=== RUN   TestCredential_IsExpired
+=== RUN   TestCredential_IsExpired/no_expiration
+=== RUN   TestCredential_IsExpired/expired_credential
+=== RUN   TestCredential_IsExpired/not_yet_expired
+--- PASS: TestCredential_IsExpired (0.00s)
+    --- PASS: TestCredential_IsExpired/no_expiration (0.00s)
+    --- PASS: TestCredential_IsExpired/expired_credential (0.00s)
+    --- PASS: TestCredential_IsExpired/not_yet_expired (0.00s)
+=== RUN   TestAgent_Validate
+=== RUN   TestAgent_Validate/valid_agent
+=== RUN   TestAgent_Validate/missing_ID
+=== RUN   TestAgent_Validate/invalid_type
+=== RUN   TestAgent_Validate/invalid_status
+=== RUN   TestAgent_Validate/missing_display_name
+--- PASS: TestAgent_Validate (0.00s)
+    --- PASS: TestAgent_Validate/valid_agent (0.00s)
+    --- PASS: TestAgent_Validate/missing_ID (0.00s)
+    --- PASS: TestAgent_Validate/invalid_type (0.00s)
+    --- PASS: TestAgent_Validate/invalid_status (0.00s)
+    --- PASS: TestAgent_Validate/missing_display_name (0.00s)
+PASS
+ok  	github.com/authz-engine/go-core/pkg/types	(cached)
+=== RUN   TestDefaultConfig
+--- PASS: TestDefaultConfig (0.00s)
+=== RUN   TestSearchResult
+--- PASS: TestSearchResult (0.00s)
+=== RUN   TestVectorEntry
+--- PASS: TestVectorEntry (0.00s)
+PASS
+ok  	github.com/authz-engine/go-core/pkg/vector	(cached)
+=== RUN   TestAgentStore_Register
+--- PASS: TestAgentStore_Register (0.00s)
+=== RUN   TestAgentStore_Register_Duplicate
+--- PASS: TestAgentStore_Register_Duplicate (0.00s)
+=== RUN   TestAgentStore_Get
+--- PASS: TestAgentStore_Get (0.00s)
+=== RUN   TestAgentStore_UpdateStatus
+--- PASS: TestAgentStore_UpdateStatus (0.00s)
+=== RUN   TestAgentStore_UpdateStatus_InvalidStatus
+--- PASS: TestAgentStore_UpdateStatus_InvalidStatus (0.00s)
+=== RUN   TestAgentStore_Revoke
+--- PASS: TestAgentStore_Revoke (0.00s)
+=== RUN   TestAgentStore_List
+--- PASS: TestAgentStore_List (0.00s)
+=== RUN   TestAgentStore_AddCredential
+--- PASS: TestAgentStore_AddCredential (0.00s)
+=== RUN   TestAgentStore_RevokeCredential
+--- PASS: TestAgentStore_RevokeCredential (0.00s)
+=== RUN   TestAgentStore_Performance_O1_Lookup
+--- PASS: TestAgentStore_Performance_O1_Lookup (0.00s)
+PASS
+ok  	github.com/authz-engine/go-core/tests/agent	(cached)
+testing: warning: no tests to run
+PASS
+ok  	github.com/authz-engine/go-core/tests/benchmarks	(cached) [no tests to run]
+=== RUN   TestPerRequestCaching
+=== RUN   TestPerRequestCaching/should_cache_computed_results
+=== RUN   TestPerRequestCaching/should_store_different_principals_independently
+=== RUN   TestPerRequestCaching/should_handle_empty_role_arrays
+=== RUN   TestPerRequestCaching/should_handle_nil_principal_gracefully
+--- PASS: TestPerRequestCaching (0.00s)
+    --- PASS: TestPerRequestCaching/should_cache_computed_results (0.00s)
+    --- PASS: TestPerRequestCaching/should_store_different_principals_independently (0.00s)
+    --- PASS: TestPerRequestCaching/should_handle_empty_role_arrays (0.00s)
+    --- PASS: TestPerRequestCaching/should_handle_nil_principal_gracefully (0.00s)
+=== RUN   TestCacheInvalidation
+=== RUN   TestCacheInvalidation/should_clear_cache
+=== RUN   TestCacheInvalidation/should_recompute_after_clear
+--- PASS: TestCacheInvalidation (0.00s)
+    --- PASS: TestCacheInvalidation/should_clear_cache (0.00s)
+    --- PASS: TestCacheInvalidation/should_recompute_after_clear (0.00s)
+=== RUN   TestCacheKeyGeneration
+=== RUN   TestCacheKeyGeneration/should_generate_consistent_cache_keys
+=== RUN   TestCacheKeyGeneration/should_differentiate_by_principal_ID
+=== RUN   TestCacheKeyGeneration/should_differentiate_by_principal_roles
+=== RUN   TestCacheKeyGeneration/should_handle_role_order_consistency
+--- PASS: TestCacheKeyGeneration (0.00s)
+    --- PASS: TestCacheKeyGeneration/should_generate_consistent_cache_keys (0.00s)
+    --- PASS: TestCacheKeyGeneration/should_differentiate_by_principal_ID (0.00s)
+    --- PASS: TestCacheKeyGeneration/should_differentiate_by_principal_roles (0.00s)
+    --- PASS: TestCacheKeyGeneration/should_handle_role_order_consistency (0.00s)
+=== RUN   TestPerformanceVerification
+=== RUN   TestPerformanceVerification/should_handle_large_number_of_cache_entries_efficiently
+    cache_test.go:201: Successfully cached 1000 entries
+=== RUN   TestPerformanceVerification/should_provide_fast_lookups
+    cache_test.go:223: Completed 1000 lookups successfully
+--- PASS: TestPerformanceVerification (0.00s)
+    --- PASS: TestPerformanceVerification/should_handle_large_number_of_cache_entries_efficiently (0.00s)
+    --- PASS: TestPerformanceVerification/should_provide_fast_lookups (0.00s)
+=== RUN   TestConcurrentAccess
+=== RUN   TestConcurrentAccess/should_be_thread-safe_for_concurrent_reads_and_writes
+    cache_test.go:257: Concurrent test completed: size=10
+=== RUN   TestConcurrentAccess/should_handle_concurrent_clear_operations
+    cache_test.go:295: After concurrent clear: size=2
+--- PASS: TestConcurrentAccess (0.00s)
+    --- PASS: TestConcurrentAccess/should_be_thread-safe_for_concurrent_reads_and_writes (0.00s)
+    --- PASS: TestConcurrentAccess/should_handle_concurrent_clear_operations (0.00s)
+=== RUN   TestCacheEdgeCases
+=== RUN   TestCacheEdgeCases/should_handle_empty_cache
+=== RUN   TestCacheEdgeCases/should_handle_special_characters_in_principal_ID
+=== RUN   TestCacheEdgeCases/should_handle_resource_attributes
+=== RUN   TestCacheEdgeCases/should_return_copy_of_cached_roles
+--- PASS: TestCacheEdgeCases (0.00s)
+    --- PASS: TestCacheEdgeCases/should_handle_empty_cache (0.00s)
+    --- PASS: TestCacheEdgeCases/should_handle_special_characters_in_principal_ID (0.00s)
+    --- PASS: TestCacheEdgeCases/should_handle_resource_attributes (0.00s)
+    --- PASS: TestCacheEdgeCases/should_return_copy_of_cached_roles (0.00s)
+=== RUN   TestMemoryEfficiency
+=== RUN   TestMemoryEfficiency/should_not_leak_memory_on_repeated_operations
+    cache_test.go:396: Final cache size: 100
+--- PASS: TestMemoryEfficiency (0.00s)
+    --- PASS: TestMemoryEfficiency/should_not_leak_memory_on_repeated_operations (0.00s)
+=== RUN   TestBasicRoleDerivation
+=== RUN   TestBasicRoleDerivation/should_derive_role_when_parent_role_matches_and_condition_is_true
+=== RUN   TestBasicRoleDerivation/should_not_derive_role_when_parent_role_does_not_match
+=== RUN   TestBasicRoleDerivation/should_not_derive_role_when_condition_is_false
+=== RUN   TestBasicRoleDerivation/should_derive_multiple_roles_when_conditions_match
+--- PASS: TestBasicRoleDerivation (0.00s)
+    --- PASS: TestBasicRoleDerivation/should_derive_role_when_parent_role_matches_and_condition_is_true (0.00s)
+    --- PASS: TestBasicRoleDerivation/should_not_derive_role_when_parent_role_does_not_match (0.00s)
+    --- PASS: TestBasicRoleDerivation/should_not_derive_role_when_condition_is_false (0.00s)
+    --- PASS: TestBasicRoleDerivation/should_derive_multiple_roles_when_conditions_match (0.00s)
+=== RUN   TestWildcardParentRoles
+=== RUN   TestWildcardParentRoles/should_match_all_roles_with_asterisk_wildcard
+=== RUN   TestWildcardParentRoles/should_match_roles_with_prefix_wildcard
+=== RUN   TestWildcardParentRoles/should_match_roles_with_suffix_wildcard
+--- PASS: TestWildcardParentRoles (0.00s)
+    --- PASS: TestWildcardParentRoles/should_match_all_roles_with_asterisk_wildcard (0.00s)
+    --- PASS: TestWildcardParentRoles/should_match_roles_with_prefix_wildcard (0.00s)
+    --- PASS: TestWildcardParentRoles/should_match_roles_with_suffix_wildcard (0.00s)
+=== RUN   TestRoleDependencies
+=== RUN   TestRoleDependencies/should_resolve_dependent_roles_in_correct_order
+=== RUN   TestRoleDependencies/should_detect_circular_dependencies
+--- PASS: TestRoleDependencies (0.00s)
+    --- PASS: TestRoleDependencies/should_resolve_dependent_roles_in_correct_order (0.00s)
+    --- PASS: TestRoleDependencies/should_detect_circular_dependencies (0.00s)
+=== RUN   TestComplexCELConditions
+=== RUN   TestComplexCELConditions/should_evaluate_complex_boolean_conditions
+=== RUN   TestComplexCELConditions/should_handle_list_containment_checks
+--- PASS: TestComplexCELConditions (0.00s)
+    --- PASS: TestComplexCELConditions/should_evaluate_complex_boolean_conditions (0.00s)
+    --- PASS: TestComplexCELConditions/should_handle_list_containment_checks (0.00s)
+=== RUN   TestEdgeCases
+=== RUN   TestEdgeCases/should_handle_nil_principal_gracefully
+=== RUN   TestEdgeCases/should_handle_empty_derived_roles_list
+=== RUN   TestEdgeCases/should_handle_invalid_CEL_expression_gracefully
+=== RUN   TestEdgeCases/should_handle_missing_attributes_in_condition
+--- PASS: TestEdgeCases (0.00s)
+    --- PASS: TestEdgeCases/should_handle_nil_principal_gracefully (0.00s)
+    --- PASS: TestEdgeCases/should_handle_empty_derived_roles_list (0.00s)
+    --- PASS: TestEdgeCases/should_handle_invalid_CEL_expression_gracefully (0.00s)
+    --- PASS: TestEdgeCases/should_handle_missing_attributes_in_condition (0.00s)
+=== RUN   TestPerformance
+=== RUN   TestPerformance/should_handle_large_number_of_derived_roles_efficiently
+--- PASS: TestPerformance (0.00s)
+    --- PASS: TestPerformance/should_handle_large_number_of_derived_roles_efficiently (0.00s)
+=== RUN   TestSchemaValidation
+=== RUN   TestSchemaValidation/should_accept_valid_derived_role
+=== RUN   TestSchemaValidation/should_reject_nil_derived_role
+=== RUN   TestSchemaValidation/should_reject_duplicate_role_names_in_collection
+=== RUN   TestSchemaValidation/should_accept_role_names_with_hyphens_and_underscores
+=== RUN   TestSchemaValidation/should_reject_empty_role_names
+--- PASS: TestSchemaValidation (0.00s)
+    --- PASS: TestSchemaValidation/should_accept_valid_derived_role (0.00s)
+    --- PASS: TestSchemaValidation/should_reject_nil_derived_role (0.00s)
+    --- PASS: TestSchemaValidation/should_reject_duplicate_role_names_in_collection (0.00s)
+    --- PASS: TestSchemaValidation/should_accept_role_names_with_hyphens_and_underscores (0.00s)
+    --- PASS: TestSchemaValidation/should_reject_empty_role_names (0.00s)
+=== RUN   TestParentRoleValidation
+=== RUN   TestParentRoleValidation/should_accept_valid_parent_roles
+=== RUN   TestParentRoleValidation/should_reject_empty_parent_roles_list
+=== RUN   TestParentRoleValidation/should_reject_self-reference_in_parent_roles
+=== RUN   TestParentRoleValidation/should_accept_wildcard_parent_roles
+--- PASS: TestParentRoleValidation (0.00s)
+    --- PASS: TestParentRoleValidation/should_accept_valid_parent_roles (0.00s)
+    --- PASS: TestParentRoleValidation/should_reject_empty_parent_roles_list (0.00s)
+    --- PASS: TestParentRoleValidation/should_reject_self-reference_in_parent_roles (0.00s)
+    --- PASS: TestParentRoleValidation/should_accept_wildcard_parent_roles (0.00s)
+=== RUN   TestConditionValidation
+=== RUN   TestConditionValidation/should_accept_valid_CEL_expression
+=== RUN   TestConditionValidation/should_accept_empty_condition_(always_true)
+=== RUN   TestConditionValidation/should_reject_invalid_CEL_syntax
+    validator_test.go:197: 
+        	Error Trace:	/Users/tommaduri/Documents/GitHub/authz-engine/go-core/tests/derived_roles/validator_test.go:197
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestConditionValidation/should_reject_invalid_CEL_syntax
+=== RUN   TestConditionValidation/should_accept_complex_boolean_expressions
+--- FAIL: TestConditionValidation (0.00s)
+    --- PASS: TestConditionValidation/should_accept_valid_CEL_expression (0.00s)
+    --- PASS: TestConditionValidation/should_accept_empty_condition_(always_true) (0.00s)
+    --- FAIL: TestConditionValidation/should_reject_invalid_CEL_syntax (0.00s)
+    --- PASS: TestConditionValidation/should_accept_complex_boolean_expressions (0.00s)
+=== RUN   TestCircularDependencyDetection
+=== RUN   TestCircularDependencyDetection/should_detect_simple_circular_dependency
+=== RUN   TestCircularDependencyDetection/should_detect_transitive_circular_dependency
+=== RUN   TestCircularDependencyDetection/should_accept_acyclic_dependency_graph
+--- PASS: TestCircularDependencyDetection (0.00s)
+    --- PASS: TestCircularDependencyDetection/should_detect_simple_circular_dependency (0.00s)
+    --- PASS: TestCircularDependencyDetection/should_detect_transitive_circular_dependency (0.00s)
+    --- PASS: TestCircularDependencyDetection/should_accept_acyclic_dependency_graph (0.00s)
+=== RUN   TestComplexValidationScenarios
+=== RUN   TestComplexValidationScenarios/should_validate_large_collection_of_derived_roles
+=== RUN   TestComplexValidationScenarios/should_validate_complex_dependency_graph
+--- PASS: TestComplexValidationScenarios (0.00s)
+    --- PASS: TestComplexValidationScenarios/should_validate_large_collection_of_derived_roles (0.00s)
+    --- PASS: TestComplexValidationScenarios/should_validate_complex_dependency_graph (0.00s)
+=== RUN   TestValidatorEdgeCases
+=== RUN   TestValidatorEdgeCases/should_handle_empty_derived_roles_list
+=== RUN   TestValidatorEdgeCases/should_handle_single_derived_role
+=== RUN   TestValidatorEdgeCases/should_validate_role_with_multiple_parent_roles
+--- PASS: TestValidatorEdgeCases (0.00s)
+    --- PASS: TestValidatorEdgeCases/should_handle_empty_derived_roles_list (0.00s)
+    --- PASS: TestValidatorEdgeCases/should_handle_single_derived_role (0.00s)
+    --- PASS: TestValidatorEdgeCases/should_validate_role_with_multiple_parent_roles (0.00s)
+FAIL
+FAIL	github.com/authz-engine/go-core/tests/derived_roles	0.756s
+=== RUN   TestUserSpecificPolicyOverridesResourcePolicyAllow
+--- PASS: TestUserSpecificPolicyOverridesResourcePolicyAllow (0.00s)
+=== RUN   TestUserSpecificPolicyOverridesResourcePolicyDeny
+--- PASS: TestUserSpecificPolicyOverridesResourcePolicyDeny (0.00s)
+=== RUN   TestMultipleUserSpecificPoliciesDenyWins
+--- PASS: TestMultipleUserSpecificPoliciesDenyWins (0.00s)
+=== RUN   TestUserPolicyWithWildcardResourceKind
+--- PASS: TestUserPolicyWithWildcardResourceKind (0.00s)
+=== RUN   TestUserPolicyWithResourceScopePattern
+--- PASS: TestUserPolicyWithResourceScopePattern (0.00s)
+=== RUN   TestNonMatchingPrincipalIDFallsThrough
+--- PASS: TestNonMatchingPrincipalIDFallsThrough (0.00s)
+=== RUN   TestCacheCorrectlyDistinguishesUsers
+--- PASS: TestCacheCorrectlyDistinguishesUsers (0.00s)
+=== RUN   TestPolicyResolutionMetadataCorrect
+--- PASS: TestPolicyResolutionMetadataCorrect (0.00s)
+=== RUN   TestRoleBasedPolicyAppliesToAllWithRole
+--- PASS: TestRoleBasedPolicyAppliesToAllWithRole (0.00s)
+=== RUN   TestMultipleRolesMultiplePolicies
+--- PASS: TestMultipleRolesMultiplePolicies (0.00s)
+=== RUN   TestRolePolicyOverridesResourcePolicy
+--- PASS: TestRolePolicyOverridesResourcePolicy (0.00s)
+=== RUN   TestRolePolicyDenyOverridesAllow
+--- PASS: TestRolePolicyDenyOverridesAllow (0.00s)
+=== RUN   TestRoleWildcardResourceKind
+--- PASS: TestRoleWildcardResourceKind (0.00s)
+=== RUN   TestUserNotInRoleFallsThrough
+--- PASS: TestUserNotInRoleFallsThrough (0.00s)
+=== RUN   TestRolePolicyDeduplicationWorks
+--- PASS: TestRolePolicyDeduplicationWorks (0.00s)
+=== RUN   TestPolicyResolutionShowsRoleBased
+    principal_eval_test.go:1365: Note: EvaluationOrder doesn't explicitly mention role-based: [role-based-principal]
+--- PASS: TestPolicyResolutionShowsRoleBased (0.00s)
+=== RUN   TestPrincipalSpecificOverridesRoleOverridesResourceOverridesGlobal
+--- PASS: TestPrincipalSpecificOverridesRoleOverridesResourceOverridesGlobal (0.00s)
+=== RUN   TestPrincipalPolicyAllowNoResourcePolicies
+--- PASS: TestPrincipalPolicyAllowNoResourcePolicies (0.00s)
+=== RUN   TestRolePolicyAllowResourcePolicyDenyDenyWins
+--- PASS: TestRolePolicyAllowResourcePolicyDenyDenyWins (0.00s)
+=== RUN   TestBothPrincipalAndResourcePoliciesCollected
+--- PASS: TestBothPrincipalAndResourcePoliciesCollected (0.00s)
+=== RUN   TestGlobalFallbackWhenNoPrincipalPolicies
+--- PASS: TestGlobalFallbackWhenNoPrincipalPolicies (0.00s)
+=== RUN   TestEvaluationOrderMetadataCorrect
+    principal_eval_test.go:1922: EvaluationOrder: [principal-specific role-based-principal resource-scoped]
+--- PASS: TestEvaluationOrderMetadataCorrect (0.00s)
+=== RUN   TestScopeResolutionNestedCorrectly
+--- PASS: TestScopeResolutionNestedCorrectly (0.00s)
+=== RUN   TestCacheKeyIncludesRoles
+--- PASS: TestCacheKeyIncludesRoles (0.00s)
+=== RUN   TestSameUserDifferentRolesDifferentCacheEntries
+--- PASS: TestSameUserDifferentRolesDifferentCacheEntries (0.00s)
+=== RUN   TestUserRoleChangeCacheMiss
+--- PASS: TestUserRoleChangeCacheMiss (0.00s)
+=== RUN   TestRolePolicyCachedCorrectly
+--- PASS: TestRolePolicyCachedCorrectly (0.00s)
+=== RUN   TestCacheHitRateWithRoles
+    principal_eval_test.go:2450: Cache stats: Hits=9, Misses=1, Size=1
+--- PASS: TestCacheHitRateWithRoles (0.00s)
+=== RUN   TestClearCacheWorks
+--- PASS: TestClearCacheWorks (0.00s)
+=== RUN   TestConcurrentCacheAccessWithRoles
+    principal_eval_test.go:2655: Concurrent test cache stats: Hits=0, Misses=20, Size=20
+--- PASS: TestConcurrentCacheAccessWithRoles (0.00s)
+=== RUN   TestCheckWithScope
+=== RUN   TestCheckWithScope/scoped_resource_uses_scoped_policy
+=== RUN   TestCheckWithScope/more_specific_scope_takes_precedence
+=== RUN   TestCheckWithScope/no_scope_uses_global_policy
+=== RUN   TestCheckWithScope/scope_with_no_policy_falls_back_to_global
+--- PASS: TestCheckWithScope (0.00s)
+    --- PASS: TestCheckWithScope/scoped_resource_uses_scoped_policy (0.00s)
+    --- PASS: TestCheckWithScope/more_specific_scope_takes_precedence (0.00s)
+    --- PASS: TestCheckWithScope/no_scope_uses_global_policy (0.00s)
+    --- PASS: TestCheckWithScope/scope_with_no_policy_falls_back_to_global (0.00s)
+=== RUN   TestScopeInheritance
+--- PASS: TestScopeInheritance (0.00s)
+=== RUN   TestPrincipalScope
+--- PASS: TestPrincipalScope (0.00s)
+=== RUN   TestResourceScopeTakesPrecedence
+--- PASS: TestResourceScopeTakesPrecedence (0.00s)
+=== RUN   TestInvalidScopeFailsClosed
+--- PASS: TestInvalidScopeFailsClosed (0.00s)
+=== RUN   TestGlobalFallback
+--- PASS: TestGlobalFallback (0.00s)
+=== RUN   TestScopeResolutionMetadata
+--- PASS: TestScopeResolutionMetadata (0.00s)
+=== RUN   TestMultipleActions
+--- PASS: TestMultipleActions (0.00s)
+PASS
+ok  	github.com/authz-engine/go-core/tests/engine	(cached)
+=== RUN   TestDerivedRolesIntegration
+--- PASS: TestDerivedRolesIntegration (0.00s)
+=== RUN   TestDerivedRolesValidatorErrors
+--- PASS: TestDerivedRolesValidatorErrors (0.00s)
+=== RUN   TestDerivedRolesWithConditions
+--- PASS: TestDerivedRolesWithConditions (0.00s)
+=== RUN   TestIntegration_FullPolicyEvaluation
+=== RUN   TestIntegration_FullPolicyEvaluation/Admin_full_access
+=== RUN   TestIntegration_FullPolicyEvaluation/Owner_write_access
+=== RUN   TestIntegration_FullPolicyEvaluation/Non-owner_limited_access
+=== RUN   TestIntegration_FullPolicyEvaluation/Department_access
+--- PASS: TestIntegration_FullPolicyEvaluation (0.00s)
+    --- PASS: TestIntegration_FullPolicyEvaluation/Admin_full_access (0.00s)
+    --- PASS: TestIntegration_FullPolicyEvaluation/Owner_write_access (0.00s)
+    --- PASS: TestIntegration_FullPolicyEvaluation/Non-owner_limited_access (0.00s)
+    --- PASS: TestIntegration_FullPolicyEvaluation/Department_access (0.00s)
+=== RUN   TestIntegration_CacheBehavior
+--- PASS: TestIntegration_CacheBehavior (0.00s)
+=== RUN   TestIntegration_ConcurrentRequests
+--- PASS: TestIntegration_ConcurrentRequests (0.00s)
+=== RUN   TestIntegration_BatchRequests
+--- PASS: TestIntegration_BatchRequests (0.00s)
+=== RUN   TestIntegration_PolicyHotReload
+    engine_integration_test.go:381: Expected allow after policy change
+--- FAIL: TestIntegration_PolicyHotReload (0.00s)
+=== RUN   TestIntegration_PerformanceBaseline
+    engine_integration_test.go:433: Performance baseline: 1000 iterations in 3.978708ms (avg: 3.978µs per request)
+--- PASS: TestIntegration_PerformanceBaseline (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyFullStack
+--- PASS: TestIntegrationPrincipalPolicyFullStack (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyWithCELConditions_SKIP
+    principal_integration_test.go:87: CEL numeric type handling needs improvement - known limitation
+--- SKIP: TestIntegrationPrincipalPolicyWithCELConditions_SKIP (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyWithDerivedRoles
+--- PASS: TestIntegrationPrincipalPolicyWithDerivedRoles (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyWithMultipleResourceSelectors
+--- PASS: TestIntegrationPrincipalPolicyWithMultipleResourceSelectors (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyWithScopePatterns
+--- PASS: TestIntegrationPrincipalPolicyWithScopePatterns (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyValidationErrors
+--- PASS: TestIntegrationPrincipalPolicyValidationErrors (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyCacheBehavior
+--- PASS: TestIntegrationPrincipalPolicyCacheBehavior (2.00s)
+=== RUN   TestIntegrationPrincipalPolicyConcurrentAccess
+--- PASS: TestIntegrationPrincipalPolicyConcurrentAccess (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyHotReload
+--- PASS: TestIntegrationPrincipalPolicyHotReload (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyWithMetadata
+--- PASS: TestIntegrationPrincipalPolicyWithMetadata (0.00s)
+=== RUN   TestIntegrationPrincipalSpecificOverridesResourcePolicy
+--- PASS: TestIntegrationPrincipalSpecificOverridesResourcePolicy (0.00s)
+=== RUN   TestIntegrationRoleBasedPrincipalOverridesResourcePolicy
+--- PASS: TestIntegrationRoleBasedPrincipalOverridesResourcePolicy (0.00s)
+=== RUN   TestIntegrationMultiplePrincipalPoliciesDenyWins
+--- PASS: TestIntegrationMultiplePrincipalPoliciesDenyWins (0.00s)
+=== RUN   TestIntegrationPrincipalResourceScopePoliciesTogether
+--- PASS: TestIntegrationPrincipalResourceScopePoliciesTogether (0.00s)
+=== RUN   TestIntegrationGlobalFallbackWhenNoPrincipalPolicies
+--- PASS: TestIntegrationGlobalFallbackWhenNoPrincipalPolicies (0.00s)
+=== RUN   TestIntegrationCacheInvalidationOnPolicyChange
+--- PASS: TestIntegrationCacheInvalidationOnPolicyChange (0.00s)
+=== RUN   TestIntegrationEvaluationOrderMetadataCorrectness
+--- PASS: TestIntegrationEvaluationOrderMetadataCorrectness (0.00s)
+=== RUN   TestIntegrationPolicyResolutionTracking
+--- PASS: TestIntegrationPolicyResolutionTracking (0.00s)
+=== RUN   TestIntegrationVIPUserElevatedPermissions
+--- PASS: TestIntegrationVIPUserElevatedPermissions (0.00s)
+=== RUN   TestIntegrationBlockedUserDespiteRolePermissions
+--- PASS: TestIntegrationBlockedUserDespiteRolePermissions (0.00s)
+=== RUN   TestIntegrationGlobalAdminRole
+--- PASS: TestIntegrationGlobalAdminRole (0.00s)
+=== RUN   TestIntegrationScopedAdminRole
+--- PASS: TestIntegrationScopedAdminRole (0.00s)
+=== RUN   TestIntegrationTemporaryAccessGrant_SKIP
+    principal_integration_test.go:1126: CEL numeric type handling needs improvement - known limitation
+--- SKIP: TestIntegrationTemporaryAccessGrant_SKIP (0.00s)
+=== RUN   TestIntegrationMultiTenantIsolationWithScopes
+--- PASS: TestIntegrationMultiTenantIsolationWithScopes (0.00s)
+=== RUN   TestIntegrationServiceToServiceAuth
+--- PASS: TestIntegrationServiceToServiceAuth (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyTimeBasedCEL_SKIP
+    principal_integration_test.go:1294: CEL numeric type handling needs improvement - known limitation
+--- SKIP: TestIntegrationPrincipalPolicyTimeBasedCEL_SKIP (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyResourceAttributeCEL
+--- PASS: TestIntegrationPrincipalPolicyResourceAttributeCEL (0.00s)
+=== RUN   TestIntegrationComplexRoleCombinations
+--- PASS: TestIntegrationComplexRoleCombinations (0.00s)
+=== RUN   TestIntegrationPrincipalPolicyFallbackChain
+--- PASS: TestIntegrationPrincipalPolicyFallbackChain (0.00s)
+=== RUN   TestIntegrationWildcardPatterns
+--- PASS: TestIntegrationWildcardPatterns (0.00s)
+=== RUN   TestAgentService_RegisterAndValidate
+--- PASS: TestAgentService_RegisterAndValidate (0.00s)
+=== RUN   TestAgentService_StatusTransitions
+--- PASS: TestAgentService_StatusTransitions (0.00s)
+=== RUN   TestAgentService_CredentialRotation
+--- PASS: TestAgentService_CredentialRotation (0.00s)
+=== RUN   TestAgent_ToPrincipal_Integration
+--- PASS: TestAgent_ToPrincipal_Integration (0.00s)
+=== RUN   TestAgentService_ExpirationHandling
+--- PASS: TestAgentService_ExpirationHandling (0.15s)
+=== RUN   TestDerivedRolesWithDecisionEngine
+=== RUN   TestDerivedRolesWithDecisionEngine/should_integrate_derived_roles_with_decision_engine
+=== RUN   TestDerivedRolesWithDecisionEngine/should_handle_derived_roles_with_principal_policies
+--- PASS: TestDerivedRolesWithDecisionEngine (0.00s)
+    --- PASS: TestDerivedRolesWithDecisionEngine/should_integrate_derived_roles_with_decision_engine (0.00s)
+    --- PASS: TestDerivedRolesWithDecisionEngine/should_handle_derived_roles_with_principal_policies (0.00s)
+=== RUN   TestDerivedRolesWithResourcePolicies
+=== RUN   TestDerivedRolesWithResourcePolicies/should_use_derived_roles_in_resource_policy_evaluation
+    derived_roles_integration_test.go:214: 
+        	Error Trace:	/Users/tommaduri/Documents/GitHub/authz-engine/go-core/tests/integration/derived_roles_integration_test.go:214
+        	Error:      	Not equal: 
+        	            	expected: "allow"
+        	            	actual  : "deny"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1,2 +1,2 @@
+        	            	-(types.Effect) (len=5) "allow"
+        	            	+(types.Effect) (len=4) "deny"
+        	            	 
+        	Test:       	TestDerivedRolesWithResourcePolicies/should_use_derived_roles_in_resource_policy_evaluation
+=== RUN   TestDerivedRolesWithResourcePolicies/should_handle_multiple_derived_roles_in_single_policy
+--- FAIL: TestDerivedRolesWithResourcePolicies (0.00s)
+    --- FAIL: TestDerivedRolesWithResourcePolicies/should_use_derived_roles_in_resource_policy_evaluation (0.00s)
+    --- PASS: TestDerivedRolesWithResourcePolicies/should_handle_multiple_derived_roles_in_single_policy (0.00s)
+=== RUN   TestCacheEffectiveness
+=== RUN   TestCacheEffectiveness/should_cache_derived_roles_across_multiple_requests
+    derived_roles_integration_test.go:400: Cache stats: hits=99, misses=1, hit rate=99.00%
+--- PASS: TestCacheEffectiveness (0.00s)
+    --- PASS: TestCacheEffectiveness/should_cache_derived_roles_across_multiple_requests (0.00s)
+=== RUN   TestComplexScenarios
+=== RUN   TestComplexScenarios/should_handle_multi-tenant_isolation_with_derived_roles
+--- PASS: TestComplexScenarios (0.00s)
+    --- PASS: TestComplexScenarios/should_handle_multi-tenant_isolation_with_derived_roles (0.00s)
+=== RUN   TestEndToEndScopedEvaluation
+=== RUN   TestEndToEndScopedEvaluation/guest_uses_global_policy
+=== RUN   TestEndToEndScopedEvaluation/acme_member_gets_read-write
+=== RUN   TestEndToEndScopedEvaluation/acme_corp_admin_gets_full_access
+=== RUN   TestEndToEndScopedEvaluation/engineer_in_deep_scope_inherits_from_engineering
+=== RUN   TestEndToEndScopedEvaluation/beta_member_gets_lockdown_deny
+=== RUN   TestEndToEndScopedEvaluation/unknown_scope_falls_back_to_global
+--- PASS: TestEndToEndScopedEvaluation (0.00s)
+    --- PASS: TestEndToEndScopedEvaluation/guest_uses_global_policy (0.00s)
+    --- PASS: TestEndToEndScopedEvaluation/acme_member_gets_read-write (0.00s)
+    --- PASS: TestEndToEndScopedEvaluation/acme_corp_admin_gets_full_access (0.00s)
+    --- PASS: TestEndToEndScopedEvaluation/engineer_in_deep_scope_inherits_from_engineering (0.00s)
+    --- PASS: TestEndToEndScopedEvaluation/beta_member_gets_lockdown_deny (0.00s)
+    --- PASS: TestEndToEndScopedEvaluation/unknown_scope_falls_back_to_global (0.00s)
+=== RUN   TestMultiTenantScenario
+=== RUN   TestMultiTenantScenario/cross-tenant_isolation
+=== RUN   TestMultiTenantScenario/same-tenant_access
+--- PASS: TestMultiTenantScenario (0.00s)
+    --- PASS: TestMultiTenantScenario/cross-tenant_isolation (0.00s)
+    --- PASS: TestMultiTenantScenario/same-tenant_access (0.00s)
+=== RUN   TestScopePerformanceBenchmark
+    scoped_integration_test.go:441: Single-threaded performance:
+    scoped_integration_test.go:442:   Throughput: 229960 checks/sec
+    scoped_integration_test.go:443:   Avg latency: 4.348µs
+--- PASS: TestScopePerformanceBenchmark (0.01s)
+=== RUN   TestConcurrentScopedAccess
+--- PASS: TestConcurrentScopedAccess (0.00s)
+=== RUN   TestScopeResolutionCaching
+    scoped_integration_test.go:620: Cache miss: 11.709µs, Cache hit: 1.125µs (10.4x faster)
+--- PASS: TestScopeResolutionCaching (0.00s)
+=== RUN   TestComplexScopeHierarchy
+=== RUN   TestComplexScopeHierarchy/scope=a,action=read
+=== RUN   TestComplexScopeHierarchy/scope=a.b,action=read
+=== RUN   TestComplexScopeHierarchy/scope=a.b.c,action=read
+    scoped_integration_test.go:704: expected effect allow, got deny
+    scoped_integration_test.go:708: expected matched scope "a", got "a.b.c"
+=== RUN   TestComplexScopeHierarchy/scope=a.b.c,action=write
+=== RUN   TestComplexScopeHierarchy/scope=a.b.c.d,action=write
+=== RUN   TestComplexScopeHierarchy/scope=a.b.c.d.e,action=delete
+=== RUN   TestComplexScopeHierarchy/scope=a.b.c.d.e.f,action=delete
+--- FAIL: TestComplexScopeHierarchy (0.00s)
+    --- PASS: TestComplexScopeHierarchy/scope=a,action=read (0.00s)
+    --- PASS: TestComplexScopeHierarchy/scope=a.b,action=read (0.00s)
+    --- FAIL: TestComplexScopeHierarchy/scope=a.b.c,action=read (0.00s)
+    --- PASS: TestComplexScopeHierarchy/scope=a.b.c,action=write (0.00s)
+    --- PASS: TestComplexScopeHierarchy/scope=a.b.c.d,action=write (0.00s)
+    --- PASS: TestComplexScopeHierarchy/scope=a.b.c.d.e,action=delete (0.00s)
+    --- PASS: TestComplexScopeHierarchy/scope=a.b.c.d.e.f,action=delete (0.00s)
+FAIL
+FAIL	github.com/authz-engine/go-core/tests/integration	2.983s
+FAIL	github.com/authz-engine/go-core/tests/integration/phase5 [build failed]
+=== RUN   TestPrincipalSelectorMatchByID
+=== RUN   TestPrincipalSelectorMatchByID/exact_ID_match
+=== RUN   TestPrincipalSelectorMatchByID/ID_mismatch
+=== RUN   TestPrincipalSelectorMatchByID/match_ignores_roles
+=== RUN   TestPrincipalSelectorMatchByID/match_ignores_scope
+--- PASS: TestPrincipalSelectorMatchByID (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByID/exact_ID_match (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByID/ID_mismatch (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByID/match_ignores_roles (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByID/match_ignores_scope (0.00s)
+=== RUN   TestPrincipalSelectorMatchByRoles
+=== RUN   TestPrincipalSelectorMatchByRoles/has_admin_role
+=== RUN   TestPrincipalSelectorMatchByRoles/has_manager_role
+=== RUN   TestPrincipalSelectorMatchByRoles/has_both_roles
+=== RUN   TestPrincipalSelectorMatchByRoles/has_no_matching_roles
+=== RUN   TestPrincipalSelectorMatchByRoles/no_roles
+--- PASS: TestPrincipalSelectorMatchByRoles (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByRoles/has_admin_role (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByRoles/has_manager_role (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByRoles/has_both_roles (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByRoles/has_no_matching_roles (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByRoles/no_roles (0.00s)
+=== RUN   TestPrincipalSelectorMatchByScope
+=== RUN   TestPrincipalSelectorMatchByScope/exact_scope_match
+=== RUN   TestPrincipalSelectorMatchByScope/scope_mismatch
+=== RUN   TestPrincipalSelectorMatchByScope/empty_principal_scope
+=== RUN   TestPrincipalSelectorMatchByScope/child_scope_no_match
+--- PASS: TestPrincipalSelectorMatchByScope (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByScope/exact_scope_match (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByScope/scope_mismatch (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByScope/empty_principal_scope (0.00s)
+    --- PASS: TestPrincipalSelectorMatchByScope/child_scope_no_match (0.00s)
+=== RUN   TestPrincipalSelectorCombined
+=== RUN   TestPrincipalSelectorCombined/all_criteria_match
+=== RUN   TestPrincipalSelectorCombined/ID_mismatch
+=== RUN   TestPrincipalSelectorCombined/role_mismatch
+=== RUN   TestPrincipalSelectorCombined/scope_mismatch
+=== RUN   TestPrincipalSelectorCombined/all_mismatch
+--- PASS: TestPrincipalSelectorCombined (0.00s)
+    --- PASS: TestPrincipalSelectorCombined/all_criteria_match (0.00s)
+    --- PASS: TestPrincipalSelectorCombined/ID_mismatch (0.00s)
+    --- PASS: TestPrincipalSelectorCombined/role_mismatch (0.00s)
+    --- PASS: TestPrincipalSelectorCombined/scope_mismatch (0.00s)
+    --- PASS: TestPrincipalSelectorCombined/all_mismatch (0.00s)
+=== RUN   TestPrincipalSelectorNoMatch
+=== RUN   TestPrincipalSelectorNoMatch/empty_selector_matches_all
+=== RUN   TestPrincipalSelectorNoMatch/ID_specified_but_principal_ID_different
+=== RUN   TestPrincipalSelectorNoMatch/roles_specified_but_principal_has_none
+--- PASS: TestPrincipalSelectorNoMatch (0.00s)
+    --- PASS: TestPrincipalSelectorNoMatch/empty_selector_matches_all (0.00s)
+    --- PASS: TestPrincipalSelectorNoMatch/ID_specified_but_principal_ID_different (0.00s)
+    --- PASS: TestPrincipalSelectorNoMatch/roles_specified_but_principal_has_none (0.00s)
+=== RUN   TestResourceSelectorExactKindMatch
+=== RUN   TestResourceSelectorExactKindMatch/exact_kind_match
+=== RUN   TestResourceSelectorExactKindMatch/kind_mismatch
+=== RUN   TestResourceSelectorExactKindMatch/case_sensitive
+--- PASS: TestResourceSelectorExactKindMatch (0.00s)
+    --- PASS: TestResourceSelectorExactKindMatch/exact_kind_match (0.00s)
+    --- PASS: TestResourceSelectorExactKindMatch/kind_mismatch (0.00s)
+    --- PASS: TestResourceSelectorExactKindMatch/case_sensitive (0.00s)
+=== RUN   TestResourceSelectorWildcardKind
+=== RUN   TestResourceSelectorWildcardKind/matches_document
+=== RUN   TestResourceSelectorWildcardKind/matches_avatar
+=== RUN   TestResourceSelectorWildcardKind/matches_any_kind
+--- PASS: TestResourceSelectorWildcardKind (0.00s)
+    --- PASS: TestResourceSelectorWildcardKind/matches_document (0.00s)
+    --- PASS: TestResourceSelectorWildcardKind/matches_avatar (0.00s)
+    --- PASS: TestResourceSelectorWildcardKind/matches_any_kind (0.00s)
+=== RUN   TestResourceSelectorExactScopeMatch
+=== RUN   TestResourceSelectorExactScopeMatch/exact_scope_match
+=== RUN   TestResourceSelectorExactScopeMatch/scope_mismatch
+=== RUN   TestResourceSelectorExactScopeMatch/child_scope_no_match
+--- PASS: TestResourceSelectorExactScopeMatch (0.00s)
+    --- PASS: TestResourceSelectorExactScopeMatch/exact_scope_match (0.00s)
+    --- PASS: TestResourceSelectorExactScopeMatch/scope_mismatch (0.00s)
+    --- PASS: TestResourceSelectorExactScopeMatch/child_scope_no_match (0.00s)
+=== RUN   TestResourceSelectorWildcardScope
+=== RUN   TestResourceSelectorWildcardScope/matches_any_scope
+=== RUN   TestResourceSelectorWildcardScope/matches_different_scope
+=== RUN   TestResourceSelectorWildcardScope/matches_empty_scope
+--- PASS: TestResourceSelectorWildcardScope (0.00s)
+    --- PASS: TestResourceSelectorWildcardScope/matches_any_scope (0.00s)
+    --- PASS: TestResourceSelectorWildcardScope/matches_different_scope (0.00s)
+    --- PASS: TestResourceSelectorWildcardScope/matches_empty_scope (0.00s)
+=== RUN   TestResourceSelectorEmptyScope
+=== RUN   TestResourceSelectorEmptyScope/matches_resource_with_scope
+=== RUN   TestResourceSelectorEmptyScope/matches_resource_without_scope
+=== RUN   TestResourceSelectorEmptyScope/matches_any_scope
+--- PASS: TestResourceSelectorEmptyScope (0.00s)
+    --- PASS: TestResourceSelectorEmptyScope/matches_resource_with_scope (0.00s)
+    --- PASS: TestResourceSelectorEmptyScope/matches_resource_without_scope (0.00s)
+    --- PASS: TestResourceSelectorEmptyScope/matches_any_scope (0.00s)
+=== RUN   TestPrincipalIndexAddPrincipalSpecific
+--- PASS: TestPrincipalIndexAddPrincipalSpecific (0.00s)
+=== RUN   TestPrincipalIndexAddRoleBased
+--- PASS: TestPrincipalIndexAddRoleBased (0.00s)
+=== RUN   TestPrincipalIndexAddWildcardKind
+--- PASS: TestPrincipalIndexAddWildcardKind (0.00s)
+=== RUN   TestPrincipalIndexRemoveUpdatesAllIndices
+--- PASS: TestPrincipalIndexRemoveUpdatesAllIndices (0.00s)
+=== RUN   TestPrincipalIndexClearRemovesAll
+--- PASS: TestPrincipalIndexClearRemovesAll (0.00s)
+=== RUN   TestFindByPrincipalIDAndKind
+=== RUN   TestFindByPrincipalIDAndKind/alice_documents
+=== RUN   TestFindByPrincipalIDAndKind/alice_avatars
+=== RUN   TestFindByPrincipalIDAndKind/bob_documents
+=== RUN   TestFindByPrincipalIDAndKind/alice_unknown_kind
+--- PASS: TestFindByPrincipalIDAndKind (0.00s)
+    --- PASS: TestFindByPrincipalIDAndKind/alice_documents (0.00s)
+    --- PASS: TestFindByPrincipalIDAndKind/alice_avatars (0.00s)
+    --- PASS: TestFindByPrincipalIDAndKind/bob_documents (0.00s)
+    --- PASS: TestFindByPrincipalIDAndKind/alice_unknown_kind (0.00s)
+=== RUN   TestFindByPrincipalIncludesWildcard
+--- PASS: TestFindByPrincipalIncludesWildcard (0.00s)
+=== RUN   TestFindByPrincipalNonExistent
+--- PASS: TestFindByPrincipalNonExistent (0.00s)
+=== RUN   TestFindByPrincipalMultiplePolicies
+--- PASS: TestFindByPrincipalMultiplePolicies (0.00s)
+=== RUN   TestFindByPrincipalThreadSafe
+--- PASS: TestFindByPrincipalThreadSafe (0.00s)
+=== RUN   TestFindByRolesSingleRole
+--- PASS: TestFindByRolesSingleRole (0.00s)
+=== RUN   TestFindByRolesMultipleRoles
+--- PASS: TestFindByRolesMultipleRoles (0.00s)
+=== RUN   TestFindByRolesIncludesWildcard
+--- PASS: TestFindByRolesIncludesWildcard (0.00s)
+=== RUN   TestFindByRolesNonExistent
+--- PASS: TestFindByRolesNonExistent (0.00s)
+=== RUN   TestFindByRolesConcurrentAccess
+--- PASS: TestFindByRolesConcurrentAccess (0.00s)
+=== RUN   TestFindPoliciesForScope
+=== RUN   TestFindPoliciesForScope/find_acme_scope
+=== RUN   TestFindPoliciesForScope/find_acme.corp_scope
+=== RUN   TestFindPoliciesForScope/find_acme.corp.engineering_scope
+=== RUN   TestFindPoliciesForScope/find_beta_scope
+=== RUN   TestFindPoliciesForScope/non-existent_scope_returns_nil
+=== RUN   TestFindPoliciesForScope/empty_scope_returns_nil_(global_not_in_scope_index)
+--- PASS: TestFindPoliciesForScope (0.00s)
+    --- PASS: TestFindPoliciesForScope/find_acme_scope (0.00s)
+    --- PASS: TestFindPoliciesForScope/find_acme.corp_scope (0.00s)
+    --- PASS: TestFindPoliciesForScope/find_acme.corp.engineering_scope (0.00s)
+    --- PASS: TestFindPoliciesForScope/find_beta_scope (0.00s)
+    --- PASS: TestFindPoliciesForScope/non-existent_scope_returns_nil (0.00s)
+    --- PASS: TestFindPoliciesForScope/empty_scope_returns_nil_(global_not_in_scope_index) (0.00s)
+=== RUN   TestScopeIndexing
+--- PASS: TestScopeIndexing (0.00s)
+=== RUN   TestGlobalPoliciesNotInScopeIndex
+--- PASS: TestGlobalPoliciesNotInScopeIndex (0.00s)
+=== RUN   TestMultiplePoliciesSameScope
+--- PASS: TestMultiplePoliciesSameScope (0.00s)
+=== RUN   TestScopeIndexByResourceKind
+--- PASS: TestScopeIndexByResourceKind (0.00s)
+=== RUN   TestRemoveScopedPolicy
+--- PASS: TestRemoveScopedPolicy (0.00s)
+=== RUN   TestClearScopeIndex
+--- PASS: TestClearScopeIndex (0.00s)
+=== RUN   TestConcurrentScopeAccess
+--- PASS: TestConcurrentScopeAccess (0.00s)
+=== RUN   TestScopeIndexIsolation
+--- PASS: TestScopeIndexIsolation (0.00s)
+PASS
+ok  	github.com/authz-engine/go-core/tests/policy	(cached)
+FAIL	github.com/authz-engine/go-core/tests/vector [build failed]
+FAIL

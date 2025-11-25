@@ -1,7 +1,7 @@
 # Architecture Decision Records Index
 
 **Last Updated**: 2024-11-25
-**Total ADRs**: 10
+**Total ADRs**: 12
 
 ---
 
@@ -30,6 +30,8 @@
 | [ADR-008](./ADR-008-HYBRID-GO-TYPESCRIPT-ARCHITECTURE.md) | Hybrid Go/TypeScript Architecture | Accepted | [CORE-ARCHITECTURE-SDD](../sdd/CORE-ARCHITECTURE-SDD.md) |
 | [ADR-009](./ADR-009-CEL-LIBRARY-CHOICE.md) | CEL Library Choice (cel-js) | Implemented | [CEL-EVALUATOR-SDD](../sdd/CEL-EVALUATOR-SDD.md) |
 | [ADR-010](./ADR-010-VECTOR-STORE-PRODUCTION-STRATEGY.md) | Vector Store Production Strategy | **Accepted** | [MEMORY-PACKAGE-SDD](../sdd/MEMORY-PACKAGE-SDD.md), [GO-VECTOR-STORE-SDD](../sdd/GO-VECTOR-STORE-SDD.md) |
+| [ADR-011](./ADR-011-MCP-A2A-PROTOCOL-INTEGRATION.md) | MCP/A2A Protocol Integration | Accepted | [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md), [SERVER-PACKAGE-SDD](../sdd/SERVER-PACKAGE-SDD.md) |
+| [ADR-012](./ADR-012-AGENT-IDENTITY-LIFECYCLE.md) | Agent Identity Lifecycle Architecture | Accepted | [TYPES-REFERENCE-SDD](../sdd/TYPES-REFERENCE-SDD.md), [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md) |
 
 ---
 
@@ -83,11 +85,23 @@
 **Note**: Both implementations use CEL standard library. Go implementation validated in Phase 3 (30 integration tests).
 
 ### ADR-010: Vector Store Production Strategy
-**Decision**: Implement vector store in Go with HNSW indexing, inspired by ruvector reference implementation.
+**Decision**: Implement vector store in Go with HNSW indexing using production-proven patterns.
 **Rationale**: TypeScript InMemoryVectorStore has O(n) linear scan (unsuitable for scale). Go implementation aligns with go-core engine performance requirements.
 **Implementation**: [GO-VECTOR-STORE-SDD](../sdd/GO-VECTOR-STORE-SDD.md), [GO-VECTOR-STORE-ARCHITECTURE](../GO-VECTOR-STORE-ARCHITECTURE.md), [GO-VECTOR-STORE-DEVELOPMENT-PLAN](../GO-VECTOR-STORE-DEVELOPMENT-PLAN.md)
-**Status**: Phase 1 (In-Memory HNSW) implementation starting. 4-phase roadmap: 8-10 weeks total.
+**Status**: ✅ **APPROVED** - fogfish/hnsw with in-memory store
+**Approach**: Go-native HNSW using fogfish/hnsw library with production patterns
 **Performance Targets**: <1ms p99 search latency, <800MB per 1M vectors, 95%+ recall accuracy.
+**Timeline**: 3-6 weeks implementation
+
+### ADR-011: MCP/A2A Protocol Integration
+**Decision**: Implement MCP/A2A protocol as P0 in Phase 5 for agent-to-agent authorization.
+**Rationale**: Technical Scope P0 requirement, Avatar Connex needs delegation chains.
+**Implementation**: Agent registration, MCP/A2A endpoints, delegation chain validation (3-4 weeks).
+
+### ADR-012: Agent Identity Lifecycle Architecture
+**Decision**: Implement separate Agent type (distinct from Principal) for lifecycle management.
+**Rationale**: Clean separation of concerns, aligns with Technical Scope, future-proof for MCP/A2A.
+**Implementation**: Agent type with Status/Credentials/Expiration, AgentStore, lifecycle APIs (2-3 weeks).
 
 ---
 
@@ -106,6 +120,9 @@ This table shows how each ADR drives specific implementation work documented in 
 | ADR-007 (Native Agentic) | [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md) | [OBSERVABILITY-SDD](../sdd/OBSERVABILITY-SDD.md) |
 | ADR-008 (Hybrid Architecture) | [CORE-ARCHITECTURE-SDD](../sdd/CORE-ARCHITECTURE-SDD.md) | [SERVER-PACKAGE-SDD](../sdd/SERVER-PACKAGE-SDD.md) |
 | ADR-009 (cel-js) | [CEL-EVALUATOR-SDD](../sdd/CEL-EVALUATOR-SDD.md) | [CORE-PACKAGE-SDD](../sdd/CORE-PACKAGE-SDD.md) |
+| ADR-010 (Vector Store) | [GO-VECTOR-STORE-SDD](../sdd/GO-VECTOR-STORE-SDD.md) | [MEMORY-PACKAGE-SDD](../sdd/MEMORY-PACKAGE-SDD.md) |
+| ADR-011 (MCP/A2A) | [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md) | [SERVER-PACKAGE-SDD](../sdd/SERVER-PACKAGE-SDD.md) |
+| ADR-012 (Agent Lifecycle) | [TYPES-REFERENCE-SDD](../sdd/TYPES-REFERENCE-SDD.md) | [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md) |
 
 ---
 
@@ -175,6 +192,11 @@ Complete list of Software Design Documents implementing these decisions:
 ### Architecture
 - ADR-008: Hybrid Go/TypeScript Architecture
 - ADR-009: CEL Library Choice (cel-js)
+- ADR-010: Vector Store Production Strategy
+
+### Agent Integration
+- ADR-011: MCP/A2A Protocol Integration
+- ADR-012: Agent Identity Lifecycle Architecture
 
 ---
 
@@ -182,14 +204,20 @@ Complete list of Software Design Documents implementing these decisions:
 
 | Level | Description | ADRs |
 |-------|-------------|------|
-| **High** | Fundamental architecture, hard to change | ADR-001, ADR-002, ADR-005, ADR-006, ADR-008 |
-| **Medium** | Significant but reversible with effort | ADR-003, ADR-004, ADR-007, ADR-009 |
+| **High** | Fundamental architecture, hard to change | ADR-001, ADR-002, ADR-005, ADR-006, ADR-008, ADR-010 |
+| **Medium** | Significant but reversible with effort | ADR-003, ADR-004, ADR-007, ADR-009, ADR-011, ADR-012 |
 | **Low** | Easily changed, localized impact | None currently |
 
 ---
 
 ## Related Documents
 
+### Strategic Planning
+- [TECHNOLOGY-DECISION-MATRIX](../TECHNOLOGY-DECISION-MATRIX.md) - **NEW** Critical technology decisions (Phase 5)
+- [TECHNICAL-SCOPE-COMPARISON](../TECHNICAL-SCOPE-COMPARISON.md) - **NEW** External scope vs implementation gap analysis (~5,000 lines)
+- [IMPLEMENTATION-STATUS](../IMPLEMENTATION-STATUS.md) - Current implementation status with Technical Scope alignment
+
+### Core Documentation
 - [SDD Framework](../sdd/SDD-FRAMEWORK.md) - Documentation standards
 - [Documentation Index](../README.md) - All documentation
 - [Feature Coverage Matrix](../CERBOS-FEATURE-COVERAGE-MATRIX.md) - All 271 features
@@ -233,9 +261,11 @@ Use the template:
 
 ## Proposed ADRs (Pending Review)
 
-| ID | Title | Proposed Date | Proposer |
-|----|-------|---------------|----------|
-| - | None pending | - | - |
+| ID | Title | Proposed Date | Proposer | Status |
+|----|-------|---------------|----------|--------|
+| - | None currently | - | - | - |
+
+**Note**: ADR-011 and ADR-012 (MCP/A2A Protocol Integration and Agent Identity Lifecycle) have been **ACCEPTED** and moved to the main ADR list above.
 
 ---
 

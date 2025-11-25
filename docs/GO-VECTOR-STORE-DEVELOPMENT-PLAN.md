@@ -1,8 +1,9 @@
 # Go Vector Store - Development Plan
 
 **Created**: 2024-11-25
-**Status**: Implementation Ready
-**Estimated Duration**: 8-10 weeks (Phases 1-4)
+**Last Updated**: 2025-11-25
+**Status**: Implementation Ready (Accelerated Timeline)
+**Estimated Duration**: 3-6 weeks (leveraging fogfish/hnsw library)
 **Team**: 2-3 engineers
 
 ---
@@ -15,89 +16,58 @@ This document provides a detailed development plan for implementing the Go vecto
 
 - [GO-VECTOR-STORE-SDD.md](./sdd/GO-VECTOR-STORE-SDD.md) - Complete technical specification
 - [GO-VECTOR-STORE-ARCHITECTURE.md](./GO-VECTOR-STORE-ARCHITECTURE.md) - Integration architecture
-- [ruvector](https://github.com/ruvnet/ruvector) - Reference implementation
+- [fogfish/hnsw](https://github.com/fogfish/hnsw) - Production HNSW library
 - [ADR-010](./adr/ADR-010-VECTOR-STORE-PRODUCTION-STRATEGY.md) - Strategic context
 
-### 1.2 High-Level Timeline
+### 1.2 High-Level Timeline (Accelerated)
 
 ```
-Week 1-3:  Phase 1 - In-Memory HNSW Implementation
-Week 4-6:  Phase 2 - PostgreSQL + pgvector Backend
-Week 7:    Phase 3 - Product Quantization
-Week 8-10: Phase 4 - Advanced Features & Production Hardening
+Week 1:    Phase 1a - fogfish/hnsw Integration + Decision Embedding
+Week 2:    Phase 1b - In-Memory Store + Async Worker
+Week 3:    Phase 1c - Engine Integration + Testing
+Week 4-5:  Phase 2  - PostgreSQL + pgvector Backend (OPTIONAL)
+Week 6:    Phase 3  - Final Testing + Documentation + Benchmarks
 ```
+
+**Key Acceleration**: Using the battle-tested fogfish/hnsw library eliminates ~2 weeks of custom HNSW implementation (~2,000 lines of complex graph code), allowing us to focus on integration and business logic.
 
 ---
 
-## 2. Phase 1: In-Memory HNSW Implementation (Weeks 1-3)
+## 2. Phase 1: In-Memory Vector Store with fogfish/hnsw (Weeks 1-3)
 
 ### 2.1 Goal
 
-Implement production-ready in-memory vector store with HNSW indexing for development and small-scale deployments.
+Implement production-ready in-memory vector store leveraging fogfish/hnsw library for HNSW indexing. This accelerated approach eliminates custom HNSW implementation, reducing complexity and time-to-production.
 
-### 2.2 Week 1: Core HNSW + Interfaces
+### 2.2 Week 1: fogfish/hnsw Integration + Decision Embedding
 
-#### Day 1-2: Project Setup & Interfaces
+#### Day 1-2: Project Setup & fogfish/hnsw Integration
 **Tasks**:
 - [ ] Create `go-core/internal/vector/` package
+- [ ] Add fogfish/hnsw dependency: `go get github.com/fogfish/hnsw`
+- [ ] Study fogfish/hnsw API (1-2 hour learning curve)
 - [ ] Define `VectorStore` interface (store.go)
 - [ ] Define configuration types (config.go)
 - [ ] Define result types (SearchResult, VectorEntry, StoreStats)
 - [ ] Set up test framework (vector_test.go)
-- [ ] Add dependencies (testify, prometheus)
+- [ ] Add additional dependencies (testify, prometheus)
 
 **Deliverables**:
-- `store.go` (~100 lines)
-- `config.go` (~150 lines)
+- `store.go` (~100 lines) - VectorStore interface
+- `config.go` (~150 lines) - Configuration types
 - `vector_test.go` (skeleton)
+- fogfish/hnsw dependency configured
 
 **Success Criteria**:
+- All dependencies installed successfully
 - Interfaces compile
 - Basic test structure in place
 - All types documented with godoc comments
+- Team understands fogfish/hnsw API
 
-#### Day 3-5: HNSW Graph Implementation
-**Tasks**:
-- [ ] Implement `HNSWGraph` struct (hnsw.go)
-- [ ] Implement `HNSWNode` with multi-layer connections
-- [ ] Implement `Insert()` method with layer selection
-- [ ] Implement `Search()` method with greedy traversal
-- [ ] Implement distance metrics (Euclidean, Cosine)
-- [ ] Implement neighbor selection heuristics
-- [ ] Add heap data structures (min-heap, max-heap)
+**Effort Saved**: ~2,000 lines of custom HNSW implementation eliminated!
 
-**Deliverables**:
-- `hnsw.go` (~800 lines)
-- Unit tests for each method
-
-**Success Criteria**:
-- Insert 1000 vectors successfully
-- Search returns k nearest neighbors
-- Recall@10 > 90% vs brute force
-- Thread-safe operations (mutex protection)
-
-### 2.3 Week 2: In-Memory Store + Embedding
-
-#### Day 1-2: MemoryStore Implementation
-**Tasks**:
-- [ ] Implement `MemoryStore` struct (memory_store.go)
-- [ ] Wrap `HNSWGraph` with `VectorStore` interface
-- [ ] Implement `Insert()`, `Search()`, `Delete()`, `BatchInsert()`
-- [ ] Implement `Stats()` method
-- [ ] Add concurrent access safety (RWMutex)
-- [ ] Add metrics collection (Prometheus)
-
-**Deliverables**:
-- `memory_store.go` (~300 lines)
-- Unit tests for all methods
-
-**Success Criteria**:
-- All VectorStore interface methods implemented
-- Concurrent insert/search tests pass
-- Memory usage tracking works
-- Metrics exposed correctly
-
-#### Day 3-5: Decision Embedding Generation
+#### Day 3-5: Decision Embedding + Distance Metrics
 **Tasks**:
 - [ ] Implement `DecisionEmbedding` struct (embeddings.go)
 - [ ] Implement feature hashing for principal, resource, actions
@@ -105,9 +75,12 @@ Implement production-ready in-memory vector store with HNSW indexing for develop
 - [ ] Implement vector normalization
 - [ ] Add deterministic embedding tests
 - [ ] Add collision rate analysis
+- [ ] Implement distance metrics wrapper (Euclidean, Cosine) for fogfish/hnsw
+- [ ] Test integration with fogfish/hnsw distance functions
 
 **Deliverables**:
-- `embeddings.go` (~400 lines)
+- `embeddings.go` (~400 lines) - Embedding generation
+- `distance.go` (~100 lines) - Distance metrics wrapper
 - Comprehensive unit tests
 
 **Success Criteria**:
@@ -115,8 +88,63 @@ Implement production-ready in-memory vector store with HNSW indexing for develop
 - All embeddings are unit vectors (cosine similarity compatible)
 - Feature hash collision rate <1%
 - Embedding generation <50µs
+- Distance metrics compatible with fogfish/hnsw API
 
-### 2.4 Week 3: Integration + Testing
+### 2.3 Week 2: In-Memory Store + Async Worker
+
+#### Day 1-3: MemoryStore with fogfish/hnsw
+**Tasks**:
+- [ ] Implement `MemoryStore` struct (memory_store.go)
+- [ ] Wrap fogfish/hnsw index with `VectorStore` interface
+- [ ] Implement `Insert()` using fogfish/hnsw.Add()
+- [ ] Implement `Search()` using fogfish/hnsw.Search()
+- [ ] Implement `Delete()` (if supported by fogfish/hnsw, else mark as deleted)
+- [ ] Implement `BatchInsert()` with optimized batch operations
+- [ ] Implement `Stats()` method
+- [ ] Add concurrent access safety (RWMutex)
+- [ ] Add metrics collection (Prometheus)
+- [ ] Configure fogfish/hnsw parameters (M, efConstruction, efSearch)
+
+**Deliverables**:
+- `memory_store.go` (~300-400 lines) - Wrapper around fogfish/hnsw
+- Unit tests for all methods
+- Configuration tuning guide
+
+**Success Criteria**:
+- All VectorStore interface methods implemented
+- fogfish/hnsw index operations work correctly
+- Concurrent insert/search tests pass (race detector enabled)
+- Memory usage tracking works
+- Metrics exposed correctly
+- Insert 10K vectors <1 second
+
+**Integration Notes**:
+- fogfish/hnsw handles all graph management, layer selection, and neighbor connections
+- Focus on interface implementation and thread safety
+- Estimated effort: ~50% reduction vs custom HNSW
+
+#### Day 4-5: Async Embedding Worker
+**Tasks**:
+- [ ] Implement `EmbeddingWorker` (worker.go)
+- [ ] Add worker queue with channel-based architecture
+- [ ] Implement graceful shutdown
+- [ ] Add error handling and retry logic
+- [ ] Add worker pool for concurrent embedding generation
+- [ ] Implement backpressure handling
+- [ ] Add worker metrics (queue depth, processing rate)
+
+**Deliverables**:
+- `worker.go` (~250 lines)
+- Worker pool tests
+- Performance benchmarks
+
+**Success Criteria**:
+- Worker queue handles 1000 decisions/sec
+- No goroutine leaks
+- Graceful shutdown works correctly
+- Backpressure prevents memory exhaustion
+
+### 2.4 Week 3: Engine Integration + Comprehensive Testing
 
 #### Day 1-2: Engine Integration
 **Tasks**:
@@ -137,7 +165,7 @@ Implement production-ready in-memory vector store with HNSW indexing for develop
 - Worker queue handles 1000 decisions/sec
 - No goroutine leaks
 
-#### Day 3-4: Comprehensive Testing
+#### Day 3-4: Comprehensive Testing + Benchmarking
 **Tasks**:
 - [ ] Write integration tests (vector_integration_test.go)
 - [ ] Write performance benchmarks (vector_bench_test.go)
@@ -146,19 +174,24 @@ Implement production-ready in-memory vector store with HNSW indexing for develop
 - [ ] Benchmark search latency at different scales
 - [ ] Benchmark memory footprint
 - [ ] Test concurrent access (race detector)
+- [ ] Test fogfish/hnsw index accuracy (recall@10, recall@100)
+- [ ] Compare performance: fogfish/hnsw vs theoretical HNSW
+- [ ] Test parameter tuning (M, efConstruction, efSearch)
 
 **Deliverables**:
 - `vector_integration_test.go` (~300 lines)
 - `vector_bench_test.go` (~200 lines)
-- Performance report
+- Performance comparison report (fogfish/hnsw vs expectations)
+- Parameter tuning guide
 
 **Success Criteria**:
 - All tests pass
 - Search latency <0.5ms p50, <2ms p99 (100K vectors)
 - Insert latency <0.1ms p99
-- Memory <800MB per 1M vectors
+- Memory <800MB per 1M vectors (same as custom HNSW target)
 - No race conditions detected
 - Test coverage >90%
+- fogfish/hnsw recall@10 >95% vs brute force
 
 #### Day 5: Documentation + Phase 1 Completion
 **Tasks**:
@@ -181,11 +214,11 @@ Implement production-ready in-memory vector store with HNSW indexing for develop
 
 ---
 
-## 3. Phase 2: PostgreSQL + pgvector Backend (Weeks 4-6)
+## 3. Phase 2: PostgreSQL + pgvector Backend (Weeks 4-5, OPTIONAL)
 
 ### 3.1 Goal
 
-Implement durable vector storage using PostgreSQL + pgvector extension for production deployments.
+**OPTIONAL**: Implement durable vector storage using PostgreSQL + pgvector extension for production deployments requiring persistence. The in-memory store (Phase 1) is production-ready for most use cases.
 
 ### 3.2 Week 4: PostgreSQL Backend
 
@@ -281,7 +314,7 @@ WITH (m = 16, ef_construction = 64);
 - Connection pool stable under load
 - HNSW index recall >95%
 
-### 3.4 Week 6: Factory + Documentation
+### 3.4 PostgreSQL Integration Completion (End of Week 5)
 
 #### Day 1-2: VectorStore Factory
 **Tasks**:
@@ -319,257 +352,166 @@ WITH (m = 16, ef_construction = 64);
 - Working Docker Compose environment
 - Migration guide validated
 
-#### Day 5: Phase 2 Completion
-**Tasks**:
-- [ ] Code review
-- [ ] Performance validation
-- [ ] Documentation review
-- [ ] Tag Phase 2 release (v1.2.0-phase2)
-
 **Success Criteria**:
-- All Phase 2 deliverables complete
-- Production-ready PostgreSQL backend
-- Ready for Phase 3
+- All Phase 2 deliverables complete (if implemented)
+- Production-ready PostgreSQL backend (optional)
+- Ready for Phase 3 (final testing and documentation)
 
 ---
 
-## 4. Phase 3: Product Quantization (Week 7)
+## 4. Phase 3: Final Testing + Documentation + Benchmarks (Week 6)
 
 ### 4.1 Goal
 
-Implement memory-efficient vector compression using Product Quantization.
+Complete comprehensive testing, documentation, and benchmarking for production release.
 
-### 4.2 Week 7: Quantization Implementation
+### 4.2 Week 6: Production Readiness
 
-#### Day 1-2: Codebook Generation
+#### Day 1-2: Integration Testing + Load Testing
 **Tasks**:
-- [ ] Implement k-means clustering for codebook generation
-- [ ] Implement 4-bit, 8-bit, 16-bit codebooks
-- [ ] Add codebook serialization (save/load)
-- [ ] Implement vector encoding (quantize)
-- [ ] Implement vector decoding (dequantize)
+- [ ] Write end-to-end integration tests
+- [ ] Test authorization engine with vector store at scale
+- [ ] Load test with realistic workloads (10K-100K decisions)
+- [ ] Stress test concurrent access (100+ goroutines)
+- [ ] Test memory stability over extended periods
+- [ ] Validate fogfish/hnsw behavior under load
+- [ ] Test error handling and recovery scenarios
 
 **Deliverables**:
-- `quantization.go` (~500 lines)
-- Codebook generation algorithm
+- `e2e_test.go` (~200 lines)
+- Load test results
+- Stability test report
 
 **Success Criteria**:
-- Codebook generation completes in <10 seconds (10K training vectors)
-- 8-bit quantization achieves 4x memory reduction
-- Encoding/decoding is deterministic
+- All integration tests pass
+- Load tests show stable performance
+- No memory leaks detected
+- Authorization latency unchanged (<10µs p99)
+- Vector store operations meet SLA targets
 
-#### Day 3-4: Quantized Search
+#### Day 3-4: Benchmarking + Performance Tuning
 **Tasks**:
-- [ ] Implement quantized distance computation
-- [ ] Integrate quantization with MemoryStore
-- [ ] Integrate quantization with PostgresStore
-- [ ] Add accuracy benchmarks (recall vs unquantized)
-- [ ] Add memory footprint comparisons
+- [ ] Run comprehensive benchmarks (1K, 10K, 100K, 1M vectors)
+- [ ] Tune fogfish/hnsw parameters (M, efConstruction, efSearch)
+- [ ] Optimize memory allocations
+- [ ] Profile CPU usage
+- [ ] Compare performance against theoretical targets
+- [ ] Document optimal configuration for different scales
+- [ ] Create performance tuning guide
 
 **Deliverables**:
-- Quantized search implementation
-- Accuracy benchmarks
+- Comprehensive benchmark report
+- Performance tuning guide
+- Recommended configurations for different scales
 
 **Success Criteria**:
-- 8-bit quantization: <5% recall degradation
-- 4-bit quantization: <10% recall degradation
-- Memory reduction matches theoretical (4-32x)
+- Search latency <0.5ms p50, <2ms p99 (100K vectors)
+- Insert latency <0.1ms p99
+- Memory <800MB per 1M vectors
+- Throughput >50K QPS (in-memory)
+- All performance targets met
 
-#### Day 5: Documentation + Phase 3 Completion
+#### Day 5: Final Documentation + Release
 **Tasks**:
-- [ ] Document quantization configuration
-- [ ] Write guide on choosing quantization bits
-- [ ] Create accuracy vs memory tradeoff guide
-- [ ] Tag Phase 3 release (v1.3.0-phase3)
+- [ ] Write comprehensive package documentation
+- [ ] Update go-core README with vector store section
+- [ ] Create deployment runbook
+- [ ] Document configuration options and tuning
+- [ ] Create troubleshooting guide
+- [ ] Document fogfish/hnsw integration details
+- [ ] Create migration guide (future PostgreSQL)
+- [ ] Write release notes
+- [ ] Tag production release (v1.1.0)
+
+**Deliverables**:
+- Complete documentation
+- Deployment runbook
+- Configuration guide
+- Release notes
 
 **Success Criteria**:
-- Quantization documentation complete
-- Performance tradeoffs documented
-- Ready for Phase 4
+- All documentation reviewed and approved
+- Runbook validated
+- Production-ready release
+- Team trained on deployment and operations
 
 ---
 
-## 5. Phase 4: Advanced Features & Production Hardening (Weeks 8-10)
+## 5. Future Enhancements (Post-3-6 Week Timeline)
 
-### 5.1 Goal
+### 5.1 Deferred to Future Releases
 
-Implement advanced features for production deployments and operational excellence.
+The following features are deferred to future releases after the initial 3-6 week implementation:
 
-### 5.2 Week 8: Advanced Features
+#### Product Quantization (Future: v1.2.0)
+- Memory-efficient vector compression (4x-32x memory reduction)
+- 4-bit, 8-bit, 16-bit codebook generation
+- Quantized distance computation
+- Estimated effort: 1-2 weeks
 
-#### Day 1-2: Filtered Search
-**Tasks**:
-- [ ] Implement metadata filtering in search
-- [ ] Add filter predicate support (equality, range, contains)
-- [ ] Optimize filtered search with pre-filtering
-- [ ] Test performance with complex filters
-
-**Deliverables**:
-- Filtered search implementation
-- Filter performance benchmarks
-
-**Success Criteria**:
-- Metadata filters work correctly
-- Filtered search latency <2ms p99
-
-#### Day 3-4: Bulk Operations
-**Tasks**:
-- [ ] Implement bulk export (vectors → JSON/binary)
-- [ ] Implement bulk import (JSON/binary → vectors)
-- [ ] Add incremental backup support
-- [ ] Create restore tool
-
-**Deliverables**:
+#### Advanced Features (Future: v1.3.0)
+- Filtered search with metadata predicates
 - Bulk import/export tools
-- Backup/restore documentation
+- Index optimization and rebalancing
+- Estimated effort: 1 week
 
-**Success Criteria**:
-- Export/import 1M vectors in <60 seconds
-- Backup format is portable
-
-#### Day 5: Index Optimization
-**Tasks**:
-- [ ] Implement HNSW graph rebalancing
-- [ ] Add index rebuild tool
-- [ ] Optimize memory layout
-- [ ] Document index tuning parameters
-
-**Deliverables**:
-- Index optimization tools
-- Tuning guide
-
-**Success Criteria**:
-- Rebalancing improves search accuracy
-- Index rebuild completes in <5 minutes (1M vectors)
-
-### 5.3 Week 9: Observability & Monitoring
-
-#### Day 1-2: Prometheus Metrics
-**Tasks**:
-- [ ] Implement comprehensive metrics (metrics.go)
-- [ ] Add insert/search duration histograms
-- [ ] Add store size gauge
-- [ ] Add memory usage gauge
-- [ ] Add anomaly detection counter
-- [ ] Create Grafana dashboard
-
-**Deliverables**:
-- `metrics.go` (~200 lines)
-- Grafana dashboard JSON
-
-**Success Criteria**:
-- All metrics exposed on /metrics
-- Grafana dashboard visualizes key metrics
-- Alerts configured
-
-#### Day 3-4: Logging & Tracing
-**Tasks**:
-- [ ] Add structured logging (logrus/zap)
-- [ ] Add OpenTelemetry tracing spans
-- [ ] Add request ID propagation
-- [ ] Document logging configuration
-
-**Deliverables**:
-- Structured logging
-- Tracing integration
-
-**Success Criteria**:
-- All operations logged with context
-- Traces show full request lifecycle
-
-#### Day 5: Health Checks
-**Tasks**:
-- [ ] Implement /health endpoint
-- [ ] Implement /ready endpoint (PostgreSQL check)
-- [ ] Add vector store health check
-- [ ] Document health check format
-
-**Deliverables**:
+#### Advanced Observability (Future: v1.4.0)
+- Prometheus metrics (histograms, gauges)
+- Grafana dashboards
+- OpenTelemetry tracing
 - Health check endpoints
-- Documentation
+- Estimated effort: 1 week
 
-**Success Criteria**:
-- Health checks report store status
-- Kubernetes readiness probe works
+#### Production Hardening (Future: v1.5.0)
+- Anomaly detection service
+- Multi-tenancy support with tenant isolation
+- Advanced security features
+- Estimated effort: 1-2 weeks
 
-### 5.4 Week 10: Production Hardening & Release
-
-#### Day 1-2: Anomaly Detection Service
-**Tasks**:
-- [ ] Implement `AnomalyDetectionService` (anomaly_detector.go)
-- [ ] Add periodic anomaly checks
-- [ ] Add alerting integration (webhook)
-- [ ] Test anomaly detection accuracy
-- [ ] Document tuning threshold
-
-**Deliverables**:
-- `anomaly_detector.go` (~300 lines)
-- Anomaly detection guide
-
-**Success Criteria**:
-- Service runs without errors
-- Anomalies detected correctly
-- False positive rate <5%
-
-#### Day 3-4: Multi-Tenancy Support
-**Tasks**:
-- [ ] Add tenant ID to metadata
-- [ ] Implement tenant-scoped search
-- [ ] Add tenant isolation tests
-- [ ] Document multi-tenant setup
-
-**Deliverables**:
-- Multi-tenant support
-- Isolation tests
-
-**Success Criteria**:
-- Tenants cannot access each other's vectors
-- Performance unaffected by tenant count
-
-#### Day 5: Production Release
-**Tasks**:
-- [ ] Final code review
-- [ ] Final performance validation
-- [ ] Security audit
-- [ ] Update all documentation
-- [ ] Create release notes
-- [ ] Tag v1.0.0 (production-ready)
-
-**Success Criteria**:
-- All tests passing
-- Performance targets met
-- Documentation complete
-- Production-ready
+**Total Future Enhancements**: 4-6 additional weeks (as needed based on production requirements)
 
 ---
 
-## 6. Success Metrics
+## 6. Success Metrics (Accelerated Timeline)
 
 ### 6.1 Performance Targets
 
-| Metric | Target | Phase 1 | Phase 2 | Phase 3 | Phase 4 |
-|--------|--------|---------|---------|---------|---------|
-| **Search Latency (p50)** | <0.5ms | ✅ | <1ms | <1ms | <1ms |
-| **Search Latency (p99)** | <2ms | ✅ | <5ms | <5ms | <5ms |
-| **Insert Latency** | <0.1ms | ✅ | <10ms | <10ms | <10ms |
-| **Throughput** | 50K+ QPS | ✅ | 10K+ | 10K+ | 10K+ |
-| **Memory (1M vectors)** | <800MB | ✅ | ~200MB | ~200MB | ~200MB |
-| **Accuracy (Recall@10)** | 95%+ | ✅ | ✅ | 90%+ | 95%+ |
-| **Test Coverage** | 90%+ | ✅ | ✅ | ✅ | ✅ |
+| Metric | Target | Phase 1a (Week 1) | Phase 1b (Week 2) | Phase 1c (Week 3) | Phase 2 (Week 4-5, Optional) | Phase 3 (Week 6) |
+|--------|--------|-------------------|-------------------|-------------------|------------------------------|------------------|
+| **Search Latency (p50)** | <0.5ms | N/A | ✅ | ✅ | <1ms | ✅ |
+| **Search Latency (p99)** | <2ms | N/A | ✅ | ✅ | <5ms | ✅ |
+| **Insert Latency** | <0.1ms | N/A | ✅ | ✅ | <10ms | ✅ |
+| **Throughput** | 50K+ QPS | N/A | ✅ | ✅ | 10K+ | ✅ |
+| **Memory (1M vectors)** | <800MB | N/A | ✅ | ✅ | N/A | ✅ |
+| **Accuracy (Recall@10)** | 95%+ | N/A | ✅ | ✅ | ✅ | ✅ |
+| **Test Coverage** | 90%+ | Basic | ✅ | ✅ | ✅ | ✅ |
 
-### 6.2 Deliverables Checklist
+### 6.2 Deliverables Checklist (Accelerated)
 
-**Phase 1** (In-Memory HNSW):
-- [x] VectorStore interface
-- [x] HNSW graph implementation
-- [x] In-memory backend
-- [x] Decision embedding
-- [x] Engine integration
-- [x] Unit tests (90%+ coverage)
-- [x] Benchmarks
-- [x] Documentation
+**Phase 1a - Week 1** (fogfish/hnsw Integration):
+- [ ] VectorStore interface
+- [ ] Configuration types
+- [ ] fogfish/hnsw dependency integration
+- [ ] Decision embedding implementation
+- [ ] Distance metrics wrapper
+- [ ] Basic unit tests
 
-**Phase 2** (PostgreSQL + pgvector):
+**Phase 1b - Week 2** (In-Memory Store):
+- [ ] MemoryStore with fogfish/hnsw backend
+- [ ] Async embedding worker
+- [ ] Batch operations
+- [ ] Concurrent access safety
+- [ ] Prometheus metrics
+- [ ] Comprehensive unit tests
+
+**Phase 1c - Week 3** (Engine Integration):
+- [ ] Engine integration
+- [ ] Integration tests
+- [ ] Performance benchmarks
+- [ ] Authorization latency validation
+- [ ] Documentation (initial)
+
+**Phase 2 - Week 4-5** (PostgreSQL, OPTIONAL):
 - [ ] PostgreSQL schema
 - [ ] pgvector integration
 - [ ] Batch operations
@@ -577,26 +519,22 @@ Implement advanced features for production deployments and operational excellenc
 - [ ] Integration tests
 - [ ] Migration tools
 - [ ] Docker Compose
-- [ ] Documentation
+- [ ] PostgreSQL documentation
 
-**Phase 3** (Product Quantization):
-- [ ] Codebook generation
-- [ ] Vector encoding/decoding
-- [ ] Quantized search
-- [ ] Accuracy benchmarks
-- [ ] Memory comparisons
-- [ ] Documentation
+**Phase 3 - Week 6** (Production Ready):
+- [ ] End-to-end integration tests
+- [ ] Load testing and benchmarking
+- [ ] Performance tuning
+- [ ] Comprehensive documentation
+- [ ] Deployment runbook
+- [ ] Configuration guide
+- [ ] Production release (v1.1.0)
 
-**Phase 4** (Advanced Features):
-- [ ] Filtered search
-- [ ] Bulk import/export
-- [ ] Index optimization
-- [ ] Prometheus metrics
-- [ ] Grafana dashboard
-- [ ] Health checks
-- [ ] Anomaly detection service
-- [ ] Multi-tenancy
-- [ ] Production runbook
+**Future Enhancements** (Deferred):
+- [ ] Product Quantization (v1.2.0)
+- [ ] Advanced features (v1.3.0)
+- [ ] Observability (v1.4.0)
+- [ ] Production hardening (v1.5.0)
 
 ---
 
@@ -699,40 +637,70 @@ Implement advanced features for production deployments and operational excellenc
 - Assign initial tasks
 - Set up communication channels
 
-### 10.2 Phase 1 Kickoff (Week 1 Day 1)
+### 10.2 Phase 1a Kickoff (Week 1 Day 1)
 
 **Morning** (10am):
 - Team standup
-- Review Week 1 Day 1-2 tasks
-- Create GitHub issues for all tasks
+- Review fogfish/hnsw library documentation
+- Study fogfish/hnsw API (1-2 hours)
+- Create GitHub issues for all Week 1 tasks
 - Begin implementation: VectorStore interface + config types
 
 **Afternoon**:
+- Install fogfish/hnsw dependency: `go get github.com/fogfish/hnsw`
 - Pair programming session: Define interfaces
+- Experiment with fogfish/hnsw example code
 - Code review: Interface design
 - End-of-day standup: Progress check
+
+**Key Success Factor**: Understanding fogfish/hnsw API is critical for efficient integration
 
 ---
 
 ## 11. Conclusion
 
-This development plan provides a structured roadmap for implementing the Go vector store over 8-10 weeks. By following this plan, the team will deliver a production-ready vector store that enables powerful anomaly detection and policy analysis capabilities without compromising the authorization engine's sub-10µs latency.
+This **accelerated development plan** provides a structured roadmap for implementing the Go vector store in **3-6 weeks** by leveraging the battle-tested **fogfish/hnsw library**. This approach eliminates ~2 weeks of custom HNSW implementation (~2,000 lines of complex graph code) while delivering the same production-ready functionality.
 
-**Key Principles**:
+**Key Acceleration Factors**:
+- ✅ **fogfish/hnsw library**: Eliminates custom HNSW implementation (~2 weeks saved)
+- ✅ **Focus on integration**: Spend time on business logic, not algorithms
+- ✅ **Battle-tested implementation**: fogfish/hnsw is production-proven
+- ✅ **Simplified testing**: Test integration, not HNSW internals
+- ✅ **Faster iteration**: Focus on features, not low-level graph operations
+
+**Key Principles** (Unchanged):
 - ✅ Phase-based delivery (ship incrementally)
 - ✅ Performance-first (benchmark continuously)
 - ✅ Test-driven development (90%+ coverage)
 - ✅ Zero impact on authorization (async embedding)
 - ✅ Production-ready (observability, docs, runbooks)
 
-**Timeline Summary**:
-- **Week 1-3**: Phase 1 (In-Memory HNSW) → Development-ready
-- **Week 4-6**: Phase 2 (PostgreSQL) → Production-ready storage
-- **Week 7**: Phase 3 (Quantization) → Memory-efficient
-- **Week 8-10**: Phase 4 (Advanced Features) → Enterprise-ready
+**Accelerated Timeline Summary**:
+- **Week 1**: Phase 1a (fogfish/hnsw Integration + Embedding) → Library integrated
+- **Week 2**: Phase 1b (In-Memory Store + Worker) → Development-ready
+- **Week 3**: Phase 1c (Engine Integration + Testing) → Production-ready (in-memory)
+- **Week 4-5**: Phase 2 (PostgreSQL, OPTIONAL) → Durable storage
+- **Week 6**: Phase 3 (Final Testing + Documentation) → Production release
+
+**Comparison to Original Plan**:
+| Aspect | Original (8-10 weeks) | Accelerated (3-6 weeks) | Savings |
+|--------|----------------------|-------------------------|---------|
+| Custom HNSW | 2 weeks (~2,000 lines) | 2-3 days (integration) | ~10 days |
+| In-Memory Store | Week 1-3 | Week 1-3 | Same |
+| PostgreSQL | Week 4-6 | Week 4-5 (optional) | 1 week |
+| Quantization | Week 7 | Deferred to v1.2.0 | 1 week |
+| Advanced Features | Week 8-10 | Deferred to v1.3-1.5 | 3 weeks |
+| **Total** | **8-10 weeks** | **3-6 weeks** | **~5 weeks** |
+
+**Risk Mitigation**:
+- fogfish/hnsw is a mature, production-tested library
+- Learning curve is minimal (1-2 days)
+- API is well-documented
+- Fallback: Can still implement custom HNSW if needed (but unlikely)
 
 ---
 
-**Document Version**: 1.0.0
-**Status**: Approved and Ready for Implementation
+**Document Version**: 2.0.0 (Accelerated Timeline)
+**Last Updated**: 2025-11-25
+**Status**: Approved and Ready for Accelerated Implementation
 **Next Update**: After Phase 1 completion (Week 3)

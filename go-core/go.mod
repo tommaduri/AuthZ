@@ -16,9 +16,16 @@ require (
 
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
+	github.com/bits-and-blooms/bitset v1.13.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/chewxy/math32 v1.10.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/fogfish/faults v0.2.0 // indirect
+	github.com/fogfish/golem/pure v0.10.1 // indirect
+	github.com/fogfish/hnsw v0.0.5 // indirect
+	github.com/kelindar/binary v1.0.19 // indirect
+	github.com/kshard/vector v0.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
@@ -28,3 +35,5 @@ require (
 	golang.org/x/text v0.31.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
 )
+
+replace github.com/tommaduri/authz-engine/go-core => ./

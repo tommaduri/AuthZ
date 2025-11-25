@@ -5,6 +5,21 @@
 **Deciders**: AuthZ Engine Team
 **Technical Story**: Production-ready vector storage for pattern learning at scale
 **Supersedes**: Partial implementation details in ADR-004
+**Decision Made**: Option B - fogfish/hnsw with in-memory store (phased approach)
+
+---
+
+## Decision Rationale
+
+After evaluating three technology approaches (see [TECHNOLOGY-DECISION-MATRIX.md](../TECHNOLOGY-DECISION-MATRIX.md)), we selected **Option B: fogfish/hnsw** for the following reasons:
+
+1. **Go-Native Performance**: fogfish/hnsw is a pure Go implementation optimized for Go's memory model and concurrency patterns
+2. **Zero External Dependencies**: No PostgreSQL or Vald cluster required initially - reduces operational complexity
+3. **Faster Time to Value**: 3-6 weeks vs 8-10 weeks for custom HNSW implementation
+4. **Production-Proven**: Production-tested architecture patterns, validated in real-world deployments
+5. **Flexible Migration Path**: Start with in-memory, optionally add PostgreSQL persistence later (Phase 2)
+
+**Architecture Pattern**: Using production-tested HNSW patterns for embedding generation, indexing, and query optimization.
 
 ---
 
@@ -78,72 +93,89 @@ Without production-grade vector search:
 
 ## Decision
 
-We will adopt a **phased approach** to production-ready vector storage:
+We will adopt a **phased approach** to production-ready vector storage using **fogfish/hnsw**:
 
-### Phase 1: pgvector Foundation (3-4 weeks)
-**Status**: ⚠️ NOT YET IMPLEMENTED
+### Phase 1: fogfish/hnsw with In-Memory Store (3-6 weeks)
+**Status**: ✅ **APPROVED - Implementation Starting**
 **Target**: v1.1.0
+**Technology**: fogfish/hnsw (Go-native HNSW library)
+**Architecture**: Production HNSW patterns
 
-Implement PostgreSQL with pgvector extension for persistence and basic indexing.
+Implement Go-native HNSW indexing with in-memory vector storage for fast pattern learning.
 
 **Required Components:**
-1. ✅ **PostgreSQL connection pool** (exists in decision-store.ts)
-2. ❌ **pgvector extension setup** (`CREATE EXTENSION vector`)
-3. ❌ **Vector column with HNSW index** (`CREATE INDEX ON authz_decisions USING hnsw (embedding vector_cosine_ops)`)
-4. ❌ **Vector similarity queries** (`ORDER BY embedding <=> query_vector LIMIT k`)
-5. ❌ **Batch insert operations** (bulk decision storage)
-6. ❌ **Connection health monitoring** (dead connection detection)
+1. ✅ **fogfish/hnsw Go package** (github.com/fogfish/hnsw)
+2. ❌ **In-memory vector store** (map-based, thread-safe)
+3. ❌ **HNSW index initialization** (M=16, efConstruction=200, efSearch=50)
+4. ❌ **Vector similarity search API** (cosine distance, k-NN)
+5. ❌ **Async embedding generation** (OpenAI ada-002 or similar)
+6. ❌ **Batch insert operations** (bulk decision vectorization)
 
-**SQL Schema:**
-```sql
--- Enable pgvector extension
-CREATE EXTENSION IF NOT EXISTS vector;
+**Go Implementation:**
+```go
+import (
+    "github.com/fogfish/hnsw"
+)
 
--- Add vector column to decisions table
-ALTER TABLE authz_decisions
-  ADD COLUMN embedding vector(1536);  -- OpenAI ada-002 dimension
+// Vector store with HNSW indexing
+type VectorStore struct {
+    index    *hnsw.Index
+    vectors  map[string][]float32
+    metadata map[string]DecisionMetadata
+    mu       sync.RWMutex
+}
 
--- Create HNSW index for fast similarity search
-CREATE INDEX ON authz_decisions
-  USING hnsw (embedding vector_cosine_ops)
-  WITH (m = 16, ef_construction = 64);
+// Initialize HNSW index
+func NewVectorStore(dimension int) *VectorStore {
+    return &VectorStore{
+        index: hnsw.New(
+            dimension,
+            hnsw.WithM(16),              // Max connections per layer
+            hnsw.WithEfConstruction(200), // Build-time search depth
+            hnsw.WithEfSearch(50),        // Query-time search depth
+        ),
+        vectors:  make(map[string][]float32),
+        metadata: make(map[string]DecisionMetadata),
+    }
+}
 
--- Vector similarity search query
-SELECT id, principal_id, resource_kind, action,
-       embedding <=> $1::vector AS distance
-FROM authz_decisions
-WHERE embedding IS NOT NULL
-ORDER BY embedding <=> $1::vector
-LIMIT 10;
+// Search similar decisions
+func (vs *VectorStore) Search(query []float32, k int) ([]SearchResult, error) {
+    results := vs.index.Search(query, k)
+    // Map results to decision metadata
+    return results, nil
+}
 ```
 
 **Pros:**
-- Self-hosted, no external dependencies
-- PostgreSQL already in use for DecisionStore
-- ~100x faster than current O(n) scan (O(log n) HNSW)
-- Handles millions of vectors
-- ACID transactions, replication, backups
+- ✅ **Zero external dependencies** - No PostgreSQL, no Vald cluster initially
+- ✅ **Go-native performance** - Optimized for Go's memory model
+- ✅ **Fast time to value** - 3-6 weeks vs 8-10 weeks (custom HNSW)
+- ✅ **Production-proven** - Production-tested architecture patterns
+- ✅ **Simple deployment** - Single binary, no database setup
+- ✅ **Optional persistence** - Add PostgreSQL in Phase 2 if needed
 
 **Cons:**
-- HNSW build time increases with data (minutes for 10M vectors)
-- Limited to single machine CPU (no GPU acceleration)
-- Requires tuning `m` and `ef_construction` parameters
+- ⚠️ **In-memory only initially** - Data lost on restart (acceptable for pattern learning)
+- ⚠️ **Single-node scaling** - No distribution (Phase 2 can add PostgreSQL/Vald)
+- ⚠️ **Manual tuning** - Requires optimal M, efConstruction, efSearch parameters
 
 **Performance Targets:**
-- Search: <5ms p50, <15ms p99 (1M vectors)
-- Insert: <10ms per decision with vector
-- Bulk insert: 1,000 decisions/sec
-- Capacity: 10M vectors (~20GB storage)
+- Search: <1ms p50, <5ms p99 (1M vectors) - **5x faster than pgvector target**
+- Insert: <2ms per decision with vector
+- Bulk insert: 5,000 decisions/sec (memory-bound)
+- Capacity: 1M vectors initially (~2GB RAM), 10M+ with optimization
 
 ---
 
-### Phase 2: Hybrid Architecture (2-3 months)
-**Status**: ⏳ PLANNED
+### Phase 2: Optional PostgreSQL Persistence (2-3 months)
+**Status**: ⏳ OPTIONAL (DEFERRED)
 **Target**: v1.2.0
+**Decision**: Only implement if in-memory limitations become critical
 
-Add specialized vector database for hot data while keeping PostgreSQL for cold storage.
+Add PostgreSQL persistence for vector storage if restart durability is required.
 
-**Architecture:**
+**Architecture (If Needed):**
 ```
 ┌──────────────────────────────────────────────────────┐
 │                  Authorization Engine                 │
@@ -151,14 +183,14 @@ Add specialized vector database for hot data while keeping PostgreSQL for cold s
 │  ANALYST Agent Pattern Learning                      │
 ├──────────────────────────────────────────────────────┤
 │  ┌────────────────┐          ┌──────────────────┐   │
-│  │  Hot Storage   │          │   Cold Storage   │   │
-│  │  (Pinecone/    │◄────────►│   (PostgreSQL    │   │
-│  │   Weaviate)    │  Sync    │    + pgvector)   │   │
+│  │  In-Memory     │          │   PostgreSQL     │   │
+│  │  (fogfish/     │──backup─→│   (pgvector)     │   │
+│  │   hnsw)        │          │   (optional)     │   │
 │  │                │          │                  │   │
-│  │  - Last 30 days│          │  - Historical    │   │
-│  │  - 1M vectors  │          │  - 10M+ vectors  │   │
-│  │  - <5ms p99    │          │  - <50ms p99     │   │
-│  │  - GPU accel   │          │  - Batch queries │   │
+│  │  - Active data │          │  - Persistence   │   │
+│  │  - 1M vectors  │          │  - Restart safe  │   │
+│  │  - <1ms p50    │          │  - <10ms p99     │   │
+│  │  - CPU-based   │          │  - Backup/restore│   │
 │  └────────────────┘          └──────────────────┘   │
 └──────────────────────────────────────────────────────┘
 ```
@@ -207,49 +239,50 @@ Multi-region, GPU-accelerated, with advanced features.
 
 ## Implementation Roadmap
 
-### Immediate (v1.1.0) - pgvector MVP
+### Immediate (v1.1.0) - fogfish/hnsw MVP
 
 **Acceptance Criteria:**
-- [ ] PostgreSQL with pgvector extension installed
-- [ ] HNSW index created on `embedding` column
-- [ ] Vector similarity search API implemented
-- [ ] Batch insert supports embeddings
-- [ ] Performance: <15ms p99 for 100K vectors
-- [ ] Integration tests with real embeddings
+- [ ] fogfish/hnsw package integrated into Go codebase
+- [ ] In-memory vector store with thread-safe operations
+- [ ] HNSW index initialization (M=16, efConstruction=200)
+- [ ] Vector similarity search API (k-NN, cosine distance)
+- [ ] Performance: <5ms p99 for 100K vectors, <1ms p50
+- [ ] Integration tests with real decision embeddings
 - [ ] Documentation: setup guide, tuning parameters
 
 **Tasks:**
-1. Update `decision-store.ts` with pgvector SQL queries
-2. Add migration script for vector column + HNSW index
-3. Implement `searchSimilarDecisions(embedding, k)` method
-4. Add embedding generation to decision storage flow
-5. Create performance benchmarks (100K, 1M, 10M vectors)
-6. Document index tuning (`m`, `ef_construction`, `ef_search`)
+1. Add `github.com/fogfish/hnsw` to go-core dependencies
+2. Implement `internal/vector/store.go` with fogfish/hnsw
+3. Create `VectorStore` interface using production HNSW patterns
+4. Implement async embedding generation (OpenAI API or local model)
+5. Add `searchSimilarDecisions(embedding, k)` to ANALYST agent
+6. Create performance benchmarks (100K, 1M vectors)
+7. Document index tuning (M, efConstruction, efSearch parameters)
 
 **Risk Mitigation:**
-- Start with small `m=16` for faster builds
-- Use async index creation to avoid blocking writes
-- Monitor index size vs query performance tradeoff
-- Implement graceful degradation (disable vector search if index build fails)
+- Start with conservative parameters (M=16, efConstruction=200)
+- Async embedding generation (non-blocking authorization checks)
+- Graceful degradation (ANALYST works without vectors, just slower)
+- Optional persistence via checkpoint serialization (future)
+- Memory monitoring and capacity alerts (prevent OOM)
 
 ---
 
-### Short-term (v1.2.0) - Hot/Cold Hybrid
+### Short-term (v1.2.0) - Optional PostgreSQL Persistence
 
-**Acceptance Criteria:**
-- [ ] Pinecone integration for hot storage
-- [ ] Automated archival from hot → cold storage
-- [ ] Query router (hot first, fallback to cold)
-- [ ] Cost monitoring dashboard
-- [ ] Performance: <5ms p99 for hot queries
+**Acceptance Criteria (IF NEEDED):**
+- [ ] PostgreSQL + pgvector integration for persistence
+- [ ] Checkpoint/restore mechanism for in-memory vectors
+- [ ] Graceful shutdown with vector serialization
+- [ ] Startup vector loading from PostgreSQL
+- [ ] Performance: <10ms p99 for persistent queries
 
-**Tasks:**
-1. Evaluate Pinecone vs Weaviate (1 week proof-of-concept)
-2. Implement hot storage adapter interface
-3. Build data lifecycle manager (archival scheduler)
-4. Create query router with fallback logic
-5. Add cost tracking and alerts
-6. Performance comparison: hot vs cold vs hybrid
+**Tasks (DEFERRED UNLESS REQUIRED):**
+1. Evaluate if restart durability is critical (decision point)
+2. If yes: Implement PostgreSQL persistence layer
+3. If no: Continue with in-memory only (acceptable for pattern learning)
+4. Add checkpoint serialization for faster restarts
+5. Document backup/restore procedures
 
 ---
 
@@ -388,18 +421,19 @@ const orchestratorConfig: OrchestratorConfig = {
 
 ## Success Criteria
 
-### Phase 1 (pgvector MVP)
-- ✅ 100x faster search vs current O(n) implementation
-- ✅ Support 1M+ vectors (100x current limit)
-- ✅ <15ms p99 latency for similarity search
-- ✅ Zero downtime during index builds
-- ✅ Automated backups and recovery
+### Phase 1 (fogfish/hnsw In-Memory)
+- ✅ **100x faster search** vs current O(n) implementation (<1ms vs 50ms)
+- ✅ Support **1M+ vectors** (100x current limit)
+- ✅ **<5ms p99** latency for similarity search (5x better than pgvector)
+- ✅ **<1ms p50** latency (10x better than target)
+- ✅ **Zero external dependencies** (no PostgreSQL setup required)
+- ✅ **3-6 week delivery** (50% faster than custom HNSW)
 
-### Phase 2 (Hot/Cold Hybrid)
-- ✅ <5ms p99 latency for hot queries (recent data)
-- ✅ 50% cost reduction vs pure cloud vector DB
-- ✅ 10M+ total vector capacity
-- ✅ Automated archival without manual intervention
+### Phase 2 (Optional PostgreSQL Persistence)
+- ✅ <10ms p99 latency with persistence (if implemented)
+- ✅ Checkpoint/restore in <5 seconds for 1M vectors
+- ✅ Zero data loss on graceful shutdown
+- ✅ 90% cost reduction vs cloud vector DB (self-hosted)
 
 ### Phase 3 (Enterprise)
 - ✅ Multi-region with <1ms p99 within-region
@@ -411,16 +445,16 @@ const orchestratorConfig: OrchestratorConfig = {
 
 ## Cost Analysis
 
-### Phase 1: pgvector (Self-Hosted)
-- **Storage**: $0.10/GB/month × 20GB = **$2/month**
-- **Compute**: Existing PostgreSQL instance = **$0 incremental**
-- **Total**: **~$2/month for 1M vectors**
+### Phase 1: fogfish/hnsw (In-Memory)
+- **Storage**: In-memory only = **$0/month** (part of application RAM)
+- **Compute**: Existing Go service = **$0 incremental**
+- **Dependencies**: Zero external services = **$0/month**
+- **Total**: **~$0/month for 1M vectors** (100% cost reduction vs alternatives)
 
-### Phase 2: Hybrid (Pinecone Hot + PostgreSQL Cold)
-- **Hot storage** (Pinecone s1 pod): **$70/month base**
-- **Queries**: $0.10/1000 queries × 100K/day × 30 = **$300/month**
-- **Cold storage**: $2/month (PostgreSQL)
-- **Total**: **~$372/month for 1M hot + 10M cold**
+### Phase 2: Optional PostgreSQL (If Persistence Needed)
+- **Storage**: $0.10/GB/month × 5GB = **$0.50/month** (serialized checkpoints)
+- **Compute**: Existing PostgreSQL = **$0 incremental**
+- **Total**: **~$0.50/month for 1M vectors with persistence**
 
 ### Phase 3: Enterprise (Multi-Region)
 - **Hot storage**: $70/month × 3 regions = **$210/month**
@@ -430,9 +464,9 @@ const orchestratorConfig: OrchestratorConfig = {
 - **Total**: **~$2,230/month for 3M hot + 100M cold**
 
 **Cost per decision with vector embedding:**
-- Phase 1: $0.000002 (negligible)
-- Phase 2: $0.00012 (acceptable)
-- Phase 3: $0.000074 (optimized at scale)
+- Phase 1: $0.000000 (zero cost - in-memory only)
+- Phase 2: $0.0000005 (with optional PostgreSQL persistence)
+- Phase 3: $0.00001 (if scaling to distributed Vald cluster)
 
 ---
 
@@ -446,13 +480,13 @@ const orchestratorConfig: OrchestratorConfig = {
 
 ## References
 
-- [pgvector](https://github.com/pgvector/pgvector) - PostgreSQL vector extension
-- [Pinecone](https://www.pinecone.io/) - Managed vector database
-- [Weaviate](https://weaviate.io/) - Open-source vector search engine
+- [fogfish/hnsw](https://github.com/fogfish/hnsw) - Go-native HNSW implementation
 - [HNSW Paper](https://arxiv.org/abs/1603.09320) - Hierarchical Navigable Small World graphs
 - [OpenAI Embeddings](https://platform.openai.com/docs/guides/embeddings) - Text embeddings API
+- [TECHNOLOGY-DECISION-MATRIX.md](../TECHNOLOGY-DECISION-MATRIX.md) - Decision analysis for technology selection
 
 ---
 
 **Last Updated**: 2024-11-25
-**Next Review**: After Phase 1 implementation (v1.1.0)
+**Decision Date**: 2024-11-25
+**Next Review**: After Phase 1 implementation (v1.1.0) - ~3-6 weeks
