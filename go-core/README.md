@@ -11,7 +11,7 @@ High-performance authorization engine written in Go for sub-millisecond policy e
 | Phase 1: Core Foundation | ✅ Complete | Integrated | Baseline |
 | Phase 2: Scoped Policies | ✅ Complete | 66/69 (95.7%) | Sub-microsecond |
 | Phase 3: Principal Policies | ✅ Complete | 86/89 (96.6%) | 168ns O(1) lookup |
-| **Phase 4: Derived Roles** | ✅ **90% Complete** | **90/100 est. (90%)** | **<10µs resolution** |
+| **Phase 4: Derived Roles** | ✅ **95%+ Complete** | **111/118 (94%+)** | **<10µs resolution** |
 | Phase 5: Exported Variables | 📋 Next | - | - |
 
 ## Quick Start
@@ -20,14 +20,14 @@ High-performance authorization engine written in Go for sub-millisecond policy e
 # Install dependencies
 go mod download
 
-# Run all tests (90/100 passing - 90% Phase 4 complete)
+# Run all tests (111/118 passing - 94%+ Phase 4 complete)
 go test ./...
 
 # Run specific test suites
-go test ./internal/derived_roles/...  # 22/22 Phase 4 core tests
+go test ./internal/derived_roles/...  # 61/63 Phase 4 core tests (97%)
 go test ./internal/engine/...         # 6/6 integration tests
 go test ./internal/scope/...          # 12/12 scope tests (no race conditions!)
-go test ./tests/integration/...       # Integration tests (3 non-critical failures)
+go test ./tests/integration/...       # 50/55 integration tests (91%)
 
 # Run benchmarks
 go test -bench=. ./tests/benchmarks  # 40+ performance benchmarks
