@@ -16,7 +16,7 @@ import (
 
 // HNSWAdapter wraps fogfish/hnsw index with our VectorStore interface
 type HNSWAdapter struct {
-	index     *hnsw.HNSW[[]float32]
+	index     *hnsw.HNSW[hnswvector.F32]
 	backend   *backends.MemoryBackend
 	dimension int
 	efSearch  int
@@ -43,29 +43,11 @@ func NewHNSWAdapter(dimension int, cfg vector.HNSWConfig) (*HNSWAdapter, error) 
 	}
 
 	// Create cosine distance surface for float32 vectors
-	cosineFunc := hnswvector.Cosine()
-	surface := hnswvector.Surface[[]float32]{
-		Distance: func(a, b []float32) float32 {
-			// Extract F32 slices and use cosine distance
-			f32a := hnswvector.F32(a)
-			f32b := hnswvector.F32(b)
-			return cosineFunc.Distance(f32a, f32b)
-		},
-		Equal: func(a, b []float32) bool {
-			if len(a) != len(b) {
-				return false
-			}
-			for i := range a {
-				if a[i] != b[i] {
-					return false
-				}
-			}
-			return true
-		},
-	}
+	// Note: hnswvector.F32 is just an alias for []float32, so we can use Cosine() directly
+	surface := hnswvector.Cosine()
 
 	// Create index with configuration
-	index := hnsw.New[[]float32](
+	index := hnsw.New[hnswvector.F32](
 		surface,
 		hnsw.WithM(cfg.M),
 		hnsw.WithM0(cfg.M*2),
