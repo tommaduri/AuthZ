@@ -290,14 +290,9 @@ func SerializePolicyToText(pol *types.Policy) string {
 		parts = append(parts, fmt.Sprintf("Policy: %s", pol.Name))
 	}
 
-	// Description
-	if pol.Description != "" {
-		parts = append(parts, fmt.Sprintf("Description: %s", pol.Description))
-	}
-
-	// Resource kind
-	if pol.Resource != "" {
-		parts = append(parts, fmt.Sprintf("Resource: %s", pol.Resource))
+	// Resource kind (using ResourceKind field name)
+	if pol.ResourceKind != "" {
+		parts = append(parts, fmt.Sprintf("Resource: %s", pol.ResourceKind))
 	}
 
 	// Scope
