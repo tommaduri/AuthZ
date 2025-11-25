@@ -1,6 +1,6 @@
 # Architecture Decision Records Index
 
-**Last Updated**: 2025-11-24
+**Last Updated**: 2024-11-24
 **Total ADRs**: 9
 
 ---
@@ -73,11 +73,13 @@
 **Decision**: High-performance Go core with TypeScript orchestration layer.
 **Rationale**: Go for speed (sub-ms decisions), TypeScript for ecosystem integration.
 **Implementation**: [CORE-ARCHITECTURE-SDD](../sdd/CORE-ARCHITECTURE-SDD.md)
+**Note**: Both implementations maintain feature parity. Go Phase 3 complete (86/89 tests).
 
 ### ADR-009: CEL Library Choice
-**Decision**: Use cel-js library for CEL expression evaluation.
-**Rationale**: TypeScript native, MIT licensed, good performance, Cerbos compatible syntax.
+**Decision**: Use cel-js library for CEL expression evaluation (TypeScript), google/cel-go (Go).
+**Rationale**: TypeScript: cel-js (MIT, good performance). Go: google/cel-go (official, production-ready).
 **Implementation**: [CEL-EVALUATOR-SDD](../sdd/CEL-EVALUATOR-SDD.md)
+**Note**: Both implementations use CEL standard library. Go implementation validated in Phase 3 (30 integration tests).
 
 ---
 

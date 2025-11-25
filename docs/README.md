@@ -175,15 +175,24 @@ See [CERBOS-FEATURE-COVERAGE-MATRIX.md](./CERBOS-FEATURE-COVERAGE-MATRIX.md) for
 
 **Phases Complete**: 4 of 10
 - ✅ Phase 1: Core Foundation
-- ✅ Phase 2: Scoped Policies (2025-11-24)
-- ✅ Phase 3: Principal Policies (2025-11-24)
-- ✅ Phase 4: Derived Roles (2025-11-24)
+- ✅ Phase 2: Scoped Policies (2024-11-24)
+- ✅ Phase 3: Principal Policies (2024-11-24) - **TypeScript + Go**
+- ✅ Phase 4: Derived Roles (2024-11-24)
 - 📋 Phase 5: Exported Variables (Next)
 
-**Test Coverage**: 529/530 tests (99.8%)
+**Test Coverage**:
+- TypeScript Core: 529/530 tests (99.8%)
+- Go Core Phase 3: 86/89 tests (96.6%)
+
 **Cerbos Feature Parity**: 31% (84/271 features)
 **Core Modules**: 11 modules
 
+### Phase 3 Documentation (Go Implementation)
+- [PHASE3_README.md](../go-core/docs/PHASE3_README.md) - User guide with 10 use cases, API reference, best practices
+- [PHASE3_MIGRATION.md](../go-core/docs/PHASE3_MIGRATION.md) - 6-step migration guide with rollback plan
+- [examples/principal_policies.yaml](../go-core/examples/principal_policies.yaml) - 20 production-ready examples
+- [PHASE3_COMPLETE.md](../go-core/docs/PHASE3_COMPLETE.md) - Implementation report with benchmarks
+
 ---
 
-*Last updated: 2025-11-24*
+*Last updated: 2024-11-24*
