@@ -43,6 +43,22 @@ type Store interface {
 
 	// Reload reloads all policies
 	Reload() error
+
+	// Phase 4: Derived roles methods
+	// GetDerivedRoles returns all derived role definitions
+	GetDerivedRoles() []*types.DerivedRole
+
+	// GetDerivedRole retrieves a specific derived role by name
+	GetDerivedRole(name string) (*types.DerivedRole, error)
+
+	// AddDerivedRole adds a derived role definition
+	AddDerivedRole(derivedRole *types.DerivedRole) error
+
+	// RemoveDerivedRole removes a derived role by name
+	RemoveDerivedRole(name string) error
+
+	// ClearDerivedRoles removes all derived role definitions
+	ClearDerivedRoles()
 }
 
 // PolicyEvent represents a policy change event

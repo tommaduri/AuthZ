@@ -7,7 +7,7 @@ import (
 
 	"github.com/authz-engine/go-core/pkg/types"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
+	_ "gopkg.in/yaml.v3" // Import for side effects
 )
 
 func TestLoader_LoadFromFile(t *testing.T) {

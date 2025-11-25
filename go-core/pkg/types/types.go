@@ -127,6 +127,7 @@ type ResponseMetadata struct {
 	CacheHit             bool                   `json:"cacheHit"`
 	ScopeResolution      *ScopeResolutionResult `json:"scopeResolution,omitempty"` // Scope resolution information
 	PolicyResolution     *PolicyResolution      `json:"policyResolution,omitempty"` // Phase 3: Policy resolution information
+	DerivedRoles         []string               `json:"derivedRoles,omitempty"`    // Phase 4: Derived roles that were resolved and added
 }
 
 // ScopeResolutionResult contains scope resolution result

@@ -29,6 +29,7 @@ type Server struct {
 	logger         *zap.Logger
 	config         Config
 	policyWatcher  *policy.FileWatcher
+	pollingPath    string
 	reloadMu       sync.RWMutex
 	lastReloadTime time.Time
 }
@@ -173,7 +174,7 @@ func (s *Server) EnablePolicyWatcher(ctx context.Context, pollingPath string) er
 	}
 
 	// Get the memory store from the engine
-	memStore, ok := s.engine.GetPolicyStore().(*policy.MemoryStore)
+	memStore, ok := s.engine.GetStore().(*policy.MemoryStore)
 	if !ok {
 		return fmt.Errorf("policy watcher requires a MemoryStore implementation")
 	}
@@ -194,6 +195,7 @@ func (s *Server) EnablePolicyWatcher(ctx context.Context, pollingPath string) er
 	go s.handleReloadEvents(watcher.EventChan())
 
 	s.policyWatcher = watcher
+	s.pollingPath = pollingPath
 	s.logger.Info("Policy watcher enabled",
 		zap.String("path", pollingPath),
 	)
@@ -232,13 +234,13 @@ func (s *Server) ReloadPolicies(ctx context.Context) error {
 
 	// Trigger reload by the watcher's performReload method
 	// For now, we'll reload by reading from the filesystem directly
-	memStore, ok := s.engine.GetPolicyStore().(*policy.MemoryStore)
+	memStore, ok := s.engine.GetStore().(*policy.MemoryStore)
 	if !ok {
 		return fmt.Errorf("policy store is not a MemoryStore")
 	}
 
 	loader := policy.NewLoader(s.logger)
-	reloadPath := s.policyWatcher.pollingPath
+	reloadPath := s.pollingPath
 
 	// Load all policies
 	policies, err := loader.LoadFromDirectory(reloadPath)
@@ -304,12 +306,12 @@ func (s *Server) IsPolicyWatcherRunning() bool {
 }
 
 // Check implements the Check RPC method
-func (s *Server) Check(ctx context.Context, req *CheckRequest) (*CheckResponse, error) {
+func (s *Server) Check(ctx interface{}, req *CheckRequest) (*CheckResponse, error) {
 	// Convert protobuf request to internal types
 	internalReq := protoToCheckRequest(req)
 
 	// Execute authorization check
-	resp, err := s.engine.Check(ctx, internalReq)
+	resp, err := s.engine.Check(ctx.(context.Context), internalReq)
 	if err != nil {
 		s.logger.Error("Authorization check failed",
 			zap.String("request_id", req.RequestId),
@@ -323,7 +325,7 @@ func (s *Server) Check(ctx context.Context, req *CheckRequest) (*CheckResponse, 
 }
 
 // CheckBatch implements the CheckBatch RPC method
-func (s *Server) CheckBatch(ctx context.Context, req *CheckBatchRequest) (*CheckBatchResponse, error) {
+func (s *Server) CheckBatch(ctx interface{}, req *CheckBatchRequest) (*CheckBatchResponse, error) {
 	// Convert protobuf requests to internal types
 	internalReqs := make([]*types.CheckRequest, len(req.Requests))
 	for i, r := range req.Requests {
@@ -331,7 +333,7 @@ func (s *Server) CheckBatch(ctx context.Context, req *CheckBatchRequest) (*Check
 	}
 
 	// Execute batch authorization check
-	responses, err := s.engine.CheckBatch(ctx, internalReqs)
+	responses, err := s.engine.CheckBatch(ctx.(context.Context), internalReqs)
 	if err != nil {
 		s.logger.Error("Batch authorization check failed",
 			zap.Int("request_count", len(req.Requests)),
@@ -364,7 +366,7 @@ func (s *Server) CheckStream(stream AuthzService_CheckStreamServer) error {
 
 		// Convert and execute check
 		internalReq := protoToCheckRequest(req)
-		resp, err := s.engine.Check(stream.Context(), internalReq)
+		resp, err := s.engine.Check(stream.Context().(context.Context), internalReq)
 		if err != nil {
 			s.logger.Error("Stream authorization check failed",
 				zap.String("request_id", req.RequestId),

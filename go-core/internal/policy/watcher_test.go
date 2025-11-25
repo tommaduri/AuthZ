@@ -161,13 +161,15 @@ func TestFileWatcher_FiltersPolicyFiles(t *testing.T) {
 	defer watcher.Stop()
 
 	// Verify non-policy files are ignored
-	if !watcher.shouldProcessEvent(newFakeEvent(nonPolicyPath)) {
+	nonPolicyEvent := newFakeEvent(nonPolicyPath)
+	if evt, ok := nonPolicyEvent.(fsnotify.Event); ok && !watcher.shouldProcessEvent(evt) {
 		t.Logf("Correctly ignored non-policy file: %s", nonPolicyPath)
 	}
 
 	// Verify policy files are processed
 	policyPath := filepath.Join(tmpDir, "policy.yaml")
-	if watcher.shouldProcessEvent(newFakeEvent(policyPath)) {
+	policyEvent := newFakeEvent(policyPath)
+	if evt, ok := policyEvent.(fsnotify.Event); ok && watcher.shouldProcessEvent(evt) {
 		t.Logf("Correctly processed policy file: %s", policyPath)
 	}
 }

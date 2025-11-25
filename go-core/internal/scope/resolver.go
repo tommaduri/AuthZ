@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -35,11 +36,11 @@ type Resolver struct {
 
 // scopeChainCache for computed scope chains with LRU eviction
 type scopeChainCache struct {
-	mu       sync.RWMutex
-	entries  map[string]*chainEntry
-	maxSize  int
-	hitCount int64
-	missCount int64
+	mu        sync.RWMutex
+	entries   map[string]*chainEntry
+	maxSize   int
+	hitCount  atomic.Int64
+	missCount atomic.Int64
 }
 
 type chainEntry struct {
@@ -187,21 +188,21 @@ type CacheStats struct {
 
 func (c *scopeChainCache) get(key string, ttl time.Duration) []string {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	entry, ok := c.entries[key]
+	c.mu.RUnlock()
+
 	if !ok {
-		c.missCount++
+		c.missCount.Add(1)
 		return nil
 	}
 
 	// Check expiration
 	if entry.expires < time.Now().UnixMilli() {
-		c.missCount++
+		c.missCount.Add(1)
 		return nil
 	}
 
-	c.hitCount++
+	c.hitCount.Add(1)
 	return entry.chain
 }
 
@@ -225,24 +226,27 @@ func (c *scopeChainCache) clear() {
 	defer c.mu.Unlock()
 
 	c.entries = make(map[string]*chainEntry)
-	c.hitCount = 0
-	c.missCount = 0
+	c.hitCount.Store(0)
+	c.missCount.Store(0)
 }
 
 func (c *scopeChainCache) stats() CacheStats {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
+	size := len(c.entries)
+	c.mu.RUnlock()
 
-	total := float64(c.hitCount + c.missCount)
+	hits := c.hitCount.Load()
+	misses := c.missCount.Load()
+	total := float64(hits + misses)
 	hitRate := 0.0
 	if total > 0 {
-		hitRate = float64(c.hitCount) / total
+		hitRate = float64(hits) / total
 	}
 
 	return CacheStats{
-		Size:      len(c.entries),
-		HitCount:  c.hitCount,
-		MissCount: c.missCount,
+		Size:      size,
+		HitCount:  hits,
+		MissCount: misses,
 		HitRate:   hitRate,
 	}
 }

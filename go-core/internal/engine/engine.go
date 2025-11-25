@@ -8,6 +8,7 @@ import (
 
 	"github.com/authz-engine/go-core/internal/cache"
 	"github.com/authz-engine/go-core/internal/cel"
+	"github.com/authz-engine/go-core/internal/derived_roles"
 	"github.com/authz-engine/go-core/internal/policy"
 	"github.com/authz-engine/go-core/internal/scope"
 	"github.com/authz-engine/go-core/pkg/types"
@@ -15,11 +16,12 @@ import (
 
 // Engine is the core authorization decision engine
 type Engine struct {
-	cel           *cel.Engine
-	store         policy.Store
-	cache         cache.Cache
-	workerPool    *WorkerPool
-	scopeResolver *scope.Resolver
+	cel                  *cel.Engine
+	store                policy.Store
+	cache                cache.Cache
+	workerPool           *WorkerPool
+	scopeResolver        *scope.Resolver
+	derivedRolesResolver *derived_roles.DerivedRolesResolver
 
 	config Config
 }
@@ -64,13 +66,20 @@ func New(cfg Config, store policy.Store) (*Engine, error) {
 	// Initialize scope resolver with default config
 	scopeResolver := scope.NewResolver(scope.DefaultConfig())
 
+	// Initialize derived roles resolver
+	derivedRolesResolver, err := derived_roles.NewDerivedRolesResolver()
+	if err != nil {
+		return nil, err
+	}
+
 	return &Engine{
-		cel:           celEngine,
-		store:         store,
-		cache:         c,
-		workerPool:    NewWorkerPool(cfg.ParallelWorkers),
-		scopeResolver: scopeResolver,
-		config:        cfg,
+		cel:                  celEngine,
+		store:                store,
+		cache:                c,
+		workerPool:           NewWorkerPool(cfg.ParallelWorkers),
+		scopeResolver:        scopeResolver,
+		derivedRolesResolver: derivedRolesResolver,
+		config:               cfg,
 	}, nil
 }
 
@@ -85,6 +94,34 @@ func (e *Engine) Check(ctx context.Context, req *types.CheckRequest) (*types.Che
 			resp := cached.(*types.CheckResponse)
 			resp.Metadata.CacheHit = true
 			return resp, nil
+		}
+	}
+
+	// Phase 4: Resolve derived roles before policy evaluation
+	derivedRoles := e.store.GetDerivedRoles()
+	originalRoles := req.Principal.Roles
+	derivedRolesAdded := []string{}
+
+	if len(derivedRoles) > 0 {
+		resolvedRoles, err := e.derivedRolesResolver.Resolve(req.Principal, req.Resource, derivedRoles)
+		if err != nil {
+			// Log error but continue with original roles (graceful degradation)
+			// In production, you might want to return the error instead
+			resolvedRoles = originalRoles
+		} else {
+			// Update principal roles with derived roles
+			req.Principal.Roles = resolvedRoles
+
+			// Track which derived roles were added (for metadata)
+			derivedRolesMap := make(map[string]bool)
+			for _, role := range originalRoles {
+				derivedRolesMap[role] = false // original roles
+			}
+			for _, role := range resolvedRoles {
+				if !derivedRolesMap[role] {
+					derivedRolesAdded = append(derivedRolesAdded, role)
+				}
+			}
 		}
 	}
 
@@ -106,6 +143,7 @@ func (e *Engine) Check(ctx context.Context, req *types.CheckRequest) (*types.Che
 			CacheHit:             false,
 			ScopeResolution:      policyResolution.ScopeResolution,
 			PolicyResolution:     policyResolution,
+			DerivedRoles:         derivedRolesAdded,
 		},
 	}
 

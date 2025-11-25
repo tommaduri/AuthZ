@@ -248,7 +248,7 @@ func TestValidator_ValidateDerivedRoles(t *testing.T) {
 }
 
 func TestValidator_InvalidIdentifiers(t *testing.T) {
-	validator := NewValidator()
+	_ = NewValidator() // Create validator but don't use it in this test
 
 	tests := []struct {
 		name    string
@@ -275,7 +275,7 @@ func TestValidator_InvalidIdentifiers(t *testing.T) {
 }
 
 func TestValidator_InvalidActions(t *testing.T) {
-	validator := NewValidator()
+	_ = NewValidator() // Create validator but don't use it in this test
 
 	tests := []struct {
 		name    string

@@ -12,7 +12,8 @@ type MemoryStore struct {
 	policies       map[string]*types.Policy
 	index          *Index
 	scopeIndex     *ScopeIndex
-	principalIndex *PrincipalIndex // Phase 3: Principal policy index
+	principalIndex *PrincipalIndex      // Phase 3: Principal policy index
+	derivedRoles   []*types.DerivedRole // Phase 4: Derived roles definitions
 	mu             sync.RWMutex
 }
 
@@ -22,7 +23,8 @@ func NewMemoryStore() *MemoryStore {
 		policies:       make(map[string]*types.Policy),
 		index:          NewIndex(),
 		scopeIndex:     NewScopeIndex(),
-		principalIndex: NewPrincipalIndex(), // Phase 3
+		principalIndex: NewPrincipalIndex(),      // Phase 3
+		derivedRoles:   make([]*types.DerivedRole, 0), // Phase 4
 	}
 }
 
@@ -290,4 +292,84 @@ func (s *MemoryStore) FindPoliciesByRoles(roles []string, resourceKind string) [
 	defer s.mu.RUnlock()
 
 	return s.principalIndex.FindByRoles(roles, resourceKind)
+}
+
+// Phase 4: Derived roles methods
+
+// AddDerivedRole adds a derived role definition to the store
+// Validates the derived role before adding
+func (s *MemoryStore) AddDerivedRole(derivedRole *types.DerivedRole) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if derivedRole == nil {
+		return fmt.Errorf("derived role cannot be nil")
+	}
+
+	// Validate derived role
+	if err := derivedRole.Validate(); err != nil {
+		return fmt.Errorf("invalid derived role: %w", err)
+	}
+
+	// Check for duplicate name
+	for _, dr := range s.derivedRoles {
+		if dr.Name == derivedRole.Name {
+			return fmt.Errorf("derived role %q already exists", derivedRole.Name)
+		}
+	}
+
+	// Add to store
+	s.derivedRoles = append(s.derivedRoles, derivedRole)
+	return nil
+}
+
+// RemoveDerivedRole removes a derived role by name
+func (s *MemoryStore) RemoveDerivedRole(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i, dr := range s.derivedRoles {
+		if dr.Name == name {
+			// Remove by swapping with last element and truncating
+			s.derivedRoles[i] = s.derivedRoles[len(s.derivedRoles)-1]
+			s.derivedRoles = s.derivedRoles[:len(s.derivedRoles)-1]
+			return nil
+		}
+	}
+
+	return fmt.Errorf("derived role %q not found", name)
+}
+
+// GetDerivedRoles returns all derived role definitions
+// Returns a copy to prevent external modifications
+func (s *MemoryStore) GetDerivedRoles() []*types.DerivedRole {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Return a copy to prevent external modifications
+	result := make([]*types.DerivedRole, len(s.derivedRoles))
+	copy(result, s.derivedRoles)
+	return result
+}
+
+// GetDerivedRole retrieves a specific derived role by name
+func (s *MemoryStore) GetDerivedRole(name string) (*types.DerivedRole, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, dr := range s.derivedRoles {
+		if dr.Name == name {
+			return dr, nil
+		}
+	}
+
+	return nil, fmt.Errorf("derived role %q not found", name)
+}
+
+// ClearDerivedRoles removes all derived role definitions
+func (s *MemoryStore) ClearDerivedRoles() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.derivedRoles = make([]*types.DerivedRole, 0)
 }

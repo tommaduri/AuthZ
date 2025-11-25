@@ -1,0 +1,529 @@
+package benchmarks_test
+
+import (
+	"fmt"
+	"testing"
+
+	"github.com/authz-engine/go-core/internal/derived_roles"
+	"github.com/authz-engine/go-core/internal/engine"
+	"github.com/authz-engine/go-core/pkg/types"
+)
+
+// mockCELEvaluatorBench is a test double for benchmarking
+type mockCELEvaluatorBench struct {
+	returnValue bool
+}
+
+func (m *mockCELEvaluatorBench) EvaluateBoolean(expr string, context interface{}) (bool, error) {
+	return m.returnValue, nil
+}
+
+// BenchmarkResolve benchmarks the resolution of derived roles
+func BenchmarkResolve(b *testing.B) {
+	mockEval := &mockCELEvaluatorBench{returnValue: true}
+	resolver := derived_roles.NewResolver(derived_roles.ResolverConfig{
+		CELEvaluator: mockEval,
+	})
+
+	// Load test policy
+	policy := &types.DerivedRolesPolicy{
+		Name: "benchmark-policy",
+		Definitions: []types.DerivedRoleDefinition{
+			{
+				Name:        "owner",
+				ParentRoles: []string{"user"},
+				Condition:   types.Condition{Expression: "R.attr.ownerId == P.id"},
+			},
+			{
+				Name:        "editor",
+				ParentRoles: []string{"user"},
+				Condition:   types.Condition{Expression: "P.id in R.attr.editors"},
+			},
+			{
+				Name:        "viewer",
+				ParentRoles: []string{"user"},
+				Condition:   types.Condition{Expression: "R.attr.public == true"},
+			},
+		},
+	}
+	resolver.LoadPolicies([]*types.DerivedRolesPolicy{policy})
+
+	principal := types.Principal{
+		ID:    "user123",
+		Roles: []string{"user"},
+	}
+	resource := types.Resource{
+		Kind: "document",
+		ID:   "doc1",
+		Attributes: map[string]interface{}{
+			"ownerId": "user123",
+			"editors": []string{"user123", "user456"},
+			"public":  true,
+		},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		roles, _ := resolver.Resolve(principal, resource, nil, nil)
+		_ = roles
+	}
+}
+
+// BenchmarkResolveWithCache benchmarks cached resolution
+func BenchmarkResolveWithCache(b *testing.B) {
+	mockEval := &mockCELEvaluatorBench{returnValue: true}
+	resolver := derived_roles.NewResolver(derived_roles.ResolverConfig{
+		CELEvaluator: mockEval,
+	})
+
+	policy := &types.DerivedRolesPolicy{
+		Name: "benchmark-policy",
+		Definitions: []types.DerivedRoleDefinition{
+			{
+				Name:        "owner",
+				ParentRoles: []string{"user"},
+				Condition:   types.Condition{Expression: "R.attr.ownerId == P.id"},
+			},
+		},
+	}
+	resolver.LoadPolicies([]*types.DerivedRolesPolicy{policy})
+
+	cache := derived_roles.NewCache()
+	principal := types.Principal{ID: "user123", Roles: []string{"user"}}
+	resource := types.Resource{
+		Kind:       "document",
+		Attributes: map[string]interface{}{"ownerId": "user123"},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		roles, _ := resolver.Resolve(principal, resource, nil, cache)
+		_ = roles
+	}
+	b.StopTimer()
+
+	stats := cache.GetStats()
+	b.ReportMetric(stats.HitRate*100, "%hit_rate")
+	b.ReportMetric(float64(stats.Size), "cache_entries")
+}
+
+// BenchmarkCache benchmarks cache operations
+func BenchmarkCache(b *testing.B) {
+	b.Run("GetOrCompute_CacheMiss", func(b *testing.B) {
+		cache := derived_roles.NewCache()
+		compute := func() []string { return []string{"role1", "role2"} }
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			cache.Clear()
+			result := cache.GetOrCompute(fmt.Sprintf("key%d", i), compute)
+			_ = result
+		}
+	})
+
+	b.Run("GetOrCompute_CacheHit", func(b *testing.B) {
+		cache := derived_roles.NewCache()
+		compute := func() []string { return []string{"role1", "role2"} }
+
+		// Pre-populate cache
+		key := "static-key"
+		cache.GetOrCompute(key, compute)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			result := cache.GetOrCompute(key, compute)
+			_ = result
+		}
+	})
+
+	b.Run("GenerateKey", func(b *testing.B) {
+		principalID := "user123"
+		roles := []string{"role1", "role2", "role3"}
+		resourceKind := "document"
+		resourceID := "doc456"
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			key := derived_roles.GenerateKey(principalID, roles, resourceKind, resourceID)
+			_ = key
+		}
+	})
+
+	b.Run("CacheClear", func(b *testing.B) {
+		cache := derived_roles.NewCache()
+		compute := func() []string { return []string{"role1"} }
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			// Populate
+			for j := 0; j < 100; j++ {
+				cache.GetOrCompute(fmt.Sprintf("key%d", j), compute)
+			}
+			// Clear
+			cache.Clear()
+		}
+	})
+}
+
+// BenchmarkValidation benchmarks policy validation
+func BenchmarkValidation(b *testing.B) {
+	validator := derived_roles.NewValidator()
+
+	b.Run("ValidateSimplePolicy", func(b *testing.B) {
+		policy := &types.DerivedRolesPolicy{
+			Name: "simple",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "owner",
+					ParentRoles: []string{"user"},
+					Condition:   types.Condition{Expression: "true"},
+				},
+			},
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			err := validator.Validate([]*types.DerivedRolesPolicy{policy})
+			_ = err
+		}
+	})
+
+	b.Run("ValidateComplexPolicy", func(b *testing.B) {
+		// Create policy with 50 definitions
+		definitions := make([]types.DerivedRoleDefinition, 50)
+		for i := 0; i < 50; i++ {
+			definitions[i] = types.DerivedRoleDefinition{
+				Name:        fmt.Sprintf("role%d", i),
+				ParentRoles: []string{"user"},
+				Condition:   types.Condition{Expression: "true"},
+			}
+		}
+
+		policy := &types.DerivedRolesPolicy{
+			Name:        "complex",
+			Definitions: definitions,
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			err := validator.Validate([]*types.DerivedRolesPolicy{policy})
+			_ = err
+		}
+	})
+
+	b.Run("ValidateChainedDependencies", func(b *testing.B) {
+		policy := &types.DerivedRolesPolicy{
+			Name: "chained",
+			Definitions: []types.DerivedRoleDefinition{
+				{Name: "level1", ParentRoles: []string{"user"}, Condition: types.Condition{Expression: "true"}},
+				{Name: "level2", ParentRoles: []string{"level1"}, Condition: types.Condition{Expression: "true"}},
+				{Name: "level3", ParentRoles: []string{"level2"}, Condition: types.Condition{Expression: "true"}},
+				{Name: "level4", ParentRoles: []string{"level3"}, Condition: types.Condition{Expression: "true"}},
+				{Name: "level5", ParentRoles: []string{"level4"}, Condition: types.Condition{Expression: "true"}},
+			},
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			err := validator.Validate([]*types.DerivedRolesPolicy{policy})
+			_ = err
+		}
+	})
+}
+
+// BenchmarkIntegration benchmarks end-to-end integration
+func BenchmarkIntegration(b *testing.B) {
+	b.Run("EndToEnd_SimplePolicy", func(b *testing.B) {
+		eng := engine.NewEngine()
+
+		// Add resource policy
+		resourcePolicy := &types.Policy{
+			Name: "document-policy",
+			Resource: &types.ResourceSelector{
+				Kind: "document",
+			},
+			Rules: []types.Rule{
+				{
+					Actions: []string{"read"},
+					Effect:  types.Allow,
+					Roles:   []string{"owner"},
+				},
+			},
+		}
+		eng.AddPolicy(resourcePolicy)
+
+		// Add derived roles
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name: "ownership-policy",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "owner",
+					ParentRoles: []string{"user"},
+					Condition:   types.Condition{Expression: "R.attr.ownerId == P.id"},
+				},
+			},
+		}
+		eng.AddDerivedRolesPolicy(derivedPolicy)
+
+		principal := types.Principal{ID: "user123", Roles: []string{"user"}}
+		resource := types.Resource{
+			Kind:       "document",
+			Attributes: map[string]interface{}{"ownerId": "user123"},
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			result := eng.IsAllowed(types.Request{
+				Principal: principal,
+				Action:    "read",
+				Resource:  resource,
+			})
+			_ = result
+		}
+	})
+
+	b.Run("EndToEnd_WithCache", func(b *testing.B) {
+		eng := engine.NewEngine()
+
+		resourcePolicy := &types.Policy{
+			Name: "document-policy",
+			Resource: &types.ResourceSelector{
+				Kind: "document",
+			},
+			Rules: []types.Rule{
+				{
+					Actions: []string{"read"},
+					Effect:  types.Allow,
+					Roles:   []string{"owner"},
+				},
+			},
+		}
+		eng.AddPolicy(resourcePolicy)
+
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name: "ownership-policy",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "owner",
+					ParentRoles: []string{"user"},
+					Condition:   types.Condition{Expression: "R.attr.ownerId == P.id"},
+				},
+			},
+		}
+		eng.AddDerivedRolesPolicy(derivedPolicy)
+
+		cache := derived_roles.NewCache()
+		principal := types.Principal{ID: "user123", Roles: []string{"user"}}
+		resource := types.Resource{
+			Kind:       "document",
+			Attributes: map[string]interface{}{"ownerId": "user123"},
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			result := eng.IsAllowedWithCache(types.Request{
+				Principal: principal,
+				Action:    "read",
+				Resource:  resource,
+			}, cache)
+			_ = result
+		}
+		b.StopTimer()
+
+		stats := cache.GetStats()
+		b.ReportMetric(stats.HitRate*100, "%cache_hit_rate")
+	})
+
+	b.Run("EndToEnd_MultipleRoles", func(b *testing.B) {
+		eng := engine.NewEngine()
+
+		resourcePolicy := &types.Policy{
+			Name: "document-policy",
+			Resource: &types.ResourceSelector{
+				Kind: "document",
+			},
+			Rules: []types.Rule{
+				{
+					Actions: []string{"read"},
+					Effect:  types.Allow,
+					Roles:   []string{"owner", "editor", "viewer"},
+				},
+			},
+		}
+		eng.AddPolicy(resourcePolicy)
+
+		// Multiple derived roles
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name: "multi-roles",
+			Definitions: []types.DerivedRoleDefinition{
+				{Name: "owner", ParentRoles: []string{"user"}, Condition: types.Condition{Expression: "R.attr.ownerId == P.id"}},
+				{Name: "editor", ParentRoles: []string{"user"}, Condition: types.Condition{Expression: "P.id in R.attr.editors"}},
+				{Name: "viewer", ParentRoles: []string{"user"}, Condition: types.Condition{Expression: "R.attr.public == true"}},
+			},
+		}
+		eng.AddDerivedRolesPolicy(derivedPolicy)
+
+		principal := types.Principal{ID: "user123", Roles: []string{"user"}}
+		resource := types.Resource{
+			Kind: "document",
+			Attributes: map[string]interface{}{
+				"ownerId": "user123",
+				"editors": []string{"user456"},
+				"public":  true,
+			},
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			result := eng.IsAllowed(types.Request{
+				Principal: principal,
+				Action:    "read",
+				Resource:  resource,
+			})
+			_ = result
+		}
+	})
+}
+
+// BenchmarkWildcardMatching benchmarks wildcard parent role matching
+func BenchmarkWildcardMatching(b *testing.B) {
+	mockEval := &mockCELEvaluatorBench{returnValue: true}
+	resolver := derived_roles.NewResolver(derived_roles.ResolverConfig{
+		CELEvaluator: mockEval,
+	})
+
+	b.Run("ExactMatch", func(b *testing.B) {
+		policy := &types.DerivedRolesPolicy{
+			Name: "exact-match",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "role1",
+					ParentRoles: []string{"user"},
+					Condition:   types.Condition{Expression: "true"},
+				},
+			},
+		}
+		resolver.LoadPolicies([]*types.DerivedRolesPolicy{policy})
+
+		principal := types.Principal{ID: "user1", Roles: []string{"user"}}
+		resource := types.Resource{Kind: "document"}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			roles, _ := resolver.Resolve(principal, resource, nil, nil)
+			_ = roles
+		}
+	})
+
+	b.Run("PrefixWildcard", func(b *testing.B) {
+		policy := &types.DerivedRolesPolicy{
+			Name: "prefix-wildcard",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "admin_role",
+					ParentRoles: []string{"admin:*"},
+					Condition:   types.Condition{Expression: "true"},
+				},
+			},
+		}
+		resolver.LoadPolicies([]*types.DerivedRolesPolicy{policy})
+
+		principal := types.Principal{ID: "user1", Roles: []string{"admin:read", "admin:write"}}
+		resource := types.Resource{Kind: "document"}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			roles, _ := resolver.Resolve(principal, resource, nil, nil)
+			_ = roles
+		}
+	})
+
+	b.Run("SuffixWildcard", func(b *testing.B) {
+		policy := &types.DerivedRolesPolicy{
+			Name: "suffix-wildcard",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "writer",
+					ParentRoles: []string{"*:write"},
+					Condition:   types.Condition{Expression: "true"},
+				},
+			},
+		}
+		resolver.LoadPolicies([]*types.DerivedRolesPolicy{policy})
+
+		principal := types.Principal{ID: "user1", Roles: []string{"document:write", "report:write"}}
+		resource := types.Resource{Kind: "document"}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			roles, _ := resolver.Resolve(principal, resource, nil, nil)
+			_ = roles
+		}
+	})
+
+	b.Run("MixedWildcards", func(b *testing.B) {
+		policy := &types.DerivedRolesPolicy{
+			Name: "mixed-wildcards",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "elevated",
+					ParentRoles: []string{"superuser", "admin:*", "*:write"},
+					Condition:   types.Condition{Expression: "true"},
+				},
+			},
+		}
+		resolver.LoadPolicies([]*types.DerivedRolesPolicy{policy})
+
+		principal := types.Principal{ID: "user1", Roles: []string{"admin:read", "document:write", "user"}}
+		resource := types.Resource{Kind: "document"}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			roles, _ := resolver.Resolve(principal, resource, nil, nil)
+			_ = roles
+		}
+	})
+}
+
+// BenchmarkScalability benchmarks performance at different scales
+func BenchmarkScalability(b *testing.B) {
+	scales := []int{10, 50, 100, 500}
+
+	for _, scale := range scales {
+		b.Run(fmt.Sprintf("Policies_%d", scale), func(b *testing.B) {
+			mockEval := &mockCELEvaluatorBench{returnValue: true}
+			resolver := derived_roles.NewResolver(derived_roles.ResolverConfig{
+				CELEvaluator: mockEval,
+			})
+
+			// Create policy with N definitions
+			definitions := make([]types.DerivedRoleDefinition, scale)
+			for i := 0; i < scale; i++ {
+				definitions[i] = types.DerivedRoleDefinition{
+					Name:        fmt.Sprintf("role%d", i),
+					ParentRoles: []string{"user"},
+					Condition:   types.Condition{Expression: fmt.Sprintf("P.attr.level >= %d", i)},
+				}
+			}
+
+			policy := &types.DerivedRolesPolicy{
+				Name:        "scalability-test",
+				Definitions: definitions,
+			}
+			resolver.LoadPolicies([]*types.DerivedRolesPolicy{policy})
+
+			principal := types.Principal{
+				ID:         "user1",
+				Roles:      []string{"user"},
+				Attributes: map[string]interface{}{"level": scale / 2},
+			}
+			resource := types.Resource{Kind: "document"}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				roles, _ := resolver.Resolve(principal, resource, nil, nil)
+				_ = roles
+			}
+		})
+	}
+}

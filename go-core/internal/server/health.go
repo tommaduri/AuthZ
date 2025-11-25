@@ -3,7 +3,7 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
+	_ "fmt" // Import for side effects
 	"net/http"
 	"sync"
 	"time"
