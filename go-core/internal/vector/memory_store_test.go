@@ -80,7 +80,7 @@ func TestMemoryStore_CRUD(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("insert and get", func(t *testing.T) {
-		vec := []float32{1.0, 2.0, 3.0}
+		vec := []float32{1.0, 2.0, 3.0, 4.0}
 		metadata := map[string]interface{}{
 			"label": "test",
 			"value": 42,
