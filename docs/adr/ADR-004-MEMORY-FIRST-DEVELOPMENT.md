@@ -209,8 +209,19 @@ describe('DecisionStore', () => {
 });
 ```
 
+## Production Vector Storage
+
+**IMPORTANT**: The `enableVectorSearch` configuration mentioned in this ADR refers to a **prototype implementation** only. For production use, see **ADR-010: Vector Store Production Strategy** which details:
+- Current O(n) linear scan limitations (unsuitable for scale)
+- pgvector with HNSW indexing requirement
+- Hot/cold hybrid architecture for enterprise scale
+- Performance targets and cost analysis
+
+The in-memory vector store in `@authz-engine/memory` is **acceptable for development/testing only** (up to 10,000 vectors). Production deployments must use ADR-010's phased approach.
+
 ## Related ADRs
 - ADR-002: Monorepo Structure (affects development workflow)
+- ADR-010: Vector Store Production Strategy (production requirements)
 
 ## References
 - [eventemitter3](https://github.com/primus/eventemitter3) - Fast EventEmitter
