@@ -1,7 +1,7 @@
 # Architecture Decision Records Index
 
-**Last Updated**: 2024-11-24
-**Total ADRs**: 9
+**Last Updated**: 2024-11-25
+**Total ADRs**: 10
 
 ---
 
@@ -29,6 +29,7 @@
 | [ADR-007](./ADR-007-NATIVE-AGENTIC-FRAMEWORK.md) | Native Agentic Framework | Implemented | [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md) |
 | [ADR-008](./ADR-008-HYBRID-GO-TYPESCRIPT-ARCHITECTURE.md) | Hybrid Go/TypeScript Architecture | Accepted | [CORE-ARCHITECTURE-SDD](../sdd/CORE-ARCHITECTURE-SDD.md) |
 | [ADR-009](./ADR-009-CEL-LIBRARY-CHOICE.md) | CEL Library Choice (cel-js) | Implemented | [CEL-EVALUATOR-SDD](../sdd/CEL-EVALUATOR-SDD.md) |
+| [ADR-010](./ADR-010-VECTOR-STORE-PRODUCTION-STRATEGY.md) | Vector Store Production Strategy | **Accepted** | [MEMORY-PACKAGE-SDD](../sdd/MEMORY-PACKAGE-SDD.md) |
 
 ---
 
