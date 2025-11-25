@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/authz-engine/go-core/pkg/types"
+	"github.com/fsnotify/fsnotify"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
