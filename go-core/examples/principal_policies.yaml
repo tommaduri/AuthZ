@@ -1,0 +1,547 @@
+# Principal Policy Examples
+# Phase 3: Authorization Engine
+# Version: 1.0.0
+
+# ==============================================================================
+# Example 1: VIP User Override
+# ==============================================================================
+# Use Case: Grant alice elevated permissions despite her viewer role
+# Priority: Overrides all resource policies
+# When to use: VIP users, special access, temporary elevated permissions
+---
+apiVersion: authz.engine/v1
+name: alice-vip-policy
+principalPolicy: true
+principal:
+  id: "user:alice"
+resources:
+  - kind: "*"
+    scope: "**"
+rules:
+  - name: vip-full-access
+    actions: ["*"]
+    effect: allow
+
+# ==============================================================================
+# Example 2: Security Block - Compromised Account
+# ==============================================================================
+# Use Case: Immediately block all access for a compromised account
+# Priority: Highest (deny policies always win)
+# When to use: Security incidents, suspicious activity, terminated employees
+---
+apiVersion: authz.engine/v1
+name: block-bob-security
+principalPolicy: true
+principal:
+  id: "user:bob"
+resources:
+  - kind: "*"
+    scope: "**"
+rules:
+  - name: security-block-all
+    actions: ["*"]
+    effect: deny
+    comment: "Account compromised on 2025-11-24. Security incident #1234. Do not remove without security team approval."
+
+# ==============================================================================
+# Example 3: Global Admin Role
+# ==============================================================================
+# Use Case: All users with role=admin should have full system access
+# Priority: Principal policy (evaluated before resource policies)
+# When to use: System administrators, superusers
+---
+apiVersion: authz.engine/v1
+name: global-admin-policy
+principalPolicy: true
+principal:
+  attributes:
+    role: ["admin"]
+resources:
+  - kind: "*"
+    scope: "**"
+rules:
+  - name: admin-full-access
+    actions: ["*"]
+    effect: allow
+
+# ==============================================================================
+# Example 4: Scoped Admin Role
+# ==============================================================================
+# Use Case: Domain admins can manage resources in their domain only
+# Priority: Principal policy with scope restriction
+# When to use: Department admins, team leads, domain administrators
+---
+apiVersion: authz.engine/v1
+name: domain-admin-policy
+principalPolicy: true
+principal:
+  attributes:
+    role: ["domain-admin"]
+    department: ["engineering"]
+resources:
+  - kind: "*"
+    scope: "engineering:**"
+rules:
+  - name: domain-admin-access
+    actions: ["read", "write", "delete"]
+    effect: allow
+
+# ==============================================================================
+# Example 5: Multi-Tenant Isolation
+# ==============================================================================
+# Use Case: Users should only access resources in their tenant
+# Priority: Deny policy (enforces hard boundary)
+# When to use: SaaS applications, multi-tenant systems
+---
+apiVersion: authz.engine/v1
+name: tenant-isolation-policy
+principalPolicy: true
+principal:
+  attributes:
+    tenant: ["${principal.tenant}"]
+resources:
+  - kind: "*"
+    scope: "**"
+rules:
+  - name: deny-cross-tenant-access
+    actions: ["*"]
+    effect: deny
+    condition:
+      not:
+        stringEquals:
+          - "${resource.tenant}"
+          - "${principal.tenant}"
+
+# ==============================================================================
+# Example 6: Service-to-Service Authentication
+# ==============================================================================
+# Use Case: The billing service needs read access to user and payment data
+# Priority: Service-level permissions
+# When to use: Microservices, API services, background jobs
+---
+apiVersion: authz.engine/v1
+name: billing-service-policy
+principalPolicy: true
+principal:
+  id: "service:billing"
+resources:
+  - kind: "user"
+    scope: "**"
+  - kind: "payment"
+    scope: "**"
+  - kind: "subscription"
+    scope: "**"
+rules:
+  - name: billing-read-access
+    actions: ["read"]
+    effect: allow
+
+# ==============================================================================
+# Example 7: Read-Only Service Account
+# ==============================================================================
+# Use Case: Analytics service should only read data, never write
+# Priority: Allow reads, deny writes explicitly
+# When to use: Analytics, monitoring, reporting services
+---
+apiVersion: authz.engine/v1
+name: analytics-readonly-policy
+principalPolicy: true
+principal:
+  id: "service:analytics"
+resources:
+  - kind: "*"
+    scope: "**"
+rules:
+  - name: allow-read-only
+    actions: ["read"]
+    effect: allow
+  - name: deny-write-delete
+    actions: ["write", "delete", "create"]
+    effect: deny
+
+# ==============================================================================
+# Example 8: Contractor Time Restriction
+# ==============================================================================
+# Use Case: Contractors only have access during business hours (9am-5pm)
+# Priority: Time-based access control
+# When to use: Contractors, temporary staff, time-limited access
+---
+apiVersion: authz.engine/v1
+name: contractor-time-restriction
+principalPolicy: true
+principal:
+  attributes:
+    employeeType: ["contractor"]
+resources:
+  - kind: "*"
+    scope: "**"
+rules:
+  - name: business-hours-only
+    actions: ["*"]
+    effect: deny
+    condition:
+      or:
+        - lessThan:
+            - "${time.hour}"
+            - 9
+        - greaterThan:
+            - "${time.hour}"
+            - 17
+
+# ==============================================================================
+# Example 9: IP Whitelist for Sensitive Actions
+# ==============================================================================
+# Use Case: Delete actions only allowed from corporate network (10.0.0.0/8)
+# Priority: Network-based access control
+# When to use: Sensitive operations, compliance requirements
+---
+apiVersion: authz.engine/v1
+name: delete-ip-restriction
+principalPolicy: true
+principal:
+  id: "*"
+resources:
+  - kind: "*"
+    scope: "**"
+rules:
+  - name: delete-from-corporate-only
+    actions: ["delete"]
+    effect: deny
+    condition:
+      not:
+        ipCIDR:
+          - "${context.ip}"
+          - "10.0.0.0/8"
+
+# ==============================================================================
+# Example 10: Emergency Access Override (Break-Glass)
+# ==============================================================================
+# Use Case: Incident response team gets full access when emergency mode enabled
+# Priority: Conditional full access
+# When to use: Emergencies, incident response, disaster recovery
+---
+apiVersion: authz.engine/v1
+name: emergency-access-policy
+principalPolicy: true
+principal:
+  attributes:
+    role: ["incident-response"]
+resources:
+  - kind: "*"
+    scope: "**"
+rules:
+  - name: emergency-full-access
+    actions: ["*"]
+    effect: allow
+    condition:
+      equals:
+        - "${context.emergency_mode}"
+        - true
+
+# ==============================================================================
+# Example 11: Audit Access (Read-Only for All)
+# ==============================================================================
+# Use Case: Auditors can read everything but cannot modify anything
+# Priority: Organization-wide read access
+# When to use: Compliance audits, security reviews
+---
+apiVersion: authz.engine/v1
+name: auditor-read-all-policy
+principalPolicy: true
+principal:
+  attributes:
+    role: ["auditor"]
+resources:
+  - kind: "*"
+    scope: "**"
+rules:
+  - name: audit-read-access
+    actions: ["read"]
+    effect: allow
+  - name: audit-deny-modify
+    actions: ["write", "delete", "create"]
+    effect: deny
+
+# ==============================================================================
+# Example 12: Developer Production Access
+# ==============================================================================
+# Use Case: Developers can read production but cannot modify
+# Priority: Environment-based restrictions
+# When to use: Production environments, staging restrictions
+---
+apiVersion: authz.engine/v1
+name: developer-prod-readonly
+principalPolicy: true
+principal:
+  attributes:
+    role: ["developer"]
+resources:
+  - kind: "*"
+    scope: "production:**"
+rules:
+  - name: prod-read-only
+    actions: ["read"]
+    effect: allow
+  - name: prod-deny-write
+    actions: ["write", "delete", "create"]
+    effect: deny
+
+# ==============================================================================
+# Example 13: Customer Support Limited Access
+# ==============================================================================
+# Use Case: Support staff can view user data but cannot access financial info
+# Priority: Role-based with resource type restrictions
+# When to use: Customer support, help desk
+---
+apiVersion: authz.engine/v1
+name: support-limited-access
+principalPolicy: true
+principal:
+  attributes:
+    role: ["support"]
+resources:
+  - kind: "user"
+    scope: "**"
+  - kind: "ticket"
+    scope: "**"
+rules:
+  - name: support-read-access
+    actions: ["read", "write"]
+    effect: allow
+---
+apiVersion: authz.engine/v1
+name: support-deny-financial
+principalPolicy: true
+principal:
+  attributes:
+    role: ["support"]
+resources:
+  - kind: "payment"
+    scope: "**"
+  - kind: "billing"
+    scope: "**"
+rules:
+  - name: deny-financial-access
+    actions: ["*"]
+    effect: deny
+
+# ==============================================================================
+# Example 14: Manager Approval Workflow
+# ==============================================================================
+# Use Case: Managers can approve/reject but cannot create/delete
+# Priority: Action-specific permissions
+# When to use: Approval workflows, review processes
+---
+apiVersion: authz.engine/v1
+name: manager-approval-policy
+principalPolicy: true
+principal:
+  attributes:
+    role: ["manager"]
+resources:
+  - kind: "request"
+    scope: "**"
+  - kind: "approval"
+    scope: "**"
+rules:
+  - name: allow-approve-reject
+    actions: ["approve", "reject", "read"]
+    effect: allow
+  - name: deny-create-delete
+    actions: ["create", "delete"]
+    effect: deny
+
+# ==============================================================================
+# Example 15: External Auditor Temporary Access
+# ==============================================================================
+# Use Case: External auditors get read access for limited time period
+# Priority: Time-bound access
+# When to use: External audits, consultants, temporary access
+---
+apiVersion: authz.engine/v1
+name: external-auditor-temp-access
+principalPolicy: true
+principal:
+  attributes:
+    role: ["external-auditor"]
+resources:
+  - kind: "*"
+    scope: "**"
+rules:
+  - name: temporary-read-access
+    actions: ["read"]
+    effect: allow
+    condition:
+      and:
+        - greaterThanEquals:
+            - "${time.timestamp}"
+            - 1732406400  # 2025-11-24 00:00:00
+        - lessThanEquals:
+            - "${time.timestamp}"
+            - 1735084800  # 2025-12-24 00:00:00
+
+# ==============================================================================
+# Example 16: Geo-Restricted Access
+# ==============================================================================
+# Use Case: Block access from certain countries for compliance
+# Priority: Geographic restrictions
+# When to use: Compliance, data sovereignty, security
+---
+apiVersion: authz.engine/v1
+name: geo-restriction-policy
+principalPolicy: true
+principal:
+  id: "*"
+resources:
+  - kind: "sensitive-data"
+    scope: "**"
+rules:
+  - name: block-restricted-countries
+    actions: ["*"]
+    effect: deny
+    condition:
+      in:
+        - "${context.country}"
+        - ["CN", "RU", "KP"]  # Example: China, Russia, North Korea
+
+# ==============================================================================
+# Example 17: Project Owner Full Access
+# ==============================================================================
+# Use Case: Project owners have full access to their projects
+# Priority: Ownership-based access
+# When to use: Project-based systems, ownership models
+---
+apiVersion: authz.engine/v1
+name: project-owner-policy
+principalPolicy: true
+principal:
+  attributes:
+    projectRole: ["owner"]
+resources:
+  - kind: "project"
+    scope: "project/${principal.projectId}:**"
+  - kind: "document"
+    scope: "project/${principal.projectId}:**"
+rules:
+  - name: owner-full-access
+    actions: ["*"]
+    effect: allow
+
+# ==============================================================================
+# Example 18: MFA Required for Sensitive Actions
+# ==============================================================================
+# Use Case: Sensitive actions require multi-factor authentication
+# Priority: Security-enhanced actions
+# When to use: Financial transactions, sensitive operations
+---
+apiVersion: authz.engine/v1
+name: mfa-required-sensitive
+principalPolicy: true
+principal:
+  id: "*"
+resources:
+  - kind: "*"
+    scope: "**"
+rules:
+  - name: require-mfa-for-sensitive
+    actions: ["delete", "transfer", "payment"]
+    effect: deny
+    condition:
+      not:
+        equals:
+          - "${context.mfa_verified}"
+          - true
+
+# ==============================================================================
+# Example 19: Beta Feature Access
+# ==============================================================================
+# Use Case: Only beta users can access beta features
+# Priority: Feature flag access control
+# When to use: Feature rollouts, A/B testing, beta programs
+---
+apiVersion: authz.engine/v1
+name: beta-feature-access
+principalPolicy: true
+principal:
+  attributes:
+    betaTester: ["true"]
+resources:
+  - kind: "feature"
+    scope: "beta/**"
+rules:
+  - name: beta-feature-access
+    actions: ["read", "use"]
+    effect: allow
+---
+apiVersion: authz.engine/v1
+name: non-beta-deny
+principalPolicy: true
+principal:
+  attributes:
+    betaTester: ["false"]
+resources:
+  - kind: "feature"
+    scope: "beta/**"
+rules:
+  - name: deny-beta-features
+    actions: ["*"]
+    effect: deny
+
+# ==============================================================================
+# Example 20: API Rate Limiting Bypass
+# ==============================================================================
+# Use Case: Premium users bypass rate limits
+# Priority: Service tier differentiation
+# When to use: API access tiers, premium features
+---
+apiVersion: authz.engine/v1
+name: premium-no-rate-limit
+principalPolicy: true
+principal:
+  attributes:
+    tier: ["premium", "enterprise"]
+resources:
+  - kind: "api"
+    scope: "**"
+rules:
+  - name: bypass-rate-limit
+    actions: ["api:call"]
+    effect: allow
+    comment: "Premium users have unlimited API calls"
+
+# ==============================================================================
+# NOTES
+# ==============================================================================
+#
+# Policy Evaluation Order:
+# 1. Principal DENY policies (highest priority)
+# 2. Resource DENY policies
+# 3. Principal ALLOW policies
+# 4. Resource ALLOW policies (lowest priority)
+# 5. Default DENY
+#
+# Best Practices:
+# - Use principal policies for user-centric controls
+# - Use resource policies for resource-centric controls
+# - Be specific with scopes (avoid "**" when possible)
+# - Document policies with comments
+# - Test policies thoroughly before deploying
+# - Monitor policy performance
+# - Version your policies
+#
+# Condition Variables:
+# - ${principal.id} - Principal ID
+# - ${principal.tenant} - Principal tenant
+# - ${principal.*} - Any principal attribute
+# - ${resource.kind} - Resource type
+# - ${resource.scope} - Resource scope
+# - ${resource.tenant} - Resource tenant
+# - ${resource.*} - Any resource attribute
+# - ${context.*} - Any context variable
+# - ${time.hour} - Current hour (0-23)
+# - ${time.timestamp} - Unix timestamp
+#
+# For more information:
+# - README: docs/PHASE3_README.md
+# - Migration Guide: docs/PHASE3_MIGRATION.md
+# - API Reference: docs/API.md
