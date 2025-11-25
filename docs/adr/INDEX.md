@@ -29,7 +29,7 @@
 | [ADR-007](./ADR-007-NATIVE-AGENTIC-FRAMEWORK.md) | Native Agentic Framework | Implemented | [AGENTS-PACKAGE-SDD](../sdd/AGENTS-PACKAGE-SDD.md) |
 | [ADR-008](./ADR-008-HYBRID-GO-TYPESCRIPT-ARCHITECTURE.md) | Hybrid Go/TypeScript Architecture | Accepted | [CORE-ARCHITECTURE-SDD](../sdd/CORE-ARCHITECTURE-SDD.md) |
 | [ADR-009](./ADR-009-CEL-LIBRARY-CHOICE.md) | CEL Library Choice (cel-js) | Implemented | [CEL-EVALUATOR-SDD](../sdd/CEL-EVALUATOR-SDD.md) |
-| [ADR-010](./ADR-010-VECTOR-STORE-PRODUCTION-STRATEGY.md) | Vector Store Production Strategy | **Accepted** | [MEMORY-PACKAGE-SDD](../sdd/MEMORY-PACKAGE-SDD.md) |
+| [ADR-010](./ADR-010-VECTOR-STORE-PRODUCTION-STRATEGY.md) | Vector Store Production Strategy | **Accepted** | [MEMORY-PACKAGE-SDD](../sdd/MEMORY-PACKAGE-SDD.md), [GO-VECTOR-STORE-SDD](../sdd/GO-VECTOR-STORE-SDD.md) |
 
 ---
 
@@ -81,6 +81,13 @@
 **Rationale**: TypeScript: cel-js (MIT, good performance). Go: google/cel-go (official, production-ready).
 **Implementation**: [CEL-EVALUATOR-SDD](../sdd/CEL-EVALUATOR-SDD.md)
 **Note**: Both implementations use CEL standard library. Go implementation validated in Phase 3 (30 integration tests).
+
+### ADR-010: Vector Store Production Strategy
+**Decision**: Implement vector store in Go with HNSW indexing, inspired by ruvector reference implementation.
+**Rationale**: TypeScript InMemoryVectorStore has O(n) linear scan (unsuitable for scale). Go implementation aligns with go-core engine performance requirements.
+**Implementation**: [GO-VECTOR-STORE-SDD](../sdd/GO-VECTOR-STORE-SDD.md), [GO-VECTOR-STORE-ARCHITECTURE](../GO-VECTOR-STORE-ARCHITECTURE.md), [GO-VECTOR-STORE-DEVELOPMENT-PLAN](../GO-VECTOR-STORE-DEVELOPMENT-PLAN.md)
+**Status**: Phase 1 (In-Memory HNSW) implementation starting. 4-phase roadmap: 8-10 weeks total.
+**Performance Targets**: <1ms p99 search latency, <800MB per 1M vectors, 95%+ recall accuracy.
 
 ---
 

@@ -12,7 +12,8 @@ High-performance authorization engine written in Go for sub-millisecond policy e
 | Phase 2: Scoped Policies | ✅ Complete | 66/69 (95.7%) | Sub-microsecond |
 | Phase 3: Principal Policies | ✅ Complete | 86/89 (96.6%) | 168ns O(1) lookup |
 | **Phase 4: Derived Roles** | ✅ **95%+ Complete** | **111/118 (94%+)** | **<10µs resolution** |
-| Phase 5: Exported Variables | 📋 Next | - | - |
+| Phase 5: Vector Store (Go) | 🚧 **Design Complete** | **0/0 (Planning)** | **<1ms p99 target** |
+| Phase 6: Exported Variables | 📋 Future | - | - |
 
 ## Quick Start
 
@@ -39,7 +40,29 @@ go build ./cmd/server
 ./server --port 8080 --policy-dir ./examples
 ```
 
-## Phase 4: Derived Roles (NEW)
+## Phase 5: Vector Store (DESIGN COMPLETE - NEW)
+
+High-performance vector database for anomaly detection, policy similarity analysis, and risk assessment:
+
+- **HNSW Indexing**: Hierarchical Navigable Small World graphs for O(log n) search
+- **Reference**: Inspired by [ruvector](https://github.com/ruvnet/ruvector) architecture
+- **Performance Target**: <1ms p99 search latency, <800MB per 1M vectors
+- **Integration**: Async embedding generation, zero impact on authorization checks
+- **Use Cases**: Anomaly detection, policy recommendations, risk scoring
+- **Implementation**: 4-phase roadmap (8-10 weeks)
+  - Phase 1: In-Memory HNSW (2-3 weeks)
+  - Phase 2: PostgreSQL + pgvector (2-3 weeks)
+  - Phase 3: Product Quantization (1-2 weeks)
+  - Phase 4: Advanced Features (2-3 weeks)
+
+**Documentation**:
+- [GO-VECTOR-STORE-SDD.md](../docs/sdd/GO-VECTOR-STORE-SDD.md) - Complete technical specification (~3000 lines)
+- [GO-VECTOR-STORE-ARCHITECTURE.md](../docs/GO-VECTOR-STORE-ARCHITECTURE.md) - Integration architecture (~1500 lines)
+- [GO-VECTOR-STORE-DEVELOPMENT-PLAN.md](../docs/GO-VECTOR-STORE-DEVELOPMENT-PLAN.md) - 8-10 week roadmap (~1200 lines)
+
+**Status**: Design complete, ready for Phase 1 implementation. See ADR-010 for strategic context.
+
+## Phase 4: Derived Roles (COMPLETE)
 
 Derived roles enable dynamic role computation based on conditions, supporting ReBAC (Relationship-Based Access Control):
 
