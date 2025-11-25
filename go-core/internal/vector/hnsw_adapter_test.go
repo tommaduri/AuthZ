@@ -3,6 +3,7 @@ package vector
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/authz-engine/go-core/pkg/vector"
@@ -71,13 +72,13 @@ func TestNewHNSWAdapter(t *testing.T) {
 }
 
 func TestHNSWAdapter_Insert(t *testing.T) {
-	adapter, err := NewHNSWAdapter(3, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
+	adapter, err := NewHNSWAdapter(4, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
 	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	t.Run("successful insert", func(t *testing.T) {
-		vec := []float32{1.0, 2.0, 3.0}
+		vec := []float32{1.0, 2.0, 3.0, 4.0}
 		metadata := map[string]interface{}{"label": "test"}
 
 		err := adapter.Insert(ctx, "vec-1", vec, metadata)
@@ -102,14 +103,14 @@ func TestHNSWAdapter_Insert(t *testing.T) {
 		cancelCtx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		vec := []float32{1.0, 2.0, 3.0}
+		vec := []float32{1.0, 2.0, 3.0, 4.0}
 		err := adapter.Insert(cancelCtx, "vec-3", vec, nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("insert multiple vectors", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
-			vec := []float32{float32(i), float32(i + 1), float32(i + 2)}
+			vec := []float32{float32(i), float32(i + 1), float32(i + 2), float32(i + 3)}
 			metadata := map[string]interface{}{"index": i}
 
 			err := adapter.Insert(ctx, fmt.Sprintf("vec-%d", i), vec, metadata)
@@ -123,7 +124,7 @@ func TestHNSWAdapter_Insert(t *testing.T) {
 }
 
 func TestHNSWAdapter_Search(t *testing.T) {
-	adapter, err := NewHNSWAdapter(3, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
+	adapter, err := NewHNSWAdapter(4, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -134,10 +135,10 @@ func TestHNSWAdapter_Search(t *testing.T) {
 		vec  []float32
 		meta map[string]interface{}
 	}{
-		{"vec-1", []float32{1.0, 0.0, 0.0}, map[string]interface{}{"label": "x-axis"}},
-		{"vec-2", []float32{0.0, 1.0, 0.0}, map[string]interface{}{"label": "y-axis"}},
-		{"vec-3", []float32{0.0, 0.0, 1.0}, map[string]interface{}{"label": "z-axis"}},
-		{"vec-4", []float32{0.9, 0.1, 0.0}, map[string]interface{}{"label": "near-x"}},
+		{"vec-1", []float32{1.0, 0.0, 0.0, 0.0}, map[string]interface{}{"label": "x-axis"}},
+		{"vec-2", []float32{0.0, 1.0, 0.0, 0.0}, map[string]interface{}{"label": "y-axis"}},
+		{"vec-3", []float32{0.0, 0.0, 1.0, 0.0}, map[string]interface{}{"label": "z-axis"}},
+		{"vec-4", []float32{0.9, 0.1, 0.0, 0.0}, map[string]interface{}{"label": "near-x"}},
 	}
 
 	for _, v := range vectors {
@@ -146,7 +147,7 @@ func TestHNSWAdapter_Search(t *testing.T) {
 	}
 
 	t.Run("find nearest neighbors", func(t *testing.T) {
-		query := []float32{1.0, 0.0, 0.0} // Search for x-axis
+		query := []float32{1.0, 0.0, 0.0, 0.0} // Search for x-axis
 
 		results, err := adapter.Search(ctx, query, 2)
 		require.NoError(t, err)
@@ -166,7 +167,7 @@ func TestHNSWAdapter_Search(t *testing.T) {
 	})
 
 	t.Run("invalid k", func(t *testing.T) {
-		query := []float32{1.0, 0.0, 0.0}
+		query := []float32{1.0, 0.0, 0.0, 0.0}
 
 		_, err := adapter.Search(ctx, query, 0)
 		assert.Error(t, err)
@@ -177,13 +178,13 @@ func TestHNSWAdapter_Search(t *testing.T) {
 		cancelCtx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		query := []float32{1.0, 0.0, 0.0}
+		query := []float32{1.0, 0.0, 0.0, 0.0}
 		_, err := adapter.Search(cancelCtx, query, 2)
 		assert.Error(t, err)
 	})
 
 	t.Run("k larger than dataset", func(t *testing.T) {
-		query := []float32{1.0, 0.0, 0.0}
+		query := []float32{1.0, 0.0, 0.0, 0.0}
 
 		results, err := adapter.Search(ctx, query, 100)
 		require.NoError(t, err)
@@ -193,13 +194,13 @@ func TestHNSWAdapter_Search(t *testing.T) {
 }
 
 func TestHNSWAdapter_Delete(t *testing.T) {
-	adapter, err := NewHNSWAdapter(3, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
+	adapter, err := NewHNSWAdapter(4, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
 	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	// Insert test vector
-	vec := []float32{1.0, 2.0, 3.0}
+	vec := []float32{1.0, 2.0, 3.0, 4.0}
 	err = adapter.Insert(ctx, "vec-1", vec, map[string]interface{}{"label": "test"})
 	require.NoError(t, err)
 
@@ -227,13 +228,13 @@ func TestHNSWAdapter_Delete(t *testing.T) {
 }
 
 func TestHNSWAdapter_Get(t *testing.T) {
-	adapter, err := NewHNSWAdapter(3, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
+	adapter, err := NewHNSWAdapter(4, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
 	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	// Insert test vector
-	vec := []float32{1.0, 2.0, 3.0}
+	vec := []float32{1.0, 2.0, 3.0, 4.0}
 	metadata := map[string]interface{}{"label": "test", "version": 1}
 	err = adapter.Insert(ctx, "vec-1", vec, metadata)
 	require.NoError(t, err)
@@ -262,7 +263,7 @@ func TestHNSWAdapter_Get(t *testing.T) {
 }
 
 func TestHNSWAdapter_BatchInsert(t *testing.T) {
-	adapter, err := NewHNSWAdapter(3, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
+	adapter, err := NewHNSWAdapter(4, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -272,7 +273,7 @@ func TestHNSWAdapter_BatchInsert(t *testing.T) {
 		for i := 0; i < 50; i++ {
 			entries[i] = &vector.VectorEntry{
 				ID:     fmt.Sprintf("batch-vec-%d", i),
-				Vector: []float32{float32(i), float32(i + 1), float32(i + 2)},
+				Vector: []float32{float32(i), float32(i + 1), float32(i + 2), float32(i + 3)},
 				Metadata: map[string]interface{}{
 					"batch": true,
 					"index": i,
@@ -351,7 +352,7 @@ func TestHNSWAdapter_Stats(t *testing.T) {
 }
 
 func TestHNSWAdapter_Close(t *testing.T) {
-	adapter, err := NewHNSWAdapter(3, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
+	adapter, err := NewHNSWAdapter(4, vector.HNSWConfig{M: 16, EfConstruction: 200, EfSearch: 50})
 	require.NoError(t, err)
 
 	err = adapter.Close()
@@ -394,9 +395,11 @@ func TestHNSWAdapter_SearchAccuracy(t *testing.T) {
 	for _, v := range query {
 		norm += v * v
 	}
-	norm = float32(1.0 / (norm + 0.00001))
-	for i := range query {
-		query[i] *= norm
+	norm = float32(math.Sqrt(float64(norm)))
+	if norm > 0 {
+		for i := range query {
+			query[i] /= norm
+		}
 	}
 
 	results, err := adapter.Search(ctx, query, 10)
