@@ -128,6 +128,9 @@ message ResponseMetadata {
 
   // Scope resolution information
   ScopeResolution scope_resolution = 5;
+
+  // Phase 3: Policy resolution info
+  PolicyResolution policy_resolution = 6;
 }
 
 // ScopeResolution contains scope resolution result
@@ -140,6 +143,42 @@ message ScopeResolution {
 
   // Whether a scoped policy was found
   bool scoped_policy_matched = 3;
+}
+
+// PrincipalSelector for principal policies (Phase 3)
+message PrincipalSelector {
+  // Specific principal ID (e.g., "user:alice")
+  string id = 1;
+
+  // Match ANY of these roles
+  repeated string roles = 2;
+
+  // Principal's scope context
+  string scope = 3;
+}
+
+// ResourceSelector for principal policies (Phase 3)
+message ResourceSelector {
+  // Resource kind (supports wildcard *)
+  string kind = 1;
+
+  // Scope pattern (supports ** wildcard)
+  string scope = 2;
+}
+
+// PolicyResolution metadata (Phase 3)
+message PolicyResolution {
+  // Whether principal policies matched
+  bool principal_policies_matched = 1;
+
+  // Whether resource policies matched
+  bool resource_policies_matched = 2;
+
+  // Evaluation order (e.g., ["principal-specific", "resource-scoped"])
+  repeated string evaluation_order = 3;
+
+  // Nested scope resolution info
+  ScopeResolution scope_resolution = 4;
 }
 
 // CheckBatchRequest contains multiple check requests
@@ -190,6 +229,15 @@ message Policy {
 
   // Hierarchical scope where this policy applies (e.g., "acme.corp.engineering")
   string scope = 5;
+
+  // Phase 3: Marks this as a principal policy
+  bool principal_policy = 10;
+
+  // Phase 3: Principal selector for principal policies
+  PrincipalSelector principal = 11;
+
+  // Phase 3: Resource selectors for principal policies
+  repeated ResourceSelector resources = 12;
 }
 
 // Rule represents a single authorization rule

@@ -520,8 +520,10 @@ type ResponseMetadata struct {
 	CacheHit bool `protobuf:"varint,4,opt,name=cache_hit,json=cacheHit,proto3" json:"cache_hit,omitempty"`
 	// Scope resolution information
 	ScopeResolution *ScopeResolution `protobuf:"bytes,5,opt,name=scope_resolution,json=scopeResolution,proto3" json:"scope_resolution,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Phase 3: Policy resolution info
+	PolicyResolution *PolicyResolution `protobuf:"bytes,6,opt,name=policy_resolution,json=policyResolution,proto3" json:"policy_resolution,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ResponseMetadata) Reset() {
@@ -585,6 +587,13 @@ func (x *ResponseMetadata) GetCacheHit() bool {
 func (x *ResponseMetadata) GetScopeResolution() *ScopeResolution {
 	if x != nil {
 		return x.ScopeResolution
+	}
+	return nil
+}
+
+func (x *ResponseMetadata) GetPolicyResolution() *PolicyResolution {
+	if x != nil {
+		return x.PolicyResolution
 	}
 	return nil
 }
@@ -653,6 +662,198 @@ func (x *ScopeResolution) GetScopedPolicyMatched() bool {
 	return false
 }
 
+// PrincipalSelector for principal policies (Phase 3)
+type PrincipalSelector struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Specific principal ID (e.g., "user:alice")
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Match ANY of these roles
+	Roles []string `protobuf:"bytes,2,rep,name=roles,proto3" json:"roles,omitempty"`
+	// Principal's scope context
+	Scope         string `protobuf:"bytes,3,opt,name=scope,proto3" json:"scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrincipalSelector) Reset() {
+	*x = PrincipalSelector{}
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrincipalSelector) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrincipalSelector) ProtoMessage() {}
+
+func (x *PrincipalSelector) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrincipalSelector.ProtoReflect.Descriptor instead.
+func (*PrincipalSelector) Descriptor() ([]byte, []int) {
+	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *PrincipalSelector) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PrincipalSelector) GetRoles() []string {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
+}
+
+func (x *PrincipalSelector) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+// ResourceSelector for principal policies (Phase 3)
+type ResourceSelector struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Resource kind (supports wildcard *)
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// Scope pattern (supports ** wildcard)
+	Scope         string `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResourceSelector) Reset() {
+	*x = ResourceSelector{}
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResourceSelector) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResourceSelector) ProtoMessage() {}
+
+func (x *ResourceSelector) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResourceSelector.ProtoReflect.Descriptor instead.
+func (*ResourceSelector) Descriptor() ([]byte, []int) {
+	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ResourceSelector) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *ResourceSelector) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+// PolicyResolution metadata (Phase 3)
+type PolicyResolution struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether principal policies matched
+	PrincipalPoliciesMatched bool `protobuf:"varint,1,opt,name=principal_policies_matched,json=principalPoliciesMatched,proto3" json:"principal_policies_matched,omitempty"`
+	// Whether resource policies matched
+	ResourcePoliciesMatched bool `protobuf:"varint,2,opt,name=resource_policies_matched,json=resourcePoliciesMatched,proto3" json:"resource_policies_matched,omitempty"`
+	// Evaluation order (e.g., ["principal-specific", "resource-scoped"])
+	EvaluationOrder []string `protobuf:"bytes,3,rep,name=evaluation_order,json=evaluationOrder,proto3" json:"evaluation_order,omitempty"`
+	// Nested scope resolution info
+	ScopeResolution *ScopeResolution `protobuf:"bytes,4,opt,name=scope_resolution,json=scopeResolution,proto3" json:"scope_resolution,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PolicyResolution) Reset() {
+	*x = PolicyResolution{}
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyResolution) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyResolution) ProtoMessage() {}
+
+func (x *PolicyResolution) ProtoReflect() protoreflect.Message {
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyResolution.ProtoReflect.Descriptor instead.
+func (*PolicyResolution) Descriptor() ([]byte, []int) {
+	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *PolicyResolution) GetPrincipalPoliciesMatched() bool {
+	if x != nil {
+		return x.PrincipalPoliciesMatched
+	}
+	return false
+}
+
+func (x *PolicyResolution) GetResourcePoliciesMatched() bool {
+	if x != nil {
+		return x.ResourcePoliciesMatched
+	}
+	return false
+}
+
+func (x *PolicyResolution) GetEvaluationOrder() []string {
+	if x != nil {
+		return x.EvaluationOrder
+	}
+	return nil
+}
+
+func (x *PolicyResolution) GetScopeResolution() *ScopeResolution {
+	if x != nil {
+		return x.ScopeResolution
+	}
+	return nil
+}
+
 // CheckBatchRequest contains multiple check requests
 type CheckBatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -663,7 +864,7 @@ type CheckBatchRequest struct {
 
 func (x *CheckBatchRequest) Reset() {
 	*x = CheckBatchRequest{}
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[7]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -675,7 +876,7 @@ func (x *CheckBatchRequest) String() string {
 func (*CheckBatchRequest) ProtoMessage() {}
 
 func (x *CheckBatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[7]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -688,7 +889,7 @@ func (x *CheckBatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckBatchRequest.ProtoReflect.Descriptor instead.
 func (*CheckBatchRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{7}
+	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CheckBatchRequest) GetRequests() []*CheckRequest {
@@ -710,7 +911,7 @@ type CheckBatchResponse struct {
 
 func (x *CheckBatchResponse) Reset() {
 	*x = CheckBatchResponse{}
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[8]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -722,7 +923,7 @@ func (x *CheckBatchResponse) String() string {
 func (*CheckBatchResponse) ProtoMessage() {}
 
 func (x *CheckBatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[8]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -735,7 +936,7 @@ func (x *CheckBatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckBatchResponse.ProtoReflect.Descriptor instead.
 func (*CheckBatchResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{8}
+	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CheckBatchResponse) GetResponses() []*CheckResponse {
@@ -767,7 +968,7 @@ type LoadPoliciesRequest struct {
 
 func (x *LoadPoliciesRequest) Reset() {
 	*x = LoadPoliciesRequest{}
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[9]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -779,7 +980,7 @@ func (x *LoadPoliciesRequest) String() string {
 func (*LoadPoliciesRequest) ProtoMessage() {}
 
 func (x *LoadPoliciesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[9]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -792,7 +993,7 @@ func (x *LoadPoliciesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadPoliciesRequest.ProtoReflect.Descriptor instead.
 func (*LoadPoliciesRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{9}
+	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *LoadPoliciesRequest) GetSource() string {
@@ -828,14 +1029,20 @@ type Policy struct {
 	// Policy rules
 	Rules []*Rule `protobuf:"bytes,4,rep,name=rules,proto3" json:"rules,omitempty"`
 	// Hierarchical scope where this policy applies (e.g., "acme.corp.engineering")
-	Scope         string `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
+	Scope string `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
+	// Phase 3: Marks this as a principal policy
+	PrincipalPolicy bool `protobuf:"varint,10,opt,name=principal_policy,json=principalPolicy,proto3" json:"principal_policy,omitempty"`
+	// Phase 3: Principal selector for principal policies
+	Principal *PrincipalSelector `protobuf:"bytes,11,opt,name=principal,proto3" json:"principal,omitempty"`
+	// Phase 3: Resource selectors for principal policies
+	Resources     []*ResourceSelector `protobuf:"bytes,12,rep,name=resources,proto3" json:"resources,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Policy) Reset() {
 	*x = Policy{}
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[10]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -847,7 +1054,7 @@ func (x *Policy) String() string {
 func (*Policy) ProtoMessage() {}
 
 func (x *Policy) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[10]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -860,7 +1067,7 @@ func (x *Policy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Policy.ProtoReflect.Descriptor instead.
 func (*Policy) Descriptor() ([]byte, []int) {
-	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{10}
+	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Policy) GetApiVersion() string {
@@ -898,6 +1105,27 @@ func (x *Policy) GetScope() string {
 	return ""
 }
 
+func (x *Policy) GetPrincipalPolicy() bool {
+	if x != nil {
+		return x.PrincipalPolicy
+	}
+	return false
+}
+
+func (x *Policy) GetPrincipal() *PrincipalSelector {
+	if x != nil {
+		return x.Principal
+	}
+	return nil
+}
+
+func (x *Policy) GetResources() []*ResourceSelector {
+	if x != nil {
+		return x.Resources
+	}
+	return nil
+}
+
 // Rule represents a single authorization rule
 type Rule struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -919,7 +1147,7 @@ type Rule struct {
 
 func (x *Rule) Reset() {
 	*x = Rule{}
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[11]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -931,7 +1159,7 @@ func (x *Rule) String() string {
 func (*Rule) ProtoMessage() {}
 
 func (x *Rule) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[11]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -944,7 +1172,7 @@ func (x *Rule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Rule.ProtoReflect.Descriptor instead.
 func (*Rule) Descriptor() ([]byte, []int) {
-	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{11}
+	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Rule) GetName() string {
@@ -1002,7 +1230,7 @@ type LoadPoliciesResponse struct {
 
 func (x *LoadPoliciesResponse) Reset() {
 	*x = LoadPoliciesResponse{}
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[12]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1014,7 +1242,7 @@ func (x *LoadPoliciesResponse) String() string {
 func (*LoadPoliciesResponse) ProtoMessage() {}
 
 func (x *LoadPoliciesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[12]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1027,7 +1255,7 @@ func (x *LoadPoliciesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadPoliciesResponse.ProtoReflect.Descriptor instead.
 func (*LoadPoliciesResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{12}
+	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *LoadPoliciesResponse) GetPoliciesLoaded() int32 {
@@ -1055,7 +1283,7 @@ type ReloadPoliciesRequest struct {
 
 func (x *ReloadPoliciesRequest) Reset() {
 	*x = ReloadPoliciesRequest{}
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[13]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1067,7 +1295,7 @@ func (x *ReloadPoliciesRequest) String() string {
 func (*ReloadPoliciesRequest) ProtoMessage() {}
 
 func (x *ReloadPoliciesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[13]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1080,7 +1308,7 @@ func (x *ReloadPoliciesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReloadPoliciesRequest.ProtoReflect.Descriptor instead.
 func (*ReloadPoliciesRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{13}
+	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ReloadPoliciesRequest) GetForce() bool {
@@ -1105,7 +1333,7 @@ type ReloadPoliciesResponse struct {
 
 func (x *ReloadPoliciesResponse) Reset() {
 	*x = ReloadPoliciesResponse{}
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[14]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1117,7 +1345,7 @@ func (x *ReloadPoliciesResponse) String() string {
 func (*ReloadPoliciesResponse) ProtoMessage() {}
 
 func (x *ReloadPoliciesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[14]
+	mi := &file_api_proto_authz_v1_authz_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1130,7 +1358,7 @@ func (x *ReloadPoliciesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReloadPoliciesResponse.ProtoReflect.Descriptor instead.
 func (*ReloadPoliciesResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{14}
+	return file_api_proto_authz_v1_authz_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ReloadPoliciesResponse) GetSuccess() bool {
@@ -1197,17 +1425,30 @@ const file_api_proto_authz_v1_authz_proto_rawDesc = "" +
 	"\x04meta\x18\x05 \x03(\v2 .authz.v1.ActionResult.MetaEntryR\x04meta\x1a7\n" +
 	"\tMetaEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x85\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xce\x02\n" +
 	"\x10ResponseMetadata\x124\n" +
 	"\x16evaluation_duration_us\x18\x01 \x01(\x01R\x14evaluationDurationUs\x12-\n" +
 	"\x12policies_evaluated\x18\x02 \x01(\x05R\x11policiesEvaluated\x12)\n" +
 	"\x10matched_policies\x18\x03 \x03(\tR\x0fmatchedPolicies\x12\x1b\n" +
 	"\tcache_hit\x18\x04 \x01(\bR\bcacheHit\x12D\n" +
-	"\x10scope_resolution\x18\x05 \x01(\v2\x19.authz.v1.ScopeResolutionR\x0fscopeResolution\"\x97\x01\n" +
+	"\x10scope_resolution\x18\x05 \x01(\v2\x19.authz.v1.ScopeResolutionR\x0fscopeResolution\x12G\n" +
+	"\x11policy_resolution\x18\x06 \x01(\v2\x1a.authz.v1.PolicyResolutionR\x10policyResolution\"\x97\x01\n" +
 	"\x0fScopeResolution\x12#\n" +
 	"\rmatched_scope\x18\x01 \x01(\tR\fmatchedScope\x12+\n" +
 	"\x11inheritance_chain\x18\x02 \x03(\tR\x10inheritanceChain\x122\n" +
-	"\x15scoped_policy_matched\x18\x03 \x01(\bR\x13scopedPolicyMatched\"G\n" +
+	"\x15scoped_policy_matched\x18\x03 \x01(\bR\x13scopedPolicyMatched\"O\n" +
+	"\x11PrincipalSelector\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05roles\x18\x02 \x03(\tR\x05roles\x12\x14\n" +
+	"\x05scope\x18\x03 \x01(\tR\x05scope\"<\n" +
+	"\x10ResourceSelector\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05scope\x18\x02 \x01(\tR\x05scope\"\xfd\x01\n" +
+	"\x10PolicyResolution\x12<\n" +
+	"\x1aprincipal_policies_matched\x18\x01 \x01(\bR\x18principalPoliciesMatched\x12:\n" +
+	"\x19resource_policies_matched\x18\x02 \x01(\bR\x17resourcePoliciesMatched\x12)\n" +
+	"\x10evaluation_order\x18\x03 \x03(\tR\x0fevaluationOrder\x12D\n" +
+	"\x10scope_resolution\x18\x04 \x01(\v2\x19.authz.v1.ScopeResolutionR\x0fscopeResolution\"G\n" +
 	"\x11CheckBatchRequest\x122\n" +
 	"\brequests\x18\x01 \x03(\v2\x16.authz.v1.CheckRequestR\brequests\"w\n" +
 	"\x12CheckBatchResponse\x125\n" +
@@ -1217,14 +1458,18 @@ const file_api_proto_authz_v1_authz_proto_rawDesc = "" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x125\n" +
 	"\vsource_type\x18\x02 \x01(\x0e2\x14.authz.v1.SourceTypeR\n" +
 	"sourceType\x12,\n" +
-	"\bpolicies\x18\x03 \x03(\v2\x10.authz.v1.PolicyR\bpolicies\"\x9e\x01\n" +
+	"\bpolicies\x18\x03 \x03(\v2\x10.authz.v1.PolicyR\bpolicies\"\xbe\x02\n" +
 	"\x06Policy\x12\x1f\n" +
 	"\vapi_version\x18\x01 \x01(\tR\n" +
 	"apiVersion\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12#\n" +
 	"\rresource_kind\x18\x03 \x01(\tR\fresourceKind\x12$\n" +
 	"\x05rules\x18\x04 \x03(\v2\x0e.authz.v1.RuleR\x05rules\x12\x14\n" +
-	"\x05scope\x18\x05 \x01(\tR\x05scope\"\xb7\x01\n" +
+	"\x05scope\x18\x05 \x01(\tR\x05scope\x12)\n" +
+	"\x10principal_policy\x18\n" +
+	" \x01(\bR\x0fprincipalPolicy\x129\n" +
+	"\tprincipal\x18\v \x01(\v2\x1b.authz.v1.PrincipalSelectorR\tprincipal\x128\n" +
+	"\tresources\x18\f \x03(\v2\x1a.authz.v1.ResourceSelectorR\tresources\"\xb7\x01\n" +
 	"\x04Rule\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aactions\x18\x02 \x03(\tR\aactions\x12(\n" +
@@ -1272,7 +1517,7 @@ func file_api_proto_authz_v1_authz_proto_rawDescGZIP() []byte {
 }
 
 var file_api_proto_authz_v1_authz_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_api_proto_authz_v1_authz_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_api_proto_authz_v1_authz_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_api_proto_authz_v1_authz_proto_goTypes = []any{
 	(Effect)(0),                    // 0: authz.v1.Effect
 	(SourceType)(0),                // 1: authz.v1.SourceType
@@ -1283,51 +1528,58 @@ var file_api_proto_authz_v1_authz_proto_goTypes = []any{
 	(*ActionResult)(nil),           // 6: authz.v1.ActionResult
 	(*ResponseMetadata)(nil),       // 7: authz.v1.ResponseMetadata
 	(*ScopeResolution)(nil),        // 8: authz.v1.ScopeResolution
-	(*CheckBatchRequest)(nil),      // 9: authz.v1.CheckBatchRequest
-	(*CheckBatchResponse)(nil),     // 10: authz.v1.CheckBatchResponse
-	(*LoadPoliciesRequest)(nil),    // 11: authz.v1.LoadPoliciesRequest
-	(*Policy)(nil),                 // 12: authz.v1.Policy
-	(*Rule)(nil),                   // 13: authz.v1.Rule
-	(*LoadPoliciesResponse)(nil),   // 14: authz.v1.LoadPoliciesResponse
-	(*ReloadPoliciesRequest)(nil),  // 15: authz.v1.ReloadPoliciesRequest
-	(*ReloadPoliciesResponse)(nil), // 16: authz.v1.ReloadPoliciesResponse
-	nil,                            // 17: authz.v1.CheckResponse.ResultsEntry
-	nil,                            // 18: authz.v1.ActionResult.MetaEntry
-	(*structpb.Struct)(nil),        // 19: google.protobuf.Struct
+	(*PrincipalSelector)(nil),      // 9: authz.v1.PrincipalSelector
+	(*ResourceSelector)(nil),       // 10: authz.v1.ResourceSelector
+	(*PolicyResolution)(nil),       // 11: authz.v1.PolicyResolution
+	(*CheckBatchRequest)(nil),      // 12: authz.v1.CheckBatchRequest
+	(*CheckBatchResponse)(nil),     // 13: authz.v1.CheckBatchResponse
+	(*LoadPoliciesRequest)(nil),    // 14: authz.v1.LoadPoliciesRequest
+	(*Policy)(nil),                 // 15: authz.v1.Policy
+	(*Rule)(nil),                   // 16: authz.v1.Rule
+	(*LoadPoliciesResponse)(nil),   // 17: authz.v1.LoadPoliciesResponse
+	(*ReloadPoliciesRequest)(nil),  // 18: authz.v1.ReloadPoliciesRequest
+	(*ReloadPoliciesResponse)(nil), // 19: authz.v1.ReloadPoliciesResponse
+	nil,                            // 20: authz.v1.CheckResponse.ResultsEntry
+	nil,                            // 21: authz.v1.ActionResult.MetaEntry
+	(*structpb.Struct)(nil),        // 22: google.protobuf.Struct
 }
 var file_api_proto_authz_v1_authz_proto_depIdxs = []int32{
 	3,  // 0: authz.v1.CheckRequest.principal:type_name -> authz.v1.Principal
 	4,  // 1: authz.v1.CheckRequest.resource:type_name -> authz.v1.Resource
-	19, // 2: authz.v1.CheckRequest.context:type_name -> google.protobuf.Struct
-	19, // 3: authz.v1.Principal.attributes:type_name -> google.protobuf.Struct
-	19, // 4: authz.v1.Resource.attributes:type_name -> google.protobuf.Struct
-	17, // 5: authz.v1.CheckResponse.results:type_name -> authz.v1.CheckResponse.ResultsEntry
+	22, // 2: authz.v1.CheckRequest.context:type_name -> google.protobuf.Struct
+	22, // 3: authz.v1.Principal.attributes:type_name -> google.protobuf.Struct
+	22, // 4: authz.v1.Resource.attributes:type_name -> google.protobuf.Struct
+	20, // 5: authz.v1.CheckResponse.results:type_name -> authz.v1.CheckResponse.ResultsEntry
 	7,  // 6: authz.v1.CheckResponse.metadata:type_name -> authz.v1.ResponseMetadata
 	0,  // 7: authz.v1.ActionResult.effect:type_name -> authz.v1.Effect
-	18, // 8: authz.v1.ActionResult.meta:type_name -> authz.v1.ActionResult.MetaEntry
+	21, // 8: authz.v1.ActionResult.meta:type_name -> authz.v1.ActionResult.MetaEntry
 	8,  // 9: authz.v1.ResponseMetadata.scope_resolution:type_name -> authz.v1.ScopeResolution
-	2,  // 10: authz.v1.CheckBatchRequest.requests:type_name -> authz.v1.CheckRequest
-	5,  // 11: authz.v1.CheckBatchResponse.responses:type_name -> authz.v1.CheckResponse
-	1,  // 12: authz.v1.LoadPoliciesRequest.source_type:type_name -> authz.v1.SourceType
-	12, // 13: authz.v1.LoadPoliciesRequest.policies:type_name -> authz.v1.Policy
-	13, // 14: authz.v1.Policy.rules:type_name -> authz.v1.Rule
-	0,  // 15: authz.v1.Rule.effect:type_name -> authz.v1.Effect
-	6,  // 16: authz.v1.CheckResponse.ResultsEntry.value:type_name -> authz.v1.ActionResult
-	2,  // 17: authz.v1.AuthzService.Check:input_type -> authz.v1.CheckRequest
-	9,  // 18: authz.v1.AuthzService.CheckBatch:input_type -> authz.v1.CheckBatchRequest
-	2,  // 19: authz.v1.AuthzService.CheckStream:input_type -> authz.v1.CheckRequest
-	11, // 20: authz.v1.AuthzService.LoadPolicies:input_type -> authz.v1.LoadPoliciesRequest
-	15, // 21: authz.v1.AuthzService.ReloadPolicies:input_type -> authz.v1.ReloadPoliciesRequest
-	5,  // 22: authz.v1.AuthzService.Check:output_type -> authz.v1.CheckResponse
-	10, // 23: authz.v1.AuthzService.CheckBatch:output_type -> authz.v1.CheckBatchResponse
-	5,  // 24: authz.v1.AuthzService.CheckStream:output_type -> authz.v1.CheckResponse
-	14, // 25: authz.v1.AuthzService.LoadPolicies:output_type -> authz.v1.LoadPoliciesResponse
-	16, // 26: authz.v1.AuthzService.ReloadPolicies:output_type -> authz.v1.ReloadPoliciesResponse
-	22, // [22:27] is the sub-list for method output_type
-	17, // [17:22] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	11, // 10: authz.v1.ResponseMetadata.policy_resolution:type_name -> authz.v1.PolicyResolution
+	8,  // 11: authz.v1.PolicyResolution.scope_resolution:type_name -> authz.v1.ScopeResolution
+	2,  // 12: authz.v1.CheckBatchRequest.requests:type_name -> authz.v1.CheckRequest
+	5,  // 13: authz.v1.CheckBatchResponse.responses:type_name -> authz.v1.CheckResponse
+	1,  // 14: authz.v1.LoadPoliciesRequest.source_type:type_name -> authz.v1.SourceType
+	15, // 15: authz.v1.LoadPoliciesRequest.policies:type_name -> authz.v1.Policy
+	16, // 16: authz.v1.Policy.rules:type_name -> authz.v1.Rule
+	9,  // 17: authz.v1.Policy.principal:type_name -> authz.v1.PrincipalSelector
+	10, // 18: authz.v1.Policy.resources:type_name -> authz.v1.ResourceSelector
+	0,  // 19: authz.v1.Rule.effect:type_name -> authz.v1.Effect
+	6,  // 20: authz.v1.CheckResponse.ResultsEntry.value:type_name -> authz.v1.ActionResult
+	2,  // 21: authz.v1.AuthzService.Check:input_type -> authz.v1.CheckRequest
+	12, // 22: authz.v1.AuthzService.CheckBatch:input_type -> authz.v1.CheckBatchRequest
+	2,  // 23: authz.v1.AuthzService.CheckStream:input_type -> authz.v1.CheckRequest
+	14, // 24: authz.v1.AuthzService.LoadPolicies:input_type -> authz.v1.LoadPoliciesRequest
+	18, // 25: authz.v1.AuthzService.ReloadPolicies:input_type -> authz.v1.ReloadPoliciesRequest
+	5,  // 26: authz.v1.AuthzService.Check:output_type -> authz.v1.CheckResponse
+	13, // 27: authz.v1.AuthzService.CheckBatch:output_type -> authz.v1.CheckBatchResponse
+	5,  // 28: authz.v1.AuthzService.CheckStream:output_type -> authz.v1.CheckResponse
+	17, // 29: authz.v1.AuthzService.LoadPolicies:output_type -> authz.v1.LoadPoliciesResponse
+	19, // 30: authz.v1.AuthzService.ReloadPolicies:output_type -> authz.v1.ReloadPoliciesResponse
+	26, // [26:31] is the sub-list for method output_type
+	21, // [21:26] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_authz_v1_authz_proto_init() }
@@ -1341,7 +1593,7 @@ func file_api_proto_authz_v1_authz_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_authz_v1_authz_proto_rawDesc), len(file_api_proto_authz_v1_authz_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   17,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
