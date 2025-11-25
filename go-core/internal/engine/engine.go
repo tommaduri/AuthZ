@@ -74,7 +74,7 @@ func New(cfg Config, store policy.Store) (*Engine, error) {
 	}, nil
 }
 
-// Check evaluates an authorization request with scope resolution
+// Check evaluates an authorization request with principal-first policy resolution
 func (e *Engine) Check(ctx context.Context, req *types.CheckRequest) (*types.CheckResponse, error) {
 	start := time.Now()
 
@@ -88,29 +88,24 @@ func (e *Engine) Check(ctx context.Context, req *types.CheckRequest) (*types.Che
 		}
 	}
 
-	// Determine effective scope (resource scope takes precedence over principal scope)
-	effectiveScope := e.computeEffectiveScope(req)
+	// Phase 3: Find matching policies with principal-first resolution
+	principalPolicies, rolePolicies, resourcePolicies, policyResolution := e.findPoliciesWithPrincipalSeparate(req)
 
-	// Find matching policies with scope resolution
-	policies, scopeResult := e.findPoliciesWithScope(effectiveScope, req.Resource.Kind, req.Actions)
+	// Evaluate with priority: principal-specific > role-based > resource policies
+	results := e.evaluateWithPriority(ctx, req, principalPolicies, rolePolicies, resourcePolicies)
 
-	// If no policies found, return default response with scope info
-	if len(policies) == 0 {
-		return e.defaultResponseWithScope(req, start, scopeResult), nil
-	}
+	totalPolicies := len(principalPolicies) + len(rolePolicies) + len(resourcePolicies)
 
-	// Evaluate policies in parallel
-	results := e.evaluateParallel(ctx, req, policies)
-
-	// Build response with scope information
+	// Build response with policy resolution information
 	response := &types.CheckResponse{
 		RequestID: req.RequestID,
 		Results:   results,
 		Metadata: &types.ResponseMetadata{
 			EvaluationDurationUs: float64(time.Since(start).Microseconds()),
-			PoliciesEvaluated:    len(policies),
+			PoliciesEvaluated:    totalPolicies,
 			CacheHit:             false,
-			ScopeResolution:      scopeResult,
+			ScopeResolution:      policyResolution.ScopeResolution,
+			PolicyResolution:     policyResolution,
 		},
 	}
 
@@ -194,6 +189,24 @@ func (e *Engine) evaluateParallel(ctx context.Context, req *types.CheckRequest, 
 
 // evaluatePolicy evaluates a single policy for an action
 func (e *Engine) evaluatePolicy(ctx context.Context, req *types.CheckRequest, pol *types.Policy, action string) types.ActionResult {
+	// For principal policies, check if resource matches any resource selector
+	if pol.PrincipalPolicy {
+		resourceMatched := false
+		for _, resSelector := range pol.Resources {
+			if resSelector.MatchesResource(req.Resource) {
+				resourceMatched = true
+				break
+			}
+		}
+		if !resourceMatched {
+			// Resource doesn't match any selector in this principal policy
+			return types.ActionResult{
+				Effect:  e.config.DefaultEffect,
+				Matched: false,
+			}
+		}
+	}
+
 	for _, rule := range pol.Rules {
 		// Check if rule applies to this action
 		if !rule.MatchesAction(action) {
@@ -250,18 +263,20 @@ func (e *Engine) computeEffectiveScope(req *types.CheckRequest) string {
 
 // findPoliciesWithScope finds policies using hierarchical scope resolution
 // Returns policies and scope resolution metadata
+// IMPORTANT: Only returns resource policies (filters out principal policies)
 func (e *Engine) findPoliciesWithScope(requestScope, resourceKind string, actions []string) ([]*types.Policy, *types.ScopeResolutionResult) {
 	scopeResult := &types.ScopeResolutionResult{
 		InheritanceChain:    []string{},
 		ScopedPolicyMatched: false,
 	}
 
-	// If no scope, use ONLY global policies (filter out scoped policies)
+	// If no scope, use ONLY global policies (filter out scoped policies AND principal policies)
 	if requestScope == "" {
 		allPolicies := e.store.FindPolicies(resourceKind, actions)
 		globalPolicies := make([]*types.Policy, 0, len(allPolicies))
 		for _, p := range allPolicies {
-			if p.Scope == "" {
+			// Only include resource policies (not principal policies)
+			if p.Scope == "" && !p.PrincipalPolicy {
 				globalPolicies = append(globalPolicies, p)
 			}
 		}
@@ -280,21 +295,29 @@ func (e *Engine) findPoliciesWithScope(requestScope, resourceKind string, action
 
 	scopeResult.InheritanceChain = chain
 
-	// Try each scope from most to least specific
+	// Try each scope from most to least specific (filter out principal policies)
 	for _, currentScope := range chain {
-		policies := e.store.FindPoliciesForScope(currentScope, resourceKind, actions)
-		if len(policies) > 0 {
+		allPolicies := e.store.FindPoliciesForScope(currentScope, resourceKind, actions)
+		scopedPolicies := make([]*types.Policy, 0, len(allPolicies))
+		for _, p := range allPolicies {
+			// Only include resource policies (not principal policies)
+			if !p.PrincipalPolicy {
+				scopedPolicies = append(scopedPolicies, p)
+			}
+		}
+		if len(scopedPolicies) > 0 {
 			scopeResult.MatchedScope = currentScope
 			scopeResult.ScopedPolicyMatched = true
-			return policies, scopeResult
+			return scopedPolicies, scopeResult
 		}
 	}
 
-	// Fall back to ONLY global policies (filter out scoped policies)
+	// Fall back to ONLY global resource policies (filter out scoped policies AND principal policies)
 	allPolicies := e.store.FindPolicies(resourceKind, actions)
 	globalPolicies := make([]*types.Policy, 0, len(allPolicies))
 	for _, p := range allPolicies {
-		if p.Scope == "" {
+		// Only include resource policies (not principal policies)
+		if p.Scope == "" && !p.PrincipalPolicy {
 			globalPolicies = append(globalPolicies, p)
 		}
 	}
@@ -330,6 +353,146 @@ func (e *Engine) defaultResponseWithScope(req *types.CheckRequest, start time.Ti
 			CacheHit:             false,
 			ScopeResolution:      scopeResult,
 		},
+	}
+}
+
+// defaultResponseWithPolicyResolution creates a response when no policies match, with policy resolution info
+func (e *Engine) defaultResponseWithPolicyResolution(req *types.CheckRequest, start time.Time, policyResolution *types.PolicyResolution) *types.CheckResponse {
+	results := make(map[string]types.ActionResult)
+	for _, action := range req.Actions {
+		results[action] = types.ActionResult{
+			Effect:  e.config.DefaultEffect,
+			Matched: false,
+		}
+	}
+
+	return &types.CheckResponse{
+		RequestID: req.RequestID,
+		Results:   results,
+		Metadata: &types.ResponseMetadata{
+			EvaluationDurationUs: float64(time.Since(start).Microseconds()),
+			PoliciesEvaluated:    0,
+			CacheHit:             false,
+			ScopeResolution:      policyResolution.ScopeResolution,
+			PolicyResolution:     policyResolution,
+		},
+	}
+}
+
+// findPoliciesWithPrincipalSeparate finds policies using principal-first resolution
+// Returns policies in separate buckets for priority-based evaluation
+func (e *Engine) findPoliciesWithPrincipalSeparate(req *types.CheckRequest) ([]*types.Policy, []*types.Policy, []*types.Policy, *types.PolicyResolution) {
+	resolution := &types.PolicyResolution{
+		PrincipalPoliciesMatched: false,
+		ResourcePoliciesMatched:  false,
+		EvaluationOrder:          []string{},
+	}
+
+	// 1. Principal-specific policies (highest priority)
+	principalPolicies := e.store.FindPoliciesByPrincipal(req.Principal.ID, req.Resource.Kind)
+	if len(principalPolicies) > 0 {
+		resolution.PrincipalPoliciesMatched = true
+		resolution.EvaluationOrder = append(resolution.EvaluationOrder, "principal-specific")
+	}
+
+	// 2. Role-based principal policies
+	var rolePolicies []*types.Policy
+	if len(req.Principal.Roles) > 0 {
+		rolePolicies = e.store.FindPoliciesByRoles(req.Principal.Roles, req.Resource.Kind)
+		if len(rolePolicies) > 0 {
+			resolution.PrincipalPoliciesMatched = true
+			resolution.EvaluationOrder = append(resolution.EvaluationOrder, "role-based-principal")
+		}
+	}
+
+	// 3. Resource policies (Phase 2 scope resolution)
+	effectiveScope := e.computeEffectiveScope(req)
+	resourcePolicies, scopeResult := e.findPoliciesWithScope(effectiveScope, req.Resource.Kind, req.Actions)
+	if len(resourcePolicies) > 0 {
+		resolution.ResourcePoliciesMatched = true
+		resolution.EvaluationOrder = append(resolution.EvaluationOrder, "resource-scoped")
+	}
+	resolution.ScopeResolution = scopeResult
+
+	return principalPolicies, rolePolicies, resourcePolicies, resolution
+}
+
+// evaluateWithPriority evaluates policies with priority-based resolution
+// Priority: principal-specific > role-based > resource policies
+// Within each tier, deny-overrides applies
+func (e *Engine) evaluateWithPriority(ctx context.Context, req *types.CheckRequest, principalPolicies, rolePolicies, resourcePolicies []*types.Policy) map[string]types.ActionResult {
+	results := make(map[string]types.ActionResult)
+
+	// Initialize all actions with default deny
+	for _, action := range req.Actions {
+		results[action] = types.ActionResult{
+			Effect:  e.config.DefaultEffect,
+			Matched: false,
+		}
+	}
+
+	// Evaluate each action
+	for _, action := range req.Actions {
+		// Try principal-specific policies first (highest priority)
+		if len(principalPolicies) > 0 {
+			result := e.evaluatePolicyTier(ctx, req, principalPolicies, action)
+			if result.Matched {
+				results[action] = result
+				continue // Found match in highest priority tier, skip lower tiers
+			}
+		}
+
+		// Try role-based principal policies next
+		if len(rolePolicies) > 0 {
+			result := e.evaluatePolicyTier(ctx, req, rolePolicies, action)
+			if result.Matched {
+				results[action] = result
+				continue // Found match, skip resource policies
+			}
+		}
+
+		// Fall back to resource policies
+		if len(resourcePolicies) > 0 {
+			result := e.evaluatePolicyTier(ctx, req, resourcePolicies, action)
+			if result.Matched {
+				results[action] = result
+			}
+		}
+	}
+
+	return results
+}
+
+// evaluatePolicyTier evaluates a tier of policies for an action with deny-overrides
+func (e *Engine) evaluatePolicyTier(ctx context.Context, req *types.CheckRequest, policies []*types.Policy, action string) types.ActionResult {
+	var allowResult *types.ActionResult
+
+	for _, pol := range policies {
+		result := e.evaluatePolicy(ctx, req, pol, action)
+
+		if !result.Matched {
+			continue
+		}
+
+		// Deny immediately wins within a tier
+		if result.Effect == types.EffectDeny {
+			return result
+		}
+
+		// Keep first allow result
+		if allowResult == nil {
+			allowResult = &result
+		}
+	}
+
+	// Return allow if found, otherwise no match
+	if allowResult != nil {
+		return *allowResult
+	}
+
+	return types.ActionResult{
+		Effect:  e.config.DefaultEffect,
+		Matched: false,
 	}
 }
 

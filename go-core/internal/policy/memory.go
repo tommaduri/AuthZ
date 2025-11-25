@@ -9,18 +9,20 @@ import (
 
 // MemoryStore implements an in-memory policy store
 type MemoryStore struct {
-	policies   map[string]*types.Policy
-	index      *Index
-	scopeIndex *ScopeIndex
-	mu         sync.RWMutex
+	policies       map[string]*types.Policy
+	index          *Index
+	scopeIndex     *ScopeIndex
+	principalIndex *PrincipalIndex // Phase 3: Principal policy index
+	mu             sync.RWMutex
 }
 
 // NewMemoryStore creates a new in-memory policy store
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		policies:   make(map[string]*types.Policy),
-		index:      NewIndex(),
-		scopeIndex: NewScopeIndex(),
+		policies:       make(map[string]*types.Policy),
+		index:          NewIndex(),
+		scopeIndex:     NewScopeIndex(),
+		principalIndex: NewPrincipalIndex(), // Phase 3
 	}
 }
 
@@ -65,9 +67,29 @@ func (s *MemoryStore) Add(policy *types.Policy) error {
 		return fmt.Errorf("policy name is required")
 	}
 
+	// Validate principal policies (Phase 3)
+	if policy.PrincipalPolicy {
+		if policy.Principal == nil {
+			return fmt.Errorf("principal policy requires principal selector")
+		}
+		if policy.Principal.ID == "" && len(policy.Principal.Roles) == 0 {
+			return fmt.Errorf("principal policy requires either principal.id or principal.roles")
+		}
+		if len(policy.Resources) == 0 {
+			return fmt.Errorf("principal policy requires at least one resource selector")
+		}
+		// Validate each resource selector has a kind
+		for i, res := range policy.Resources {
+			if res.Kind == "" {
+				return fmt.Errorf("principal policy resource[%d] requires kind", i)
+			}
+		}
+	}
+
 	s.policies[policy.Name] = policy
 	s.index.Add(policy)
 	s.scopeIndex.Add(policy)
+	s.principalIndex.Add(policy) // Phase 3
 	return nil
 }
 
@@ -84,6 +106,7 @@ func (s *MemoryStore) Remove(name string) error {
 	delete(s.policies, name)
 	s.index.Remove(policy)
 	s.scopeIndex.Remove(policy)
+	s.principalIndex.Remove(policy) // Phase 3
 	return nil
 }
 
@@ -95,6 +118,7 @@ func (s *MemoryStore) Clear() {
 	s.policies = make(map[string]*types.Policy)
 	s.index = NewIndex()
 	s.scopeIndex = NewScopeIndex()
+	s.principalIndex = NewPrincipalIndex() // Phase 3
 }
 
 // Count returns the number of policies
@@ -248,4 +272,22 @@ func (i *ScopeIndex) FindByScope(scope, resourceKind string) []*types.Policy {
 	}
 
 	return nil
+}
+
+// Phase 3: Principal policy methods
+
+// FindPoliciesByPrincipal finds principal-specific policies for a principal ID and resource kind
+func (s *MemoryStore) FindPoliciesByPrincipal(principalID, resourceKind string) []*types.Policy {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.principalIndex.FindByPrincipal(principalID, resourceKind)
+}
+
+// FindPoliciesByRoles finds role-based principal policies for a set of roles and resource kind
+func (s *MemoryStore) FindPoliciesByRoles(roles []string, resourceKind string) []*types.Policy {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.principalIndex.FindByRoles(roles, resourceKind)
 }

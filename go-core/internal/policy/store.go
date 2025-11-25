@@ -19,6 +19,13 @@ type Store interface {
 	// FindPoliciesForScope finds policies for a specific scope and resource kind
 	FindPoliciesForScope(scope, resourceKind string, actions []string) []*types.Policy
 
+	// Phase 3: Principal policy lookups
+	// FindPoliciesByPrincipal finds policies for a specific principal ID and resource kind
+	FindPoliciesByPrincipal(principalID, resourceKind string) []*types.Policy
+
+	// FindPoliciesByRoles finds policies for a set of roles and resource kind
+	FindPoliciesByRoles(roles []string, resourceKind string) []*types.Policy
+
 	// Add adds a policy to the store
 	Add(policy *types.Policy) error
 

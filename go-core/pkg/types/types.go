@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -75,10 +76,19 @@ type CheckRequest struct {
 }
 
 // CacheKey generates a cache key for this request
+// Phase 3: Includes principal roles to distinguish role-based policy results
+// (e.g., user:admin vs user:viewer will have different cache entries)
+// Roles are sorted for consistent hashing regardless of order
 func (r *CheckRequest) CacheKey() string {
-	key := fmt.Sprintf("%s:%s:%s:%s:%s:%s",
+	// Sort roles for consistent cache keys (user may have roles in any order)
+	roles := make([]string, len(r.Principal.Roles))
+	copy(roles, r.Principal.Roles)
+	sort.Strings(roles)
+
+	key := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%s",
 		r.Principal.ID,
 		r.Principal.Scope,
+		strings.Join(roles, ","),
 		r.Resource.Kind,
 		r.Resource.ID,
 		r.Resource.Scope,
@@ -116,6 +126,7 @@ type ResponseMetadata struct {
 	MatchedPolicies      []string               `json:"matchedPolicies,omitempty"`
 	CacheHit             bool                   `json:"cacheHit"`
 	ScopeResolution      *ScopeResolutionResult `json:"scopeResolution,omitempty"` // Scope resolution information
+	PolicyResolution     *PolicyResolution      `json:"policyResolution,omitempty"` // Phase 3: Policy resolution information
 }
 
 // ScopeResolutionResult contains scope resolution result
@@ -132,6 +143,11 @@ type Policy struct {
 	ResourceKind string  `json:"resourceKind" yaml:"resourceKind"`
 	Rules        []*Rule `json:"rules" yaml:"rules"`
 	Scope        string  `json:"scope,omitempty" yaml:"scope,omitempty"` // Hierarchical scope (e.g., "acme.corp.engineering")
+
+	// Phase 3: Principal Policies
+	PrincipalPolicy bool                 `json:"principalPolicy,omitempty" yaml:"principalPolicy,omitempty"` // Marks this as a principal policy
+	Principal       *PrincipalSelector   `json:"principal,omitempty" yaml:"principal,omitempty"`             // Principal selector (for principal policies)
+	Resources       []*ResourceSelector  `json:"resources,omitempty" yaml:"resources,omitempty"`             // Resource selectors (for principal policies)
 }
 
 // Rule represents a single authorization rule
