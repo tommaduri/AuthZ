@@ -132,11 +132,11 @@ func TestMemoryStore_Search(t *testing.T) {
 		vec  []float32
 		meta map[string]interface{}
 	}{
-		{"vec-1", []float32{1.0, 0.0, 0.0}, map[string]interface{}{"axis": "x"}},
-		{"vec-2", []float32{0.0, 1.0, 0.0}, map[string]interface{}{"axis": "y"}},
-		{"vec-3", []float32{0.0, 0.0, 1.0}, map[string]interface{}{"axis": "z"}},
-		{"vec-4", []float32{0.9, 0.1, 0.0}, map[string]interface{}{"axis": "near-x"}},
-		{"vec-5", []float32{0.1, 0.9, 0.0}, map[string]interface{}{"axis": "near-y"}},
+		{"vec-1", []float32{1.0, 0.0, 0.0, 0.0}, map[string]interface{}{"axis": "x"}},
+		{"vec-2", []float32{0.0, 1.0, 0.0, 0.0}, map[string]interface{}{"axis": "y"}},
+		{"vec-3", []float32{0.0, 0.0, 1.0, 0.0}, map[string]interface{}{"axis": "z"}},
+		{"vec-4", []float32{0.9, 0.1, 0.0, 0.0}, map[string]interface{}{"axis": "near-x"}},
+		{"vec-5", []float32{0.1, 0.9, 0.0, 0.0}, map[string]interface{}{"axis": "near-y"}},
 	}
 
 	for _, v := range testVectors {
@@ -145,7 +145,7 @@ func TestMemoryStore_Search(t *testing.T) {
 	}
 
 	t.Run("find nearest neighbors", func(t *testing.T) {
-		query := []float32{1.0, 0.0, 0.0}
+		query := []float32{1.0, 0.0, 0.0, 0.0}
 
 		results, err := store.Search(ctx, query, 3)
 		require.NoError(t, err)
@@ -161,7 +161,7 @@ func TestMemoryStore_Search(t *testing.T) {
 	})
 
 	t.Run("search with k=1", func(t *testing.T) {
-		query := []float32{0.0, 1.0, 0.0}
+		query := []float32{0.0, 1.0, 0.0, 0.0}
 
 		results, err := store.Search(ctx, query, 1)
 		require.NoError(t, err)
@@ -187,7 +187,7 @@ func TestMemoryStore_BatchInsert(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			entries[i] = &vector.VectorEntry{
 				ID:     fmt.Sprintf("batch-vec-%d", i),
-				Vector: []float32{float32(i), float32(i + 1), float32(i + 2)},
+				Vector: []float32{float32(i), float32(i + 1), float32(i + 2), float32(i + 3)},
 				Metadata: map[string]interface{}{
 					"batch": true,
 					"index": i,
@@ -205,7 +205,7 @@ func TestMemoryStore_BatchInsert(t *testing.T) {
 	})
 
 	t.Run("search after batch insert", func(t *testing.T) {
-		query := []float32{50.0, 51.0, 52.0}
+		query := []float32{50.0, 51.0, 52.0, 53.0}
 
 		results, err := store.Search(ctx, query, 5)
 		require.NoError(t, err)
