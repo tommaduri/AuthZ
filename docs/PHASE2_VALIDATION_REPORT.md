@@ -238,7 +238,7 @@ unknown field IdleTimeout in struct literal of type redis.Options
 ## Installation and Setup Completed
 
 ### Tools Installed
-1. **Go 1.25.4**: Installed via `brew install go`
+1. **Go 1.24.0**: Installed via `brew install go`
 2. **Protobuf Compiler (protoc)**: v33.1 via `brew install protobuf`
 3. **Go Protobuf Plugins**:
    - `protoc-gen-go@latest`

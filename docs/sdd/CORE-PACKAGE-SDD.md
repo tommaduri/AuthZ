@@ -1109,6 +1109,6 @@ spec:
 | 2.3.0 | 2025-11-24 | **Phase 4**: Added derived-roles module (11 modules total). DerivedRolesResolver (~210 lines), DerivedRolesCache (~55 lines), DerivedRolesValidator (~115 lines). 84 tests, Kahn's algorithm, wildcard patterns, per-request caching. |
 | 2.2.0 | 2025-11-24 | **Phase 3**: Added principal and utils modules (10 modules total). Principal policy evaluation with pattern matching. |
 | 2.1.0 | 2025-11-24 | Added scope module documentation (9 modules total) |
-| 2.0.0 | 2024-11-24 | Full documentation of all 8 modules |
-| 1.1.0 | 2024-11-24 | Added documentation gap notice |
+| 2.0.0 | 2025-11-25 | Full documentation of all 8 modules |
+| 1.1.0 | 2025-11-25 | Added documentation gap notice |
 | 1.0.0 | 2024-11-23 | Initial release with CEL evaluator, decision engine |

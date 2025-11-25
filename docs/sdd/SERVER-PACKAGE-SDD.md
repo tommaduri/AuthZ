@@ -754,14 +754,14 @@ GET /metrics       - Prometheus metrics
   "status": "healthy",
   "version": "1.0.0",
   "uptime": 3600,
-  "timestamp": "2024-11-24T10:00:00Z",
+  "timestamp": "2025-11-25T10:00:00Z",
   "policies": {
     "loaded": 15,
     "resourcePolicies": 10,
     "derivedRolesPolicies": 3,
     "principalPolicies": 2,
     "errors": 0,
-    "lastReload": "2024-11-24T09:00:00Z"
+    "lastReload": "2025-11-25T09:00:00Z"
   },
   "agents": {
     "enabled": true,
@@ -914,5 +914,5 @@ spec:
 | Version | Date | Changes |
 |---------|------|---------|
 | 2.1.0 | 2025-11-24 | Added Section 5.3: Request Limits, Section 5.4: cerbosCallId |
-| 2.0.0 | 2024-11-24 | Full documentation of all 30+ endpoints, WebSocket, middleware |
+| 2.0.0 | 2025-11-25 | Full documentation of all 30+ endpoints, WebSocket, middleware |
 | 1.0.0 | 2024-11-23 | Initial release with REST server |

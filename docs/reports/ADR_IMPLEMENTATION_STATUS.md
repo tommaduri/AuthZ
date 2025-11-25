@@ -532,7 +532,7 @@ require (
 
 ### 🚧 ADR-010: Vector Store Production Strategy
 **Status:** **PARTIALLY IMPLEMENTED (Phase 1 Complete)**
-**Date:** 2024-11-25
+**Date:** 2025-11-25
 **Decision:** Use fogfish/hnsw for Go-native HNSW vector indexing (phased approach)
 
 **Implementation Evidence:**
@@ -632,7 +632,7 @@ func NewHNSWAdapter(dimension int, cfg vector.HNSWConfig) (*HNSWAdapter, error) 
 
 ### ⏳ ADR-011: MCP/A2A Protocol Integration Strategy
 **Status:** **ACCEPTED, IMPLEMENTATION STARTED**
-**Date:** 2024-11-25
+**Date:** 2025-11-25
 **Decision:** Implement MCP/A2A protocol for agent-to-agent authorization
 
 **Implementation Evidence:**
@@ -714,7 +714,7 @@ const (
 
 ### ⏳ ADR-012: Agent Identity Lifecycle Architecture
 **Status:** **ACCEPTED, TYPES IMPLEMENTED**
-**Date:** 2024-11-25
+**Date:** 2025-11-25
 **Decision:** Separate Agent type for lifecycle, Principal for authorization
 
 **Implementation Evidence:**

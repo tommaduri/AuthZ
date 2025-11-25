@@ -134,7 +134,7 @@ The script:
 
 **Requirements**:
 - `protoc` command-line compiler (v3.21+)
-- Go 1.22+
+- Go 1.24.0+
 - Write access to `api/proto/authz/v1/`
 
 ## Implementation Guide

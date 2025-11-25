@@ -1,7 +1,7 @@
 # ADR-010: Vector Store Production Strategy
 
 **Status**: Accepted
-**Date**: 2024-11-25
+**Date**: 2025-11-25
 **Deciders**: AuthZ Engine Team
 **Technical Story**: Production-ready vector storage for pattern learning at scale
 **Supersedes**: Partial implementation details in ADR-004
@@ -407,7 +407,7 @@ const orchestratorConfig: OrchestratorConfig = {
 │  Index Health                                       │
 │  - Index size: 2.3 GB                              │
 │  - Vectors indexed: 1.2M                           │
-│  - Last rebuild: 2024-11-25 03:00 UTC              │
+│  - Last rebuild: 2025-11-25 03:00 UTC              │
 │  - Build time: 8.4 minutes                         │
 ├─────────────────────────────────────────────────────┤
 │  Query Distribution                                 │
@@ -487,6 +487,6 @@ const orchestratorConfig: OrchestratorConfig = {
 
 ---
 
-**Last Updated**: 2024-11-25
-**Decision Date**: 2024-11-25
+**Last Updated**: 2025-11-25
+**Decision Date**: 2025-11-25
 **Next Review**: After Phase 1 implementation (v1.1.0) - ~3-6 weeks

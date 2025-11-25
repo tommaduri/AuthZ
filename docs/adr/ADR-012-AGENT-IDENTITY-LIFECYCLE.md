@@ -1,7 +1,7 @@
 # ADR-012: Agent Identity Lifecycle Architecture
 
 **Status:** Accepted
-**Date:** 2024-11-25
+**Date:** 2025-11-25
 **Deciders:** Tech Lead, based on Technical Scope requirements
 
 ## Context

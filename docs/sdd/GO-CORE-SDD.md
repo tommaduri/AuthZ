@@ -1025,7 +1025,7 @@ CMD ["-config", "/config.yaml"]
 
 module authz-engine/go-core
 
-go 1.22
+go 1.24.0
 
 require (
     github.com/google/cel-go v0.20.0

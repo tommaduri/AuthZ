@@ -3,7 +3,7 @@
 **Version**: 1.1.0
 **Package**: `packages/sdk-typescript`
 **Status**: ✅ Fully Implemented
-**Last Updated**: 2024-11-24
+**Last Updated**: 2025-11-25
 
 ---
 
@@ -646,5 +646,5 @@ The following features are planned for future releases:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.1.0 | 2024-11-24 | Accurate documentation matching implementation |
+| 1.1.0 | 2025-11-25 | Accurate documentation matching implementation |
 | 1.0.0 | 2024-11-23 | Initial release with REST client |

@@ -175,9 +175,9 @@ See [CERBOS-FEATURE-COVERAGE-MATRIX.md](./CERBOS-FEATURE-COVERAGE-MATRIX.md) for
 
 **Phases Complete**: 4 of 10
 - ✅ Phase 1: Core Foundation
-- ✅ Phase 2: Scoped Policies (2024-11-24)
-- ✅ Phase 3: Principal Policies (2024-11-24) - **TypeScript + Go**
-- ✅ Phase 4: Derived Roles (2024-11-24)
+- ✅ Phase 2: Scoped Policies (2025-11-25)
+- ✅ Phase 3: Principal Policies (2025-11-25) - **TypeScript + Go**
+- ✅ Phase 4: Derived Roles (2025-11-25)
 - 📋 Phase 5: Exported Variables (Next)
 
 **Test Coverage**:
@@ -195,4 +195,4 @@ See [CERBOS-FEATURE-COVERAGE-MATRIX.md](./CERBOS-FEATURE-COVERAGE-MATRIX.md) for
 
 ---
 
-*Last updated: 2024-11-24*
+*Last updated: 2025-11-25*

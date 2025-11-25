@@ -1,7 +1,7 @@
 # ADR-011: MCP/A2A Protocol Integration Strategy
 
 **Status:** Accepted
-**Date:** 2024-11-25
+**Date:** 2025-11-25
 **Deciders:** Tech Lead, based on Technical Scope P0 requirement
 **Technical Story:** Avatar Connex agent-to-agent authorization requirements
 
