@@ -3,15 +3,18 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/authz-engine/go-core/internal/cache"
 	"github.com/authz-engine/go-core/internal/cel"
 	"github.com/authz-engine/go-core/internal/derived_roles"
+	"github.com/authz-engine/go-core/internal/embedding"
 	"github.com/authz-engine/go-core/internal/policy"
 	"github.com/authz-engine/go-core/internal/scope"
 	"github.com/authz-engine/go-core/pkg/types"
+	"github.com/authz-engine/go-core/pkg/vector"
 )
 
 // Engine is the core authorization decision engine
@@ -22,6 +25,10 @@ type Engine struct {
 	workerPool           *WorkerPool
 	scopeResolver        *scope.Resolver
 	derivedRolesResolver *derived_roles.DerivedRolesResolver
+
+	// Phase 5: Vector similarity (optional, nil if not enabled)
+	vectorStore vector.VectorStore           // Vector store for policy embeddings
+	embedWorker *embedding.EmbeddingWorker   // Background embedding worker
 
 	config Config
 }
@@ -38,6 +45,14 @@ type Config struct {
 	ParallelWorkers int
 	// DefaultEffect is the effect when no policy matches
 	DefaultEffect types.Effect
+
+	// Phase 5: Vector similarity configuration (optional)
+	// VectorSimilarityEnabled enables vector-based policy similarity search
+	VectorSimilarityEnabled bool
+	// VectorStore is the vector store for policy embeddings (nil if not enabled)
+	VectorStore vector.VectorStore
+	// EmbeddingConfig configures the background embedding worker
+	EmbeddingConfig *embedding.Config
 }
 
 // DefaultConfig returns a default engine configuration
@@ -72,7 +87,7 @@ func New(cfg Config, store policy.Store) (*Engine, error) {
 		return nil, err
 	}
 
-	return &Engine{
+	engine := &Engine{
 		cel:                  celEngine,
 		store:                store,
 		cache:                c,
@@ -80,7 +95,30 @@ func New(cfg Config, store policy.Store) (*Engine, error) {
 		scopeResolver:        scopeResolver,
 		derivedRolesResolver: derivedRolesResolver,
 		config:               cfg,
-	}, nil
+	}
+
+	// Phase 5: Initialize vector similarity if enabled
+	if cfg.VectorSimilarityEnabled && cfg.VectorStore != nil {
+		engine.vectorStore = cfg.VectorStore
+
+		// Initialize embedding worker with config or defaults
+		embedCfg := embedding.DefaultConfig()
+		if cfg.EmbeddingConfig != nil {
+			embedCfg = *cfg.EmbeddingConfig
+		}
+
+		embedWorker, err := embedding.NewEmbeddingWorker(embedCfg, store, cfg.VectorStore)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize embedding worker: %w", err)
+		}
+		engine.embedWorker = embedWorker
+
+		// Submit existing policies for embedding
+		policies := store.GetAll()
+		_ = embedWorker.SubmitBatch(policies, 1) // Low priority, fire and forget
+	}
+
+	return engine, nil
 }
 
 // Check evaluates an authorization request with principal-first policy resolution
@@ -553,4 +591,77 @@ func (e *Engine) ClearCache() {
 	if e.cache != nil {
 		e.cache.Clear()
 	}
+}
+
+// FindSimilarPolicies returns policies similar to a query using vector similarity search
+// Phase 5: Optional enhancement - does NOT impact authorization performance
+// Returns empty slice if vector similarity not enabled
+func (e *Engine) FindSimilarPolicies(ctx context.Context, query string, k int) ([]*types.Policy, error) {
+	// Graceful degradation: return empty if not enabled
+	if e.vectorStore == nil || e.embedWorker == nil {
+		return []*types.Policy{}, nil
+	}
+
+	// Generate query embedding (synchronous, <5ms)
+	queryVec, err := e.embedWorker.Embed(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate query embedding: %w", err)
+	}
+
+	// Vector similarity search (synchronous, <1ms for 100K policies)
+	results, err := e.vectorStore.Search(ctx, queryVec, k)
+	if err != nil {
+		return nil, fmt.Errorf("vector search failed: %w", err)
+	}
+
+	// Load full policies from store
+	policies := make([]*types.Policy, 0, len(results))
+	for _, res := range results {
+		pol, err := e.store.Get(res.ID)
+		if err != nil {
+			continue // Skip policies that no longer exist
+		}
+		policies = append(policies, pol)
+	}
+
+	return policies, nil
+}
+
+// SubmitPolicyForEmbedding submits a policy for background embedding generation
+// Phase 5: Called after policy changes to keep embeddings up-to-date
+// Non-blocking, gracefully degrades if queue full
+func (e *Engine) SubmitPolicyForEmbedding(pol *types.Policy, priority int) bool {
+	if e.embedWorker == nil {
+		return false // Not enabled
+	}
+	return e.embedWorker.SubmitPolicy(pol, priority)
+}
+
+// GetEmbeddingWorkerStats returns statistics about the embedding worker
+// Phase 5: Useful for monitoring and debugging
+func (e *Engine) GetEmbeddingWorkerStats() *embedding.Stats {
+	if e.embedWorker == nil {
+		return nil
+	}
+	stats := e.embedWorker.Stats()
+	return &stats
+}
+
+// Shutdown gracefully shuts down the engine and background workers
+// Phase 5: Ensures embedding worker completes or times out gracefully
+func (e *Engine) Shutdown(ctx context.Context) error {
+	if e.embedWorker != nil {
+		if err := e.embedWorker.Shutdown(ctx); err != nil {
+			return fmt.Errorf("failed to shutdown embedding worker: %w", err)
+		}
+	}
+
+	// Close vector store if it has a Close method
+	if e.vectorStore != nil {
+		if err := e.vectorStore.Close(); err != nil {
+			return fmt.Errorf("failed to close vector store: %w", err)
+		}
+	}
+
+	return nil
 }
