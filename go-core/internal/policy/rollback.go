@@ -13,6 +13,7 @@ type RollbackManager struct {
 	store        Store
 	versionStore *VersionStore
 	validator    *Validator
+	metrics      *Metrics
 }
 
 // NewRollbackManager creates a new rollback manager
@@ -21,12 +22,16 @@ func NewRollbackManager(store Store, versionStore *VersionStore, validator *Vali
 		store:        store,
 		versionStore: versionStore,
 		validator:    validator,
+		metrics:      NewMetrics(),
 	}
 }
 
 // UpdateWithRollback attempts to update policies with automatic rollback on failure
 // Returns the new version on success, or an error with rollback details on failure
 func (rm *RollbackManager) UpdateWithRollback(ctx context.Context, newPolicies map[string]*types.Policy, comment string) (*PolicyVersion, error) {
+	startTime := time.Now()
+	rm.metrics.RecordReloadAttempt()
+
 	// 1. Save current state as a version (pre-update snapshot)
 	currentPolicies := make(map[string]*types.Policy)
 	for _, p := range rm.store.GetAll() {
@@ -35,18 +40,26 @@ func (rm *RollbackManager) UpdateWithRollback(ctx context.Context, newPolicies m
 
 	currentVersion, err := rm.versionStore.SaveVersion(currentPolicies, fmt.Sprintf("Pre-update snapshot: %s", comment))
 	if err != nil {
+		duration := time.Since(startTime).Seconds()
+		rm.metrics.RecordReloadFailure(duration)
 		return nil, fmt.Errorf("failed to save current version: %w", err)
 	}
 
 	// 2. Validate all new policies before applying
 	validationErrors := make([]error, 0)
 	for name, policy := range newPolicies {
+		rm.metrics.RecordValidationAttempt()
 		if err := rm.validator.ValidatePolicy(policy); err != nil {
+			rm.metrics.RecordValidationFailure()
 			validationErrors = append(validationErrors, fmt.Errorf("policy %s: %w", name, err))
+		} else {
+			rm.metrics.RecordValidationSuccess()
 		}
 	}
 
 	if len(validationErrors) > 0 {
+		duration := time.Since(startTime).Seconds()
+		rm.metrics.RecordReloadFailure(duration)
 		// Validation failed - no need to rollback since we haven't applied yet
 		return nil, fmt.Errorf("validation failed (%d errors): %v", len(validationErrors), validationErrors)
 	}
@@ -66,6 +79,8 @@ func (rm *RollbackManager) UpdateWithRollback(ctx context.Context, newPolicies m
 	// 4. Save the new version
 	newVersion, err := rm.versionStore.SaveVersion(newPolicies, comment)
 	if err != nil {
+		duration := time.Since(startTime).Seconds()
+		rm.metrics.RecordReloadFailure(duration)
 		// Version save failed - rollback policies
 		if rollbackErr := rm.rollback(ctx, currentVersion); rollbackErr != nil {
 			return nil, fmt.Errorf("failed to save new version: %w, rollback also failed: %v", err, rollbackErr)
@@ -73,18 +88,40 @@ func (rm *RollbackManager) UpdateWithRollback(ctx context.Context, newPolicies m
 		return nil, fmt.Errorf("failed to save new version (rolled back): %w", err)
 	}
 
+	// Success - record metrics
+	duration := time.Since(startTime).Seconds()
+	rm.metrics.RecordReloadSuccess(duration)
+	rm.metrics.SetCurrentVersion(newVersion.Version)
+	rm.metrics.SetPolicyCount(len(newPolicies))
+
 	return newVersion, nil
 }
 
 // Rollback performs a manual rollback to a specific version
 func (rm *RollbackManager) Rollback(ctx context.Context, targetVersion int64) error {
+	startTime := time.Now()
+	rm.metrics.RecordRollbackAttempt()
+
 	// Get the target version
 	version, err := rm.versionStore.GetVersion(targetVersion)
 	if err != nil {
+		duration := time.Since(startTime).Seconds()
+		rm.metrics.RecordRollbackFailure(duration)
 		return fmt.Errorf("failed to get version %d: %w", targetVersion, err)
 	}
 
-	return rm.rollback(ctx, version)
+	if err := rm.rollback(ctx, version); err != nil {
+		duration := time.Since(startTime).Seconds()
+		rm.metrics.RecordRollbackFailure(duration)
+		return err
+	}
+
+	duration := time.Since(startTime).Seconds()
+	rm.metrics.RecordRollbackSuccess(duration)
+	rm.metrics.SetCurrentVersion(version.Version)
+	rm.metrics.SetPolicyCount(len(version.Policies))
+
+	return nil
 }
 
 // RollbackToPrevious rolls back to the previous version
