@@ -147,6 +147,11 @@ func (s *Server) Stop(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
+// Router returns the underlying router for testing
+func (s *Server) Router() *mux.Router {
+	return s.router
+}
+
 // Response helpers
 type apiResponse struct {
 	Success bool        `json:"success"`
