@@ -14,15 +14,20 @@ type RollbackManager struct {
 	versionStore *VersionStore
 	validator    *Validator
 	metrics      *Metrics
+	notifier     *Notifier
 }
 
 // NewRollbackManager creates a new rollback manager
 func NewRollbackManager(store Store, versionStore *VersionStore, validator *Validator) *RollbackManager {
+	notifier := NewNotifier()
+	notifier.Start()
+
 	return &RollbackManager{
 		store:        store,
 		versionStore: versionStore,
 		validator:    validator,
 		metrics:      NewMetrics(),
+		notifier:     notifier,
 	}
 }
 
@@ -60,6 +65,16 @@ func (rm *RollbackManager) UpdateWithRollback(ctx context.Context, newPolicies m
 	if len(validationErrors) > 0 {
 		duration := time.Since(startTime).Seconds()
 		rm.metrics.RecordReloadFailure(duration)
+
+		// Publish validation failure event
+		rm.notifier.Publish(NotificationEvent{
+			Type:      NotifyPolicyValidationFailed,
+			Timestamp: time.Now(),
+			Policies:  newPolicies,
+			Error:     fmt.Errorf("validation failed (%d errors): %v", len(validationErrors), validationErrors),
+			Comment:   comment,
+		})
+
 		// Validation failed - no need to rollback since we haven't applied yet
 		return nil, fmt.Errorf("validation failed (%d errors): %v", len(validationErrors), validationErrors)
 	}
@@ -94,6 +109,24 @@ func (rm *RollbackManager) UpdateWithRollback(ctx context.Context, newPolicies m
 	rm.metrics.SetCurrentVersion(newVersion.Version)
 	rm.metrics.SetPolicyCount(len(newPolicies))
 
+	// Publish update success event
+	rm.notifier.Publish(NotificationEvent{
+		Type:      NotifyPolicyUpdated,
+		Timestamp: time.Now(),
+		Version:   newVersion.Version,
+		Policies:  newPolicies,
+		Comment:   comment,
+	})
+
+	// Publish version created event
+	rm.notifier.Publish(NotificationEvent{
+		Type:      NotifyVersionCreated,
+		Timestamp: time.Now(),
+		Version:   newVersion.Version,
+		Policies:  newPolicies,
+		Comment:   comment,
+	})
+
 	return newVersion, nil
 }
 
@@ -120,6 +153,15 @@ func (rm *RollbackManager) Rollback(ctx context.Context, targetVersion int64) er
 	rm.metrics.RecordRollbackSuccess(duration)
 	rm.metrics.SetCurrentVersion(version.Version)
 	rm.metrics.SetPolicyCount(len(version.Policies))
+
+	// Publish rollback success event
+	rm.notifier.Publish(NotificationEvent{
+		Type:      NotifyPolicyRolledBack,
+		Timestamp: time.Now(),
+		Version:   version.Version,
+		Policies:  version.Policies,
+		Comment:   fmt.Sprintf("Rolled back to version %d", version.Version),
+	})
 
 	return nil
 }
