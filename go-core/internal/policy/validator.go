@@ -232,11 +232,12 @@ func isValidIdentifier(s string) bool {
 
 // isValidAction checks if an action name is valid
 func isValidAction(action string) bool {
-	// Allow alphanumeric, hyphens, underscores, and wildcard
+	// Allow alphanumeric, hyphens, underscores, colons, and wildcard
 	if action == "*" {
 		return true
 	}
-	pattern := `^[a-zA-Z_][a-zA-Z0-9_-:]*$`
+	// Fixed regex: hyphen must be at end of character class or escaped
+	pattern := `^[a-zA-Z_][a-zA-Z0-9_:\-]*$`
 	matched, err := regexp.MatchString(pattern, action)
 	return err == nil && matched
 }
