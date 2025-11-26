@@ -1,0 +1,324 @@
+# Prometheus Alerting Rules for AuthZ Engine
+# Phase 4.5: Observability Suite
+# Last Updated: 2025-11-26
+
+groups:
+  # ============================================================================
+  # Authorization SLO Violations (CRITICAL)
+  # ============================================================================
+  - name: authz_slo_violations
+    interval: 30s
+    rules:
+      # Alert: High Authorization Latency
+      - alert: HighAuthorizationLatency
+        expr: |
+          histogram_quantile(0.99,
+            rate(authz_check_duration_microseconds_bucket[2m])
+          ) > 10
+        for: 5m
+        labels:
+          severity: critical
+          component: authorization
+          team: authz-platform
+        annotations:
+          summary: "Authorization p99 latency exceeds SLO (>10µs)"
+          description: "p99 latency is {{ $value }}µs (threshold: 10µs). Check cache hit rate and system resources."
+          runbook_url: "https://docs.authz-engine.io/runbooks/high-latency"
+
+      # Alert: High Error Rate
+      - alert: HighErrorRate
+        expr: |
+          (
+            rate(authz_errors_total[5m]) /
+            rate(authz_checks_total[5m])
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          component: authorization
+          team: authz-platform
+        annotations:
+          summary: "Authorization error rate exceeds 5%"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%). Investigate error types immediately."
+          runbook_url: "https://docs.authz-engine.io/runbooks/high-errors"
+
+      # Alert: Low Cache Hit Rate
+      - alert: LowCacheHitRate
+        expr: |
+          (
+            rate(authz_cache_hits_total[10m]) /
+            (rate(authz_cache_hits_total[10m]) + rate(authz_cache_misses_total[10m]))
+          ) < 0.70
+        for: 10m
+        labels:
+          severity: warning
+          component: authorization
+          team: authz-platform
+        annotations:
+          summary: "Cache hit rate below 70%"
+          description: "Cache hit rate is {{ $value | humanizePercentage }} (threshold: 70%). Consider increasing cache size or reviewing policy patterns."
+          runbook_url: "https://docs.authz-engine.io/runbooks/low-cache-hit-rate"
+
+      # Alert: Authorization Service Down
+      - alert: AuthorizationServiceDown
+        expr: up{job="authz-engine"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: authorization
+          team: authz-platform
+        annotations:
+          summary: "Authorization service is down"
+          description: "The authorization service has been unreachable for 1 minute. Check service health and restart if necessary."
+          runbook_url: "https://docs.authz-engine.io/runbooks/service-down"
+
+  # ============================================================================
+  # Embedding Pipeline Health (WARNING)
+  # ============================================================================
+  - name: embedding_pipeline_health
+    interval: 30s
+    rules:
+      # Alert: Embedding Queue Saturated
+      - alert: EmbeddingQueueSaturated
+        expr: authz_embedding_queue_depth > 800
+        for: 5m
+        labels:
+          severity: warning
+          component: embedding
+          team: authz-platform
+        annotations:
+          summary: "Embedding queue >80% full (saturated)"
+          description: "Queue depth is {{ $value }} (capacity: 1000, threshold: 800). Consider scaling workers or reducing job submission rate."
+          runbook_url: "https://docs.authz-engine.io/runbooks/queue-saturated"
+
+      # Alert: High Embedding Failure Rate
+      - alert: HighEmbeddingFailureRate
+        expr: |
+          (
+            rate(authz_embedding_jobs_total{status="failed"}[5m]) /
+            rate(authz_embedding_jobs_total[5m])
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+          component: embedding
+          team: authz-platform
+        annotations:
+          summary: "Embedding job failure rate >10%"
+          description: "Failure rate is {{ $value | humanizePercentage }} (threshold: 10%). Investigate embedding service health and API connectivity."
+          runbook_url: "https://docs.authz-engine.io/runbooks/embedding-failures"
+
+      # Alert: Embedding Job Latency High
+      - alert: EmbeddingJobLatencyHigh
+        expr: |
+          histogram_quantile(0.99,
+            rate(authz_embedding_job_duration_milliseconds_bucket[5m])
+          ) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: embedding
+          team: authz-platform
+        annotations:
+          summary: "Embedding job p99 latency >1000ms"
+          description: "p99 latency is {{ $value }}ms (threshold: 1000ms). Check embedding service performance and network latency."
+          runbook_url: "https://docs.authz-engine.io/runbooks/slow-embedding"
+
+      # Alert: Embedding Workers Idle
+      - alert: EmbeddingWorkersIdle
+        expr: authz_embedding_workers_active == 0 and authz_embedding_queue_depth > 0
+        for: 3m
+        labels:
+          severity: warning
+          component: embedding
+          team: authz-platform
+        annotations:
+          summary: "Embedding workers idle while queue has jobs"
+          description: "Queue depth is {{ $value }} but no workers are active. Worker pool may have failed."
+          runbook_url: "https://docs.authz-engine.io/runbooks/workers-idle"
+
+      # Alert: Embedding Cache Hit Rate Low
+      - alert: EmbeddingCacheHitRateLow
+        expr: |
+          (
+            rate(authz_embedding_cache_hits_total[10m]) /
+            (rate(authz_embedding_cache_hits_total[10m]) + rate(authz_embedding_cache_misses_total[10m]))
+          ) < 0.70
+        for: 10m
+        labels:
+          severity: info
+          component: embedding
+          team: authz-platform
+        annotations:
+          summary: "Embedding cache hit rate below 70%"
+          description: "Cache hit rate is {{ $value | humanizePercentage }}. Consider increasing cache size if embeddings are being recomputed frequently."
+          runbook_url: "https://docs.authz-engine.io/runbooks/embedding-cache-low"
+
+  # ============================================================================
+  # Vector Store Performance (WARNING)
+  # ============================================================================
+  - name: vector_store_performance
+    interval: 30s
+    rules:
+      # Alert: Slow Vector Search
+      - alert: SlowVectorSearch
+        expr: |
+          histogram_quantile(0.99,
+            rate(authz_vector_search_duration_milliseconds_bucket[5m])
+          ) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: vector_store
+          team: authz-platform
+        annotations:
+          summary: "Vector search p99 latency >100ms"
+          description: "p99 search latency is {{ $value }}ms (threshold: 100ms). Index may need rebuilding or optimization."
+          runbook_url: "https://docs.authz-engine.io/runbooks/slow-vector-search"
+
+      # Alert: High Vector Error Rate
+      - alert: HighVectorErrorRate
+        expr: |
+          (
+            rate(authz_vector_search_errors_total[5m]) /
+            rate(authz_vector_operations_total{op="search"}[5m])
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          component: vector_store
+          team: authz-platform
+        annotations:
+          summary: "Vector search error rate >5%"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%). Check vector store health and index integrity."
+          runbook_url: "https://docs.authz-engine.io/runbooks/vector-errors"
+
+      # Alert: Vector Index Too Big
+      - alert: VectorIndexTooBig
+        expr: authz_vector_index_size_bytes > 10737418240  # 10GB
+        for: 15m
+        labels:
+          severity: info
+          component: vector_store
+          team: authz-platform
+        annotations:
+          summary: "Vector index size exceeds 10GB"
+          description: "Index size is {{ $value | humanize1024 }}. Consider index pruning or archiving old vectors."
+          runbook_url: "https://docs.authz-engine.io/runbooks/large-index"
+
+      # Alert: Vector Insert Latency High
+      - alert: VectorInsertLatencyHigh
+        expr: |
+          histogram_quantile(0.99,
+            rate(authz_vector_insert_duration_milliseconds_bucket[5m])
+          ) > 50
+        for: 10m
+        labels:
+          severity: info
+          component: vector_store
+          team: authz-platform
+        annotations:
+          summary: "Vector insert p99 latency >50ms"
+          description: "p99 insert latency is {{ $value }}ms (threshold: 50ms). Index may be approaching capacity."
+          runbook_url: "https://docs.authz-engine.io/runbooks/slow-vector-insert"
+
+      # Alert: Vector Store Size Growing Rapidly
+      - alert: VectorStoreGrowthHigh
+        expr: |
+          (
+            rate(authz_vector_store_size[1h]) /
+            authz_vector_store_size
+          ) > 0.10
+        for: 30m
+        labels:
+          severity: info
+          component: vector_store
+          team: authz-platform
+        annotations:
+          summary: "Vector store growing >10% per hour"
+          description: "Store is growing at {{ $value | humanizePercentage }}/hour. Monitor capacity and consider scaling."
+          runbook_url: "https://docs.authz-engine.io/runbooks/rapid-growth"
+
+  # ============================================================================
+  # Resource Utilization (INFO)
+  # ============================================================================
+  - name: resource_utilization
+    interval: 30s
+    rules:
+      # Alert: High Active Requests
+      - alert: HighActiveRequests
+        expr: authz_active_requests > 100
+        for: 5m
+        labels:
+          severity: info
+          component: authorization
+          team: authz-platform
+        annotations:
+          summary: "High number of concurrent authorization requests"
+          description: "Active requests: {{ $value }}. System may be under heavy load."
+          runbook_url: "https://docs.authz-engine.io/runbooks/high-load"
+
+      # Alert: Authorization Decision Imbalance
+      - alert: AuthorizationDecisionImbalance
+        expr: |
+          (
+            rate(authz_checks_total{effect="deny"}[10m]) /
+            rate(authz_checks_total[10m])
+          ) > 0.90
+        for: 10m
+        labels:
+          severity: info
+          component: authorization
+          team: authz-platform
+        annotations:
+          summary: "Authorization decisions >90% denials"
+          description: "Deny rate is {{ $value | humanizePercentage }}. This may indicate misconfigured policies or unusual access patterns."
+          runbook_url: "https://docs.authz-engine.io/runbooks/decision-imbalance"
+
+  # ============================================================================
+  # Error Type Monitoring (INFO)
+  # ============================================================================
+  - name: error_monitoring
+    interval: 30s
+    rules:
+      # Alert: CEL Evaluation Errors Spike
+      - alert: CELEvaluationErrorsSpike
+        expr: |
+          rate(authz_errors_total{type="cel_eval"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: authorization
+          team: authz-platform
+        annotations:
+          summary: "CEL evaluation errors spiking"
+          description: "CEL errors at {{ $value }}/sec. Review recent policy changes for syntax errors or undefined variables."
+          runbook_url: "https://docs.authz-engine.io/runbooks/cel-errors"
+
+      # Alert: Policy Not Found Errors
+      - alert: PolicyNotFoundErrors
+        expr: |
+          rate(authz_errors_total{type="policy_not_found"}[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: authorization
+          team: authz-platform
+        annotations:
+          summary: "Policy not found errors occurring"
+          description: "Policy lookup errors at {{ $value }}/sec. Check policy deployment or request validation."
+          runbook_url: "https://docs.authz-engine.io/runbooks/policy-not-found"
+
+      # Alert: Vector Search Timeout Errors
+      - alert: VectorSearchTimeoutErrors
+        expr: |
+          rate(authz_vector_search_errors_total{type="timeout"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: vector_store
+          team: authz-platform
+        annotations:
+          summary: "Vector search timeouts occurring"
+          description: "Timeout errors at {{ $value }}/sec. Vector store may be overloaded or index corrupted."
+          runbook_url: "https://docs.authz-engine.io/runbooks/vector-timeouts"
