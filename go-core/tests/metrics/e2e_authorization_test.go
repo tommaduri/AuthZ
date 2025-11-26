@@ -2,6 +2,7 @@ package metrics_test
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -36,7 +37,7 @@ func TestE2E_AuthorizationWorkflow(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -125,7 +126,7 @@ func TestE2E_AuthorizationLatency(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -190,7 +191,7 @@ func TestE2E_AuthorizationEffects(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -261,49 +262,38 @@ func TestE2E_AuthorizationEffects(t *testing.T) {
 // Helper: Load test policies into store
 func loadTestPolicies(t *testing.T, store *policy.MemoryStore, count int) {
 	for i := 0; i < count; i++ {
-		policy := &types.ResourcePolicy{
-			ApiVersion: "api.authz.com/v1",
-			ResourcePolicy: &types.ResourcePolicyDef{
-				Resource: "document",
-				Version:  "default",
-				Rules: []*types.ResourceRule{
-					{
-						Actions: []string{"read"},
-						Effect:  types.EffectAllow,
-						Roles:   []string{"viewer"},
-					},
+		pol := &types.Policy{
+			Name:         "test-policy-" + itoa(i),
+			ResourceKind: "document",
+			Rules: []*types.Rule{
+				{
+					Name:    "allow-read",
+					Actions: []string{"read"},
+					Effect:  types.EffectAllow,
+					Roles:   []string{"viewer"},
 				},
 			},
-			Metadata: &types.Metadata{
-				SourceFile: "test-policy-" + itoa(i) + ".yaml",
-			},
 		}
-		err := store.AddOrUpdatePolicy(context.Background(), policy)
-		require.NoError(t, err)
+		store.Add(pol)
 	}
 }
 
 // Helper: Load policies with mixed effects
 func loadMixedEffectPolicies(t *testing.T, store *policy.MemoryStore) {
 	// Allow policy for admins
-	allowPolicy := &types.ResourcePolicy{
-		ApiVersion: "api.authz.com/v1",
-		ResourcePolicy: &types.ResourcePolicyDef{
-			Resource: "document",
-			Version:  "default",
-			Rules: []*types.ResourceRule{
-				{
-					Actions: []string{"write"},
-					Effect:  types.EffectAllow,
-					Roles:   []string{"admin"},
-				},
+	allowPolicy := &types.Policy{
+		Name:         "allow-policy",
+		ResourceKind: "document",
+		Rules: []*types.Rule{
+			{
+				Name:    "admin-write",
+				Actions: []string{"write"},
+				Effect:  types.EffectAllow,
+				Roles:   []string{"admin"},
 			},
 		},
-		Metadata: &types.Metadata{
-			SourceFile: "allow-policy.yaml",
-		},
 	}
-	require.NoError(t, store.AddOrUpdatePolicy(context.Background(), allowPolicy))
+	store.Add(allowPolicy)
 }
 
 // Helper: Calculate cache hit rate from Prometheus output

@@ -2,7 +2,6 @@ package metrics_test
 
 import (
 	"context"
-	"fmt"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -35,7 +34,7 @@ func TestE2E_CacheMetrics(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -117,7 +116,7 @@ func TestE2E_CacheHitRateTarget(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -179,7 +178,7 @@ func TestE2E_CacheEviction(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -240,7 +239,7 @@ func TestE2E_CacheTTL(t *testing.T) {
 	}
 
 	m := metrics.NewPrometheusMetrics("authz_test")
-	store := memory.NewMemoryStore()
+	store := policy.NewMemoryStore()
 
 	loadTestPolicies(t, store, 5)
 
@@ -254,7 +253,7 @@ func TestE2E_CacheTTL(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -313,7 +312,7 @@ func TestE2E_CacheDisabled(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -366,7 +365,7 @@ func TestE2E_CacheWarmup(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 

@@ -2,6 +2,7 @@ package metrics_test
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/authz-engine/go-core/internal/engine"
 	"github.com/authz-engine/go-core/internal/metrics"
 	"github.com/authz-engine/go-core/internal/policy"
+	intvector "github.com/authz-engine/go-core/internal/vector"
 	"github.com/authz-engine/go-core/pkg/types"
 	"github.com/authz-engine/go-core/pkg/vector"
 	"github.com/stretchr/testify/assert"
@@ -24,15 +26,27 @@ func TestE2E_EmbeddingPipeline(t *testing.T) {
 	// Setup: Create engine with embedding worker
 	m := metrics.NewPrometheusMetrics("authz_test")
 	store := policy.NewMemoryStore()
-	vectorStore := vector.NewInMemoryVectorStore()
+
+	vectorStore, err := intvector.NewMemoryStore(vector.Config{
+		Backend:   "memory",
+		Dimension: 384,
+		HNSW: vector.HNSWConfig{
+			M:              16,
+			EfConstruction: 200,
+			EfSearch:       50,
+		},
+	})
+	require.NoError(t, err)
+	defer vectorStore.Close()
 
 	embedConfig := &embedding.Config{
-		NumWorkers:       4,
-		QueueSize:        1000,
-		BatchSize:        10,
-		EmbeddingTimeout: 5 * time.Second,
-		CacheSize:        500,
-		Metrics:          m,
+		NumWorkers:    4,
+		QueueSize:     1000,
+		BatchSize:     10,
+		Dimension:     384,
+		EmbeddingFunc: embedding.DefaultEmbeddingFunction,
+		CacheConfig:   &embedding.CacheConfig{MaxEntries: 500},
+		Metrics:       m,
 	}
 
 	cfg := engine.Config{
@@ -45,35 +59,26 @@ func TestE2E_EmbeddingPipeline(t *testing.T) {
 		Metrics:                 m,
 	}
 
-	eng, err := engine.New(cfg, store)
-	require.NoError(t, err)
-	defer eng.Shutdown()
-
-	ctx := context.Background()
+	eng, err2 := engine.New(cfg, store)
+	require.NoError(t, err2)
+	defer eng.Shutdown(context.Background())
 
 	// Execute: Submit 500 policies for embedding
 	numPolicies := 500
 	for i := 0; i < numPolicies; i++ {
-		policy := &types.ResourcePolicy{
-			ApiVersion: "api.authz.com/v1",
-			ResourcePolicy: &types.ResourcePolicyDef{
-				Resource: "document",
-				Version:  "v" + itoa(i),
-				Rules: []*types.ResourceRule{
-					{
-						Actions: []string{"read", "write"},
-						Effect:  types.EffectAllow,
-						Roles:   []string{"user"},
-					},
+		pol := &types.Policy{
+			Name:         "policy-" + itoa(i),
+			ResourceKind: "document",
+			Rules: []*types.Rule{
+				{
+					Name:    "allow-read-write",
+					Actions: []string{"read", "write"},
+					Effect:  types.EffectAllow,
+					Roles:   []string{"user"},
 				},
 			},
-			Metadata: &types.Metadata{
-				SourceFile: "policy-" + itoa(i) + ".yaml",
-			},
 		}
-
-		err := store.AddOrUpdatePolicy(ctx, policy)
-		require.NoError(t, err)
+		store.Add(pol)
 	}
 
 	// Wait for embedding jobs to complete (with timeout)
@@ -116,7 +121,7 @@ VerifyMetrics:
 
 	// Parse success count
 	successCount := extractLabeledMetricValue(body, "authz_test_embedding_jobs_total", "success")
-	assert.Greater(t, successCount, float64(numPolicies*0.9),
+	assert.Greater(t, successCount, float64(numPolicies)*0.9,
 		"At least 90%% of jobs should succeed (got %.0f/%d)", successCount, numPolicies)
 
 	// Verify queue returned to 0
@@ -136,7 +141,7 @@ VerifyMetrics:
 
 	// Verify no failures (or very few)
 	failedCount := extractLabeledMetricValue(body, "authz_test_embedding_jobs_total", "failed")
-	assert.Less(t, failedCount, float64(numPolicies*0.05),
+	assert.Less(t, failedCount, float64(numPolicies)*0.05,
 		"Failure rate should be <5%% (got %.0f/%d)", failedCount, numPolicies)
 }
 
@@ -144,15 +149,27 @@ VerifyMetrics:
 func TestE2E_EmbeddingWorkerUtilization(t *testing.T) {
 	m := metrics.NewPrometheusMetrics("authz_test")
 	store := policy.NewMemoryStore()
-	vectorStore := vector.NewInMemoryVectorStore()
+
+	vectorStore, err := intvector.NewMemoryStore(vector.Config{
+		Backend:   "memory",
+		Dimension: 384,
+		HNSW: vector.HNSWConfig{
+			M:              16,
+			EfConstruction: 200,
+			EfSearch:       50,
+		},
+	})
+	require.NoError(t, err)
+	defer vectorStore.Close()
 
 	// Use only 2 workers to make utilization more observable
 	embedConfig := &embedding.Config{
-		NumWorkers:       2,
-		QueueSize:        100,
-		BatchSize:        5,
-		EmbeddingTimeout: 1 * time.Second,
-		Metrics:          m,
+		NumWorkers:    2,
+		QueueSize:     100,
+		BatchSize:     5,
+		Dimension:     384,
+		EmbeddingFunc: embedding.DefaultEmbeddingFunction,
+		Metrics:       m,
 	}
 
 	cfg := engine.Config{
@@ -162,34 +179,25 @@ func TestE2E_EmbeddingWorkerUtilization(t *testing.T) {
 		Metrics:                 m,
 	}
 
-	eng, err := engine.New(cfg, store)
-	require.NoError(t, err)
-	defer eng.Shutdown()
-
-	ctx := context.Background()
+	eng, err2 := engine.New(cfg, store)
+	require.NoError(t, err2)
+	defer eng.Shutdown(context.Background())
 
 	// Submit policies in batches to observe worker activity
 	for i := 0; i < 50; i++ {
-		policy := &types.ResourcePolicy{
-			ApiVersion: "api.authz.com/v1",
-			ResourcePolicy: &types.ResourcePolicyDef{
-				Resource: "resource-" + itoa(i),
-				Version:  "default",
-				Rules: []*types.ResourceRule{
-					{
-						Actions: []string{"read"},
-						Effect:  types.EffectAllow,
-						Roles:   []string{"user"},
-					},
+		pol := &types.Policy{
+			Name:         "policy-" + itoa(i),
+			ResourceKind: "resource-" + itoa(i),
+			Rules: []*types.Rule{
+				{
+					Name:    "allow-read",
+					Actions: []string{"read"},
+					Effect:  types.EffectAllow,
+					Roles:   []string{"user"},
 				},
 			},
-			Metadata: &types.Metadata{
-				SourceFile: "policy-" + itoa(i) + ".yaml",
-			},
 		}
-
-		err := store.AddOrUpdatePolicy(ctx, policy)
-		require.NoError(t, err)
+		store.Add(pol)
 
 		// Check metrics periodically
 		if i%10 == 0 {
@@ -234,15 +242,27 @@ func TestE2E_EmbeddingWorkerUtilization(t *testing.T) {
 func TestE2E_EmbeddingCacheEffectiveness(t *testing.T) {
 	m := metrics.NewPrometheusMetrics("authz_test")
 	store := policy.NewMemoryStore()
-	vectorStore := vector.NewInMemoryVectorStore()
+
+	vectorStore, err := intvector.NewMemoryStore(vector.Config{
+		Backend:   "memory",
+		Dimension: 384,
+		HNSW: vector.HNSWConfig{
+			M:              16,
+			EfConstruction: 200,
+			EfSearch:       50,
+		},
+	})
+	require.NoError(t, err)
+	defer vectorStore.Close()
 
 	embedConfig := &embedding.Config{
-		NumWorkers:       4,
-		QueueSize:        100,
-		BatchSize:        10,
-		EmbeddingTimeout: 2 * time.Second,
-		CacheSize:        50, // Small cache to test evictions
-		Metrics:          m,
+		NumWorkers:    4,
+		QueueSize:     100,
+		BatchSize:     10,
+		Dimension:     384,
+		EmbeddingFunc: embedding.DefaultEmbeddingFunction,
+		CacheConfig:   &embedding.CacheConfig{MaxEntries: 50}, // Small cache to test evictions
+		Metrics:       m,
 	}
 
 	cfg := engine.Config{
@@ -252,56 +272,44 @@ func TestE2E_EmbeddingCacheEffectiveness(t *testing.T) {
 		Metrics:                 m,
 	}
 
-	eng, err := engine.New(cfg, store)
-	require.NoError(t, err)
-	defer eng.Shutdown()
-
-	ctx := context.Background()
+	eng, err2 := engine.New(cfg, store)
+	require.NoError(t, err2)
+	defer eng.Shutdown(context.Background())
 
 	// Phase 1: Add unique policies (should be cache misses)
 	for i := 0; i < 30; i++ {
-		policy := &types.ResourcePolicy{
-			ApiVersion: "api.authz.com/v1",
-			ResourcePolicy: &types.ResourcePolicyDef{
-				Resource: "unique-" + itoa(i),
-				Version:  "default",
-				Rules: []*types.ResourceRule{
-					{
-						Actions: []string{"read"},
-						Effect:  types.EffectAllow,
-						Roles:   []string{"user"},
-					},
+		pol := &types.Policy{
+			Name:         "unique-" + itoa(i),
+			ResourceKind: "unique-" + itoa(i),
+			Rules: []*types.Rule{
+				{
+					Name:    "allow-read",
+					Actions: []string{"read"},
+					Effect:  types.EffectAllow,
+					Roles:   []string{"user"},
 				},
 			},
-			Metadata: &types.Metadata{
-				SourceFile: "unique-" + itoa(i) + ".yaml",
-			},
 		}
-		require.NoError(t, store.AddOrUpdatePolicy(ctx, policy))
+		store.Add(pol)
 	}
 
 	time.Sleep(2 * time.Second)
 
 	// Phase 2: Re-add same policies (should be cache hits)
 	for i := 0; i < 30; i++ {
-		policy := &types.ResourcePolicy{
-			ApiVersion: "api.authz.com/v1",
-			ResourcePolicy: &types.ResourcePolicyDef{
-				Resource: "unique-" + itoa(i),
-				Version:  "default",
-				Rules: []*types.ResourceRule{
-					{
-						Actions: []string{"read"},
-						Effect:  types.EffectAllow,
-						Roles:   []string{"user"},
-					},
+		pol := &types.Policy{
+			Name:         "unique-" + itoa(i),
+			ResourceKind: "unique-" + itoa(i),
+			Rules: []*types.Rule{
+				{
+					Name:    "allow-read",
+					Actions: []string{"read"},
+					Effect:  types.EffectAllow,
+					Roles:   []string{"user"},
 				},
 			},
-			Metadata: &types.Metadata{
-				SourceFile: "unique-" + itoa(i) + ".yaml",
-			},
 		}
-		require.NoError(t, store.AddOrUpdatePolicy(ctx, policy))
+		store.Add(pol)
 	}
 
 	time.Sleep(2 * time.Second)

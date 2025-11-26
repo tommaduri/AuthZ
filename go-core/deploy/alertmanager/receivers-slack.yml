@@ -1,0 +1,361 @@
+# Slack Receiver Configuration Example
+# Phase 4.5: Observability Suite
+# Last Updated: 2025-11-26
+#
+# This file shows example Slack configurations for different severity levels and components.
+# Include this in your main alertmanager.yml or use as reference.
+
+receivers:
+  # ========================================================================
+  # Slack Integration - Severity-Based Routing
+  # ========================================================================
+
+  # Critical alerts - High priority channel
+  - name: 'slack-critical'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL_CRITICAL>'
+        channel: '#authz-alerts-critical'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':rotating_light:'
+
+        # Title with status indicator
+        title: ':fire: CRITICAL: {{ .GroupLabels.alertname }} ({{ .Status }})'
+        title_link: '{{ .CommonAnnotations.runbook_url }}'
+
+        # Message body with detailed information
+        text: |
+          *Severity:* {{ .CommonLabels.severity | toUpper }}
+          *Component:* {{ .CommonLabels.component }}
+          *Cluster:* {{ .CommonLabels.cluster | default "unknown" }}
+          *Team:* {{ .CommonLabels.team }}
+
+          *Summary:*
+          {{ .CommonAnnotations.summary }}
+
+          *Description:*
+          {{ .CommonAnnotations.description }}
+
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+
+          *Firing Alerts:* {{ .Alerts.Firing | len }}
+          *Resolved Alerts:* {{ .Alerts.Resolved | len }}
+
+        # Color coding based on status
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+
+        # Send resolved notifications
+        send_resolved: true
+
+        # Additional fields
+        fields:
+          - title: 'Alert Name'
+            value: '{{ .GroupLabels.alertname }}'
+            short: true
+          - title: 'Severity'
+            value: '{{ .CommonLabels.severity }}'
+            short: true
+          - title: 'Component'
+            value: '{{ .CommonLabels.component }}'
+            short: true
+          - title: 'Status'
+            value: '{{ .Status }}'
+            short: true
+
+        # Footer
+        footer: 'AuthZ Engine Monitoring'
+        footer_icon: 'https://authz-engine.io/icon.png'
+
+  # Warning alerts - Standard monitoring channel
+  - name: 'slack-warnings'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-alerts-warnings'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':warning:'
+        title: ':warning: {{ .GroupLabels.alertname }} ({{ .Status }})'
+        title_link: '{{ .CommonAnnotations.runbook_url }}'
+        text: |
+          *Component:* {{ .CommonLabels.component }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+        color: '{{ if eq .Status "firing" }}warning{{ else }}good{{ end }}'
+        send_resolved: true
+
+  # Info alerts - Low priority channel
+  - name: 'slack-info'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-alerts-info'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':information_source:'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ .CommonAnnotations.description }}'
+        color: '#439FE0'
+        send_resolved: true
+
+  # ========================================================================
+  # Slack Integration - Component-Based Routing
+  # ========================================================================
+
+  # Authorization component alerts
+  - name: 'slack-authorization'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-alerts-authorization'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':shield:'
+        title: '[Authorization] {{ .GroupLabels.alertname }}'
+        title_link: 'https://grafana.authz-engine.io/d/authz-authorization'
+        text: |
+          *{{ .CommonAnnotations.summary }}*
+
+          {{ .CommonAnnotations.description }}
+
+          *Links:*
+          • <{{ .CommonAnnotations.runbook_url }}|Runbook>
+          • <https://grafana.authz-engine.io/d/authz-authorization|Dashboard>
+          • <https://prometheus.authz-engine.io|Prometheus>
+        color: '{{ if eq .CommonLabels.severity "critical" }}danger{{ else if eq .CommonLabels.severity "warning" }}warning{{ else }}good{{ end }}'
+        send_resolved: true
+        fields:
+          - title: 'Severity'
+            value: '{{ .CommonLabels.severity | toUpper }}'
+            short: true
+          - title: 'Status'
+            value: '{{ .Status }}'
+            short: true
+
+  # Embedding pipeline alerts
+  - name: 'slack-embedding'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-alerts-embedding'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':brain:'
+        title: '[Embedding Pipeline] {{ .GroupLabels.alertname }}'
+        title_link: 'https://grafana.authz-engine.io/d/authz-embedding'
+        text: |
+          *{{ .CommonAnnotations.summary }}*
+
+          {{ .CommonAnnotations.description }}
+
+          *Queue Status:*
+          Check the <https://grafana.authz-engine.io/d/authz-embedding|Embedding Dashboard> for current queue depth and worker status.
+
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+        color: '{{ if eq .CommonLabels.severity "critical" }}danger{{ else if eq .CommonLabels.severity "warning" }}warning{{ else }}good{{ end }}'
+        send_resolved: true
+
+  # Vector store alerts
+  - name: 'slack-vector-store'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-alerts-vector'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':mag:'
+        title: '[Vector Store] {{ .GroupLabels.alertname }}'
+        title_link: 'https://grafana.authz-engine.io/d/authz-vector'
+        text: |
+          *{{ .CommonAnnotations.summary }}*
+
+          {{ .CommonAnnotations.description }}
+
+          *Performance Metrics:*
+          Check the <https://grafana.authz-engine.io/d/authz-vector|Vector Store Dashboard> for search latency and error rates.
+
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+        color: '{{ if eq .CommonLabels.severity "critical" }}danger{{ else if eq .CommonLabels.severity "warning" }}warning{{ else }}good{{ end }}'
+        send_resolved: true
+
+  # ========================================================================
+  # Slack Integration - Alert Type Specific
+  # ========================================================================
+
+  # Policy error alerts (CEL evaluation, policy not found)
+  - name: 'slack-policy-errors'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-policy-errors'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':x:'
+        title: ':x: Policy Error: {{ .GroupLabels.alertname }}'
+        text: |
+          *Policy Evaluation Error Detected*
+
+          {{ .CommonAnnotations.description }}
+
+          *Action Required:*
+          • Review recent policy changes
+          • Check CEL syntax and variables
+          • Verify policy deployment
+
+          *Resources:*
+          • <{{ .CommonAnnotations.runbook_url }}|Runbook>
+          • <https://grafana.authz-engine.io/d/authz-policies|Policy Dashboard>
+          • <https://docs.authz-engine.io/policy-syntax|Policy Syntax Guide>
+        color: 'danger'
+        send_resolved: true
+
+  # Performance degradation alerts
+  - name: 'slack-performance'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-performance'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':chart_with_downwards_trend:'
+        title: ':chart_with_downwards_trend: Performance Issue: {{ .GroupLabels.alertname }}'
+        text: |
+          *Performance Degradation Detected*
+
+          {{ .CommonAnnotations.description }}
+
+          *Recommended Actions:*
+          • Check system resources (CPU, memory)
+          • Review cache hit rates
+          • Investigate slow queries
+
+          *Dashboards:*
+          • <https://grafana.authz-engine.io/d/authz-overview|Overview>
+          • <https://grafana.authz-engine.io/d/authz-performance|Performance>
+
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+        color: 'warning'
+        send_resolved: true
+
+  # Cache-related alerts
+  - name: 'slack-cache'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-cache'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':package:'
+        title: '[Cache] {{ .GroupLabels.alertname }}'
+        text: |
+          *Cache Performance Issue*
+
+          {{ .CommonAnnotations.description }}
+
+          *Investigation Steps:*
+          • Check cache size and eviction rate
+          • Review TTL configuration
+          • Analyze access patterns
+
+          *Cache Dashboard:* https://grafana.authz-engine.io/d/authz-cache
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+        color: '#439FE0'
+        send_resolved: true
+
+  # ========================================================================
+  # Slack Integration - Team Notifications
+  # ========================================================================
+
+  # AuthZ platform team general notifications
+  - name: 'slack-authz-team'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-platform-team'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':robot_face:'
+        title: '{{ .GroupLabels.alertname }}'
+        text: |
+          *Team:* {{ .CommonLabels.team }}
+          *Component:* {{ .CommonLabels.component }}
+          *Severity:* {{ .CommonLabels.severity }}
+
+          {{ .CommonAnnotations.description }}
+
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+        send_resolved: true
+
+# ========================================================================
+# Example Route Configuration for Slack
+# ========================================================================
+# Add this to your main alertmanager.yml route section:
+#
+# routes:
+#   # Critical alerts -> dedicated channel
+#   - match:
+#       severity: critical
+#     receiver: 'slack-critical'
+#     continue: true
+#
+#   # Component-specific routing
+#   - match:
+#       component: authorization
+#     receiver: 'slack-authorization'
+#
+#   - match:
+#       component: embedding
+#     receiver: 'slack-embedding'
+#
+#   - match:
+#       component: vector_store
+#     receiver: 'slack-vector-store'
+#
+#   # Alert type specific routing
+#   - match_re:
+#       alertname: '(CELEvaluationErrorsSpike|PolicyNotFoundErrors)'
+#     receiver: 'slack-policy-errors'
+#
+#   - match_re:
+#       alertname: '(HighAuthorizationLatency|SlowVectorSearch|EmbeddingJobLatencyHigh)'
+#     receiver: 'slack-performance'
+#
+#   - match_re:
+#       alertname: '(LowCacheHitRate|EmbeddingCacheHitRateLow)'
+#     receiver: 'slack-cache'
+#
+#   # Default: warnings and info
+#   - match:
+#       severity: warning
+#     receiver: 'slack-warnings'
+#
+#   - match:
+#       severity: info
+#     receiver: 'slack-info'
+
+# ========================================================================
+# Slack Color Coding Reference
+# ========================================================================
+# Status/Severity | Color   | Hex Code | Slack Display
+# ---------------|---------|----------|---------------
+# Critical/Firing | danger  | #D32F2F  | Red
+# Warning        | warning | #FFA000  | Orange/Yellow
+# Info           | good    | #4CAF50  | Green
+# Resolved       | good    | #4CAF50  | Green
+# Custom Blue    | N/A     | #439FE0  | Blue
+
+# ========================================================================
+# Setup Instructions
+# ========================================================================
+# 1. Create Slack Incoming Webhooks:
+#    - Go to https://api.slack.com/apps
+#    - Create new app or select existing
+#    - Add "Incoming Webhooks" feature
+#    - Create webhook for each channel
+#
+# 2. Create Slack channels:
+#    - #authz-alerts-critical
+#    - #authz-alerts-warnings
+#    - #authz-alerts-info
+#    - #authz-alerts-authorization
+#    - #authz-alerts-embedding
+#    - #authz-alerts-vector
+#    - #authz-policy-errors
+#    - #authz-performance
+#    - #authz-cache
+#    - #authz-platform-team
+#
+# 3. Replace placeholders:
+#    - <SLACK_WEBHOOK_URL> - General webhook URL
+#    - <SLACK_WEBHOOK_URL_CRITICAL> - Critical alerts webhook
+#
+# 4. Test the integration:
+#    amtool alert add alertname="test" severity="warning" component="authorization" --alertmanager.url=http://localhost:9093
+#
+# 5. Verify in Slack:
+#    - Check that message appears in correct channel
+#    - Verify formatting and colors
+#    - Confirm links work
+#    - Test resolved notifications

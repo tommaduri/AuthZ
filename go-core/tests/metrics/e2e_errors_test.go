@@ -33,7 +33,7 @@ func TestE2E_ErrorMetrics(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -44,7 +44,7 @@ func TestE2E_ErrorMetrics(t *testing.T) {
 			Principal: &types.Principal{
 				ID:    "user:error",
 				Roles: []string{"viewer"},
-				Attr: map[string]interface{}{
+				Attributes: map[string]interface{}{
 					"invalid_field": "this will cause CEL error",
 				},
 			},
@@ -111,7 +111,7 @@ func TestE2E_ErrorRateCalculation(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -267,7 +267,7 @@ func TestE2E_GracefulDegradation(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -324,7 +324,7 @@ func TestE2E_ErrorRecovery(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -381,30 +381,19 @@ func TestE2E_ErrorRecovery(t *testing.T) {
 
 // Helper: Load policy that can cause CEL errors
 func loadPolicyWithCELError(t *testing.T, store *policy.MemoryStore) {
-	policy := &types.ResourcePolicy{
-		ApiVersion: "api.authz.com/v1",
-		ResourcePolicy: &types.ResourcePolicyDef{
-			Resource: "document",
-			Version:  "default",
-			Rules: []*types.ResourceRule{
-				{
-					Actions: []string{"read"},
-					Effect:  types.EffectAllow,
-					Roles:   []string{"viewer"},
-					// CEL condition that might fail
-					Condition: &types.Condition{
-						Match: &types.Match{
-							Expr: "principal.attr.nonexistent_field == 'value'",
-						},
-					},
-				},
+	pol := &types.Policy{
+		Name:         "cel-error-policy",
+		ResourceKind: "document",
+		Rules: []*types.Rule{
+			{
+				Name:    "viewer-read",
+				Actions: []string{"read"},
+				Effect:  types.EffectAllow,
+				Roles:   []string{"viewer"},
+				// CEL condition that might fail
+				Condition: "principal.attr.nonexistent_field == 'value'",
 			},
 		},
-		Metadata: &types.Metadata{
-			SourceFile: "cel-error-policy.yaml",
-		},
 	}
-
-	err := store.AddOrUpdatePolicy(context.Background(), policy)
-	require.NoError(t, err)
+	store.Add(pol)
 }

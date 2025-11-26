@@ -1,0 +1,215 @@
+# PagerDuty Receiver Configuration Example
+# Phase 4.5: Observability Suite
+# Last Updated: 2025-11-26
+#
+# This file shows example PagerDuty configurations for different severity levels.
+# Include this in your main alertmanager.yml or use as reference.
+
+receivers:
+  # ========================================================================
+  # PagerDuty Integration - Critical Alerts (P1/P2)
+  # ========================================================================
+
+  # High urgency (P1) - Service down, critical errors
+  - name: 'pagerduty-critical-p1'
+    pagerduty_configs:
+      - service_key: '<PAGERDUTY_SERVICE_KEY_P1>'
+        # Routing key for newer API (use either service_key or routing_key)
+        # routing_key: '<PAGERDUTY_INTEGRATION_KEY>'
+
+        # Urgency level (high triggers phone/SMS, low triggers push/email)
+        severity: 'critical'
+
+        # Alert details
+        description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+
+        # Custom details visible in PagerDuty incident
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          resolved: '{{ .Alerts.Resolved | len }}'
+          alertname: '{{ .GroupLabels.alertname }}'
+          severity: '{{ .CommonLabels.severity }}'
+          component: '{{ .CommonLabels.component }}'
+          cluster: '{{ .CommonLabels.cluster }}'
+          service: '{{ .CommonLabels.service }}'
+          team: '{{ .CommonLabels.team }}'
+          summary: '{{ .CommonAnnotations.summary }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook_url: '{{ .CommonAnnotations.runbook_url }}'
+
+        # Custom client and client URL
+        client: 'Alertmanager'
+        client_url: 'https://alertmanager.authz-engine.io'
+
+        # Links displayed in PagerDuty
+        links:
+          - href: '{{ .CommonAnnotations.runbook_url }}'
+            text: 'Runbook'
+          - href: 'https://grafana.authz-engine.io/d/authz-overview'
+            text: 'Grafana Dashboard'
+          - href: 'https://prometheus.authz-engine.io'
+            text: 'Prometheus'
+
+        # Images to display in PagerDuty (optional)
+        # images:
+        #   - src: 'https://grafana.authz-engine.io/render/d/authz-overview'
+        #     alt: 'AuthZ Engine Dashboard'
+
+  # Medium urgency (P2) - High error rates, performance issues
+  - name: 'pagerduty-critical-p2'
+    pagerduty_configs:
+      - service_key: '<PAGERDUTY_SERVICE_KEY_P2>'
+        severity: 'error'
+        description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          resolved: '{{ .Alerts.Resolved | len }}'
+          alertname: '{{ .GroupLabels.alertname }}'
+          severity: '{{ .CommonLabels.severity }}'
+          component: '{{ .CommonLabels.component }}'
+          cluster: '{{ .CommonLabels.cluster }}'
+          summary: '{{ .CommonAnnotations.summary }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook_url: '{{ .CommonAnnotations.runbook_url }}'
+        client: 'Alertmanager'
+        client_url: 'https://alertmanager.authz-engine.io'
+        links:
+          - href: '{{ .CommonAnnotations.runbook_url }}'
+            text: 'Runbook'
+
+  # ========================================================================
+  # Component-Specific PagerDuty Routing
+  # ========================================================================
+
+  # Authorization component critical alerts
+  - name: 'pagerduty-authorization-critical'
+    pagerduty_configs:
+      - service_key: '<PAGERDUTY_SERVICE_KEY_AUTHZ>'
+        severity: 'critical'
+        description: '[Authorization] {{ .GroupLabels.alertname }}'
+        details:
+          component: 'Authorization Engine'
+          alertname: '{{ .GroupLabels.alertname }}'
+          summary: '{{ .CommonAnnotations.summary }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook_url: '{{ .CommonAnnotations.runbook_url }}'
+          cluster: '{{ .CommonLabels.cluster }}'
+        links:
+          - href: '{{ .CommonAnnotations.runbook_url }}'
+            text: 'Runbook'
+          - href: 'https://grafana.authz-engine.io/d/authz-authorization'
+            text: 'Authorization Dashboard'
+
+  # Embedding pipeline critical alerts
+  - name: 'pagerduty-embedding-critical'
+    pagerduty_configs:
+      - service_key: '<PAGERDUTY_SERVICE_KEY_EMBEDDING>'
+        severity: 'error'
+        description: '[Embedding] {{ .GroupLabels.alertname }}'
+        details:
+          component: 'Embedding Pipeline'
+          alertname: '{{ .GroupLabels.alertname }}'
+          summary: '{{ .CommonAnnotations.summary }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook_url: '{{ .CommonAnnotations.runbook_url }}'
+        links:
+          - href: '{{ .CommonAnnotations.runbook_url }}'
+            text: 'Runbook'
+          - href: 'https://grafana.authz-engine.io/d/authz-embedding'
+            text: 'Embedding Dashboard'
+
+  # Vector store critical alerts
+  - name: 'pagerduty-vector-critical'
+    pagerduty_configs:
+      - service_key: '<PAGERDUTY_SERVICE_KEY_VECTOR>'
+        severity: 'error'
+        description: '[Vector Store] {{ .GroupLabels.alertname }}'
+        details:
+          component: 'Vector Store'
+          alertname: '{{ .GroupLabels.alertname }}'
+          summary: '{{ .CommonAnnotations.summary }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook_url: '{{ .CommonAnnotations.runbook_url }}'
+        links:
+          - href: '{{ .CommonAnnotations.runbook_url }}'
+            text: 'Runbook'
+          - href: 'https://grafana.authz-engine.io/d/authz-vector'
+            text: 'Vector Store Dashboard'
+
+# ========================================================================
+# Example Route Configuration for PagerDuty
+# ========================================================================
+# Add this to your main alertmanager.yml route section:
+#
+# routes:
+#   # P1 - Service Down (immediate)
+#   - match:
+#       alertname: AuthorizationServiceDown
+#     receiver: 'pagerduty-critical-p1'
+#     group_wait: 0s
+#     repeat_interval: 1h
+#
+#   # P1 - High Error Rate (immediate)
+#   - match:
+#       alertname: HighErrorRate
+#     receiver: 'pagerduty-critical-p1'
+#     group_wait: 5s
+#     repeat_interval: 2h
+#
+#   # P2 - Performance Issues
+#   - match:
+#       alertname: HighAuthorizationLatency
+#     receiver: 'pagerduty-critical-p2'
+#     group_wait: 30s
+#     repeat_interval: 4h
+#
+#   # Component-specific routing
+#   - match:
+#       severity: critical
+#       component: authorization
+#     receiver: 'pagerduty-authorization-critical'
+#
+#   - match:
+#       severity: critical
+#       component: embedding
+#     receiver: 'pagerduty-embedding-critical'
+#
+#   - match:
+#       severity: critical
+#       component: vector_store
+#     receiver: 'pagerduty-vector-critical'
+
+# ========================================================================
+# PagerDuty Severity Mapping Reference
+# ========================================================================
+# Alertmanager severity | PagerDuty severity | Urgency | Notification
+# ---------------------|-------------------|---------|-------------
+# critical             | critical          | high    | Phone/SMS
+# critical             | error             | high    | Phone/SMS
+# warning              | warning           | low     | Push/Email
+# info                 | info              | low     | Push/Email
+
+# ========================================================================
+# Setup Instructions
+# ========================================================================
+# 1. Create integration in PagerDuty:
+#    - Go to Services → Service Directory → New Service
+#    - Choose "Integrate via Event API V2"
+#    - Copy the Integration Key
+#
+# 2. Replace placeholders:
+#    - <PAGERDUTY_SERVICE_KEY_P1> - High urgency service key
+#    - <PAGERDUTY_SERVICE_KEY_P2> - Medium urgency service key
+#    - Component-specific keys as needed
+#
+# 3. Configure escalation policies in PagerDuty:
+#    - P1: Immediate notification → Escalate after 5 min
+#    - P2: Immediate notification → Escalate after 15 min
+#
+# 4. Test the integration:
+#    amtool alert add alertname="test" severity="critical" --alertmanager.url=http://localhost:9093
+#
+# 5. Verify in PagerDuty:
+#    - Check that incident is created
+#    - Verify correct severity and details
+#    - Confirm links and runbook are accessible

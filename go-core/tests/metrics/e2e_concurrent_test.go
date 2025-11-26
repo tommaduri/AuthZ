@@ -35,7 +35,7 @@ func TestE2E_ConcurrentLoadMetrics(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -138,7 +138,7 @@ func TestE2E_ConcurrentActiveRequestsGauge(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -330,7 +330,7 @@ func TestE2E_ConcurrentBurstLoad(t *testing.T) {
 
 	eng, err := engine.New(cfg, store)
 	require.NoError(t, err)
-	defer eng.Shutdown()
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 

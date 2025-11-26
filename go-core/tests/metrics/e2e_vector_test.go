@@ -3,7 +3,6 @@ package metrics_test
 import (
 	"context"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/authz-engine/go-core/internal/engine"
 	"github.com/authz-engine/go-core/internal/metrics"
 	"github.com/authz-engine/go-core/internal/policy"
+	intvector "github.com/authz-engine/go-core/internal/vector"
 	"github.com/authz-engine/go-core/pkg/types"
 	"github.com/authz-engine/go-core/pkg/vector"
 	"github.com/stretchr/testify/assert"
@@ -24,14 +24,26 @@ func TestE2E_VectorStoreMetrics(t *testing.T) {
 	// Setup: Create engine with vector store
 	m := metrics.NewPrometheusMetrics("authz_test")
 	store := policy.NewMemoryStore()
-	vectorStore := vector.NewInMemoryVectorStore()
+
+	vectorStore, err := intvector.NewMemoryStore(vector.Config{
+		Backend:   "memory",
+		Dimension: 384,
+		HNSW: vector.HNSWConfig{
+			M:              16,
+			EfConstruction: 200,
+			EfSearch:       50,
+		},
+	})
+	require.NoError(t, err)
+	defer vectorStore.Close()
 
 	embedConfig := &embedding.Config{
-		NumWorkers:       4,
-		QueueSize:        500,
-		BatchSize:        10,
-		EmbeddingTimeout: 5 * time.Second,
-		Metrics:          m,
+		NumWorkers:    4,
+		QueueSize:     500,
+		BatchSize:     10,
+		Dimension:     384,
+		EmbeddingFunc: embedding.DefaultEmbeddingFunction,
+		Metrics:       m,
 	}
 
 	cfg := engine.Config{
@@ -41,9 +53,9 @@ func TestE2E_VectorStoreMetrics(t *testing.T) {
 		Metrics:                 m,
 	}
 
-	eng, err := engine.New(cfg, store)
-	require.NoError(t, err)
-	defer eng.Shutdown()
+	eng, err2 := engine.New(cfg, store)
+	require.NoError(t, err2)
+	defer eng.Shutdown(context.Background())
 
 	ctx := context.Background()
 
@@ -55,26 +67,19 @@ func TestE2E_VectorStoreMetrics(t *testing.T) {
 		policyID := "policy-" + itoa(i)
 		policyIDs[i] = policyID
 
-		policy := &types.ResourcePolicy{
-			ApiVersion: "api.authz.com/v1",
-			ResourcePolicy: &types.ResourcePolicyDef{
-				Resource: "document",
-				Version:  policyID,
-				Rules: []*types.ResourceRule{
-					{
-						Actions: []string{"read"},
-						Effect:  types.EffectAllow,
-						Roles:   []string{"user"},
-					},
+		pol := &types.Policy{
+			Name:         policyID,
+			ResourceKind: "document",
+			Rules: []*types.Rule{
+				{
+					Name:    "allow-read",
+					Actions: []string{"read"},
+					Effect:  types.EffectAllow,
+					Roles:   []string{"user"},
 				},
 			},
-			Metadata: &types.Metadata{
-				SourceFile: policyID + ".yaml",
-			},
 		}
-
-		err := store.AddOrUpdatePolicy(ctx, policy)
-		require.NoError(t, err)
+		store.Add(pol)
 	}
 
 	// Wait for embeddings to complete
@@ -108,15 +113,15 @@ func TestE2E_VectorStoreMetrics(t *testing.T) {
 	assert.Contains(t, body, "authz_test_vector_operations_total")
 
 	insertCount := extractLabeledMetricValue(body, "authz_test_vector_operations_total", "insert")
-	assert.GreaterOrEqual(t, insertCount, float64(numInserts*0.8),
+	assert.GreaterOrEqual(t, insertCount, float64(numInserts)*0.8,
 		"Should have recorded most inserts (got %.0f, expected ~%d)", insertCount, numInserts)
 
 	searchCount := extractLabeledMetricValue(body, "authz_test_vector_operations_total", "search")
-	assert.GreaterOrEqual(t, searchCount, float64(numSearches*0.95),
+	assert.GreaterOrEqual(t, searchCount, float64(numSearches)*0.95,
 		"Should have recorded searches (got %.0f, expected %d)", searchCount, numSearches)
 
 	deleteCount := extractLabeledMetricValue(body, "authz_test_vector_operations_total", "delete")
-	assert.GreaterOrEqual(t, deleteCount, float64(numDeletes*0.8),
+	assert.GreaterOrEqual(t, deleteCount, float64(numDeletes)*0.8,
 		"Should have recorded deletes (got %.0f, expected ~%d)", deleteCount, numDeletes)
 
 	// Verify duration histograms exist
@@ -137,8 +142,19 @@ func TestE2E_VectorStoreMetrics(t *testing.T) {
 
 // TestE2E_VectorSearchLatency validates search latency SLO (p99 <100ms)
 func TestE2E_VectorSearchLatency(t *testing.T) {
-	m := metrics.NewPrometheusMetrics("authz_test")
-	vectorStore := vector.NewInMemoryVectorStore()
+	_ = metrics.NewPrometheusMetrics("authz_test")
+
+	vectorStore, err := intvector.NewMemoryStore(vector.Config{
+		Backend:   "memory",
+		Dimension: 384,
+		HNSW: vector.HNSWConfig{
+			M:              16,
+			EfConstruction: 200,
+			EfSearch:       50,
+		},
+	})
+	require.NoError(t, err)
+	defer vectorStore.Close()
 
 	ctx := context.Background()
 
@@ -174,8 +190,21 @@ func TestE2E_VectorSearchLatency(t *testing.T) {
 // TestE2E_VectorErrorTracking validates error metrics
 func TestE2E_VectorErrorTracking(t *testing.T) {
 	m := metrics.NewPrometheusMetrics("authz_test")
+
+	baseStore, err := intvector.NewMemoryStore(vector.Config{
+		Backend:   "memory",
+		Dimension: 384,
+		HNSW: vector.HNSWConfig{
+			M:              16,
+			EfConstruction: 200,
+			EfSearch:       50,
+		},
+	})
+	require.NoError(t, err)
+	defer baseStore.Close()
+
 	vectorStore := &mockVectorStoreWithErrors{
-		baseStore: vector.NewInMemoryVectorStore(),
+		baseStore: baseStore,
 		metrics:   m,
 	}
 
@@ -217,7 +246,18 @@ func TestE2E_VectorErrorTracking(t *testing.T) {
 // TestE2E_VectorStoreSize validates size tracking
 func TestE2E_VectorStoreSize(t *testing.T) {
 	m := metrics.NewPrometheusMetrics("authz_test")
-	vectorStore := vector.NewInMemoryVectorStore()
+
+	vectorStore, err := intvector.NewMemoryStore(vector.Config{
+		Backend:   "memory",
+		Dimension: 384,
+		HNSW: vector.HNSWConfig{
+			M:              16,
+			EfConstruction: 200,
+			EfSearch:       50,
+		},
+	})
+	require.NoError(t, err)
+	defer vectorStore.Close()
 
 	ctx := context.Background()
 
@@ -269,7 +309,7 @@ func (m *mockVectorStoreWithErrors) Insert(ctx context.Context, id string, embed
 	return m.baseStore.Insert(ctx, id, embedding, metadata)
 }
 
-func (m *mockVectorStoreWithErrors) Search(ctx context.Context, query []float32, k int) ([]vector.SearchResult, error) {
+func (m *mockVectorStoreWithErrors) Search(ctx context.Context, query []float32, k int) ([]*vector.SearchResult, error) {
 	return m.baseStore.Search(ctx, query, k)
 }
 
@@ -279,11 +319,7 @@ func (m *mockVectorStoreWithErrors) Delete(ctx context.Context, id string) error
 	return m.baseStore.Delete(ctx, id)
 }
 
-func (m *mockVectorStoreWithErrors) Update(ctx context.Context, id string, embedding []float32, metadata map[string]interface{}) error {
-	return m.baseStore.Update(ctx, id, embedding, metadata)
-}
-
-func (m *mockVectorStoreWithErrors) Get(ctx context.Context, id string) (*vector.VectorEntry, error) {
+func (m *mockVectorStoreWithErrors) Get(ctx context.Context, id string) (*vector.Vector, error) {
 	return m.baseStore.Get(ctx, id)
 }
 
