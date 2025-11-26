@@ -139,8 +139,8 @@ func TestLoader_CompileCELExpression(t *testing.T) {
 func TestLoader_EvaluateCELCondition(t *testing.T) {
 	loader := NewLoader(zap.NewNop())
 
-	// Compile an expression first
-	expr := "principal.roles.contains('admin')"
+	// Compile an expression first - use correct CEL list syntax
+	expr := "'admin' in principal.roles"
 	if err := loader.CompileCELExpression(expr); err != nil {
 		t.Fatalf("Failed to compile expression: %v", err)
 	}
