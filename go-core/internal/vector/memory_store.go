@@ -3,7 +3,9 @@ package vector
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/authz-engine/go-core/internal/metrics"
 	"github.com/authz-engine/go-core/pkg/vector"
 )
 
@@ -11,6 +13,7 @@ import (
 type MemoryStore struct {
 	adapter *HNSWAdapter
 	config  vector.Config
+	metrics metrics.Metrics // Phase 4.4: Prometheus metrics
 }
 
 // NewMemoryStore creates an in-memory vector store
@@ -24,25 +27,77 @@ func NewMemoryStore(config vector.Config) (*MemoryStore, error) {
 		return nil, fmt.Errorf("failed to create HNSW adapter: %w", err)
 	}
 
+	// Phase 4.4: Initialize metrics (default to NoOp if not provided)
+	var m metrics.Metrics = metrics.NewNoOpMetrics()
+	if config.Metrics != nil {
+		if metricsImpl, ok := config.Metrics.(metrics.Metrics); ok {
+			m = metricsImpl
+		}
+	}
+
 	return &MemoryStore{
 		adapter: adapter,
 		config:  config,
+		metrics: m,
 	}, nil
 }
 
 // Insert adds a vector with metadata
 func (s *MemoryStore) Insert(ctx context.Context, id string, vec []float32, metadata map[string]interface{}) error {
-	return s.adapter.Insert(ctx, id, vec, metadata)
+	start := time.Now()
+	err := s.adapter.Insert(ctx, id, vec, metadata)
+	duration := time.Since(start)
+
+	// Phase 4.4: Record metrics
+	if err == nil {
+		s.metrics.RecordVectorOp("insert", duration)
+		// Update store size
+		if stats, statErr := s.adapter.Stats(ctx); statErr == nil {
+			s.metrics.UpdateVectorStoreSize(int(stats.TotalVectors))
+			s.metrics.UpdateIndexSize(stats.MemoryUsageBytes)
+		}
+	} else {
+		s.metrics.RecordVectorError("insert_failed")
+	}
+
+	return err
 }
 
 // Search finds k nearest neighbors
 func (s *MemoryStore) Search(ctx context.Context, query []float32, k int) ([]*vector.SearchResult, error) {
-	return s.adapter.Search(ctx, query, k)
+	start := time.Now()
+	results, err := s.adapter.Search(ctx, query, k)
+	duration := time.Since(start)
+
+	// Phase 4.4: Record metrics
+	if err == nil {
+		s.metrics.RecordVectorOp("search", duration)
+	} else {
+		s.metrics.RecordVectorError("search_failed")
+	}
+
+	return results, err
 }
 
 // Delete removes a vector
 func (s *MemoryStore) Delete(ctx context.Context, id string) error {
-	return s.adapter.Delete(ctx, id)
+	start := time.Now()
+	err := s.adapter.Delete(ctx, id)
+	duration := time.Since(start)
+
+	// Phase 4.4: Record metrics
+	if err == nil {
+		s.metrics.RecordVectorOp("delete", duration)
+		// Update store size
+		if stats, statErr := s.adapter.Stats(ctx); statErr == nil {
+			s.metrics.UpdateVectorStoreSize(int(stats.TotalVectors))
+			s.metrics.UpdateIndexSize(stats.MemoryUsageBytes)
+		}
+	} else {
+		s.metrics.RecordVectorError("delete_failed")
+	}
+
+	return err
 }
 
 // Get retrieves a vector by ID
@@ -52,7 +107,23 @@ func (s *MemoryStore) Get(ctx context.Context, id string) (*vector.Vector, error
 
 // BatchInsert efficiently inserts multiple vectors
 func (s *MemoryStore) BatchInsert(ctx context.Context, vectors []*vector.VectorEntry) error {
-	return s.adapter.BatchInsert(ctx, vectors)
+	start := time.Now()
+	err := s.adapter.BatchInsert(ctx, vectors)
+	duration := time.Since(start)
+
+	// Phase 4.4: Record metrics
+	if err == nil {
+		s.metrics.RecordVectorOp("insert", duration)
+		// Update store size
+		if stats, statErr := s.adapter.Stats(ctx); statErr == nil {
+			s.metrics.UpdateVectorStoreSize(int(stats.TotalVectors))
+			s.metrics.UpdateIndexSize(stats.MemoryUsageBytes)
+		}
+	} else {
+		s.metrics.RecordVectorError("batch_insert_failed")
+	}
+
+	return err
 }
 
 // Stats returns store statistics

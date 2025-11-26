@@ -11,6 +11,7 @@ import (
 	"github.com/authz-engine/go-core/internal/cel"
 	"github.com/authz-engine/go-core/internal/derived_roles"
 	"github.com/authz-engine/go-core/internal/embedding"
+	"github.com/authz-engine/go-core/internal/metrics"
 	"github.com/authz-engine/go-core/internal/policy"
 	"github.com/authz-engine/go-core/internal/scope"
 	"github.com/authz-engine/go-core/pkg/types"
@@ -33,6 +34,9 @@ type Engine struct {
 	// Phase 4.2: Policy hash tracking for incremental updates
 	policyHashMap map[string]string // policyID -> SHA-256 hash
 	hashMu        sync.RWMutex      // Protects policyHashMap
+
+	// Phase 4.4: Prometheus metrics (optional, nil if not enabled)
+	metrics metrics.Metrics
 
 	config Config
 }
@@ -57,6 +61,9 @@ type Config struct {
 	VectorStore vector.VectorStore
 	// EmbeddingConfig configures the background embedding worker
 	EmbeddingConfig *embedding.Config
+
+	// Phase 4.4: Prometheus metrics (optional, nil defaults to NoOpMetrics)
+	Metrics metrics.Metrics
 }
 
 // DefaultConfig returns a default engine configuration
@@ -91,6 +98,12 @@ func New(cfg Config, store policy.Store) (*Engine, error) {
 		return nil, err
 	}
 
+	// Phase 4.4: Initialize metrics (default to NoOp if not provided)
+	m := cfg.Metrics
+	if m == nil {
+		m = metrics.NewNoOpMetrics()
+	}
+
 	engine := &Engine{
 		cel:                  celEngine,
 		store:                store,
@@ -98,6 +111,7 @@ func New(cfg Config, store policy.Store) (*Engine, error) {
 		workerPool:           NewWorkerPool(cfg.ParallelWorkers),
 		scopeResolver:        scopeResolver,
 		derivedRolesResolver: derivedRolesResolver,
+		metrics:              m,
 		config:               cfg,
 	}
 
@@ -137,14 +151,34 @@ func New(cfg Config, store policy.Store) (*Engine, error) {
 
 // Check evaluates an authorization request with principal-first policy resolution
 func (e *Engine) Check(ctx context.Context, req *types.CheckRequest) (*types.CheckResponse, error) {
+	// Phase 4.4: Track active requests
+	e.metrics.IncActiveRequests()
+	defer e.metrics.DecActiveRequests()
+
 	start := time.Now()
 
 	// Check cache first
+	cacheHit := false
 	if e.cache != nil {
 		cacheKey := req.CacheKey()
 		if cached, ok := e.cache.Get(cacheKey); ok {
 			resp := cached.(*types.CheckResponse)
 			resp.Metadata.CacheHit = true
+			cacheHit = true
+
+			// Phase 4.4: Record cache hit and duration
+			duration := time.Since(start)
+			e.metrics.RecordCacheHit()
+			// Record check metrics (get first result from map)
+			for _, result := range resp.Results {
+				effect := "EFFECT_DENY"
+				if result.Effect == types.EffectAllow {
+					effect = "EFFECT_ALLOW"
+				}
+				e.metrics.RecordCheck(effect, duration)
+				break // Only record first result
+			}
+
 			return resp, nil
 		}
 	}
@@ -197,6 +231,21 @@ func (e *Engine) Check(ctx context.Context, req *types.CheckRequest) (*types.Che
 			PolicyResolution:     policyResolution,
 			DerivedRoles:         derivedRolesAdded,
 		},
+	}
+
+	// Phase 4.4: Record metrics for cache miss and authorization check
+	duration := time.Since(start)
+	if !cacheHit {
+		e.metrics.RecordCacheMiss()
+	}
+	// Record check metrics (get first result from map)
+	for _, result := range results {
+		effect := "EFFECT_DENY"
+		if result.Effect == types.EffectAllow {
+			effect = "EFFECT_ALLOW"
+		}
+		e.metrics.RecordCheck(effect, duration)
+		break // Only record first result
 	}
 
 	// Cache result

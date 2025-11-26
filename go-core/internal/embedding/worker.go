@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/authz-engine/go-core/internal/metrics"
 	"github.com/authz-engine/go-core/internal/policy"
 	"github.com/authz-engine/go-core/pkg/types"
 	"github.com/authz-engine/go-core/pkg/vector"
@@ -21,6 +22,7 @@ type EmbeddingWorker struct {
 	embedFunc    EmbeddingFunction
 	cache        *EmbeddingCache // Optional caching layer
 	ModelVersion string          // Embedding model version for tracking
+	metrics      metrics.Metrics // Phase 4.4: Prometheus metrics
 
 	jobs    chan EmbeddingJob
 	workers []*worker
@@ -74,6 +76,7 @@ type Config struct {
 	ModelVersion   string // Embedding model version (default: "v1")
 	EmbeddingFunc  EmbeddingFunction // Custom embedding function
 	CacheConfig    *CacheConfig // Optional caching configuration (nil = no cache)
+	Metrics        metrics.Metrics // Phase 4.4: Optional metrics (nil defaults to NoOp)
 }
 
 // DefaultConfig returns a default worker configuration
@@ -123,11 +126,18 @@ func NewEmbeddingWorker(cfg Config, policyStore policy.Store, vectorStore vector
 		}
 	}
 
+	// Phase 4.4: Initialize metrics (default to NoOp if not provided)
+	m := cfg.Metrics
+	if m == nil {
+		m = metrics.NewNoOpMetrics()
+	}
+
 	w := &EmbeddingWorker{
 		store:        policyStore,
 		vectorStore:  vectorStore,
 		embedFunc:    cfg.EmbeddingFunc,
 		ModelVersion: cfg.ModelVersion,
+		metrics:      m,
 		jobs:         make(chan EmbeddingJob, cfg.QueueSize),
 		workers:      make([]*worker, 0, cfg.NumWorkers),
 		shutdown:     make(chan struct{}),
@@ -140,6 +150,9 @@ func NewEmbeddingWorker(cfg Config, policyStore policy.Store, vectorStore vector
 	if cfg.CacheConfig != nil {
 		w.cache = NewEmbeddingCache(*cfg.CacheConfig)
 	}
+
+	// Phase 4.4: Update metrics with initial worker count
+	m.UpdateActiveWorkers(cfg.NumWorkers)
 
 	// Start workers
 	for i := 0; i < cfg.NumWorkers; i++ {
@@ -183,11 +196,18 @@ func (wk *worker) run() {
 		case job := <-wk.jobs:
 			start := time.Now()
 
-			if err := wk.processJob(job); err != nil {
+			err := wk.processJob(job)
+			duration := time.Since(start)
+
+			if err != nil {
 				log.Printf("[EmbeddingWorker-%d] Failed to process job for policy %s: %v", wk.id, job.PolicyID, err)
 				wk.worker.incrementFailed()
+				// Phase 4.4: Record failed job
+				wk.worker.metrics.RecordEmbeddingJob("failed", duration)
 			} else {
-				wk.worker.incrementProcessed(time.Since(start))
+				wk.worker.incrementProcessed(duration)
+				// Phase 4.4: Record successful job
+				wk.worker.metrics.RecordEmbeddingJob("success", duration)
 			}
 		}
 	}
@@ -207,9 +227,13 @@ func (wk *worker) processJob(job EmbeddingJob) error {
 		if embedding != nil {
 			// Cache hit - no need to generate or store
 			wk.worker.incrementCacheHit()
+			// Phase 4.4: Record cache hit
+			wk.worker.metrics.RecordCacheOperation("hit")
 			return nil
 		}
 		wk.worker.incrementCacheMiss()
+		// Phase 4.4: Record cache miss
+		wk.worker.metrics.RecordCacheOperation("miss")
 	}
 
 	// Cache miss or no cache - generate embedding
@@ -254,6 +278,8 @@ func (w *EmbeddingWorker) Submit(policyID string, policyText string, priority in
 
 	select {
 	case w.jobs <- job:
+		// Phase 4.4: Update queue depth
+		w.metrics.UpdateQueueDepth(len(w.jobs))
 		return true
 	default:
 		// Queue full, drop job (graceful degradation)

@@ -81,6 +81,9 @@ type Config struct {
 
 	// Quantization bits (4, 8, 16, or 32)
 	QuantizationBits int
+
+	// Metrics for observability (Phase 4.4) - interface{} to avoid circular dependency
+	Metrics interface{}
 }
 
 // HNSWConfig configures HNSW indexing
