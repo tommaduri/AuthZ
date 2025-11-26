@@ -30,6 +30,10 @@ type Engine struct {
 	vectorStore vector.VectorStore           // Vector store for policy embeddings
 	embedWorker *embedding.EmbeddingWorker   // Background embedding worker
 
+	// Phase 4.2: Policy hash tracking for incremental updates
+	policyHashMap map[string]string // policyID -> SHA-256 hash
+	hashMu        sync.RWMutex      // Protects policyHashMap
+
 	config Config
 }
 
@@ -113,9 +117,19 @@ func New(cfg Config, store policy.Store) (*Engine, error) {
 		}
 		engine.embedWorker = embedWorker
 
-		// Submit existing policies for embedding
+		// Phase 4.2: Initialize policy hash map for incremental updates
+		engine.policyHashMap = make(map[string]string)
+
+		// Track hashes for existing policies and submit for embedding
 		policies := store.GetAll()
-		_ = embedWorker.SubmitBatch(policies, 1) // Low priority, fire and forget
+		for _, pol := range policies {
+			text := embedding.SerializePolicyToText(pol)
+			hash := embedding.ComputePolicyHash(text)
+			engine.policyHashMap[pol.Name] = hash
+		}
+
+		// Submit existing policies for initial embedding (low priority)
+		_ = embedWorker.SubmitBatch(policies, 1) // Fire and forget
 	}
 
 	return engine, nil
@@ -645,6 +659,91 @@ func (e *Engine) GetEmbeddingWorkerStats() *embedding.Stats {
 	}
 	stats := e.embedWorker.Stats()
 	return &stats
+}
+
+// DetectChangedPolicies identifies which policies have changed by comparing hashes
+// Phase 4.2: Enables incremental re-embedding of only changed policies
+// Returns list of policies that are new or have changed content
+func (e *Engine) DetectChangedPolicies(policyIDs []string) []*types.Policy {
+	if e.policyHashMap == nil {
+		return []*types.Policy{} // Hash tracking not enabled
+	}
+
+	e.hashMu.Lock()
+	defer e.hashMu.Unlock()
+
+	changed := make([]*types.Policy, 0, len(policyIDs))
+
+	for _, id := range policyIDs {
+		pol, err := e.store.Get(id)
+		if err != nil || pol == nil {
+			continue // Policy not found, skip
+		}
+
+		// Serialize policy and compute hash
+		text := embedding.SerializePolicyToText(pol)
+		newHash := embedding.ComputePolicyHash(text)
+
+		// Check if policy is new or changed
+		oldHash, exists := e.policyHashMap[id]
+		if !exists || oldHash != newHash {
+			// Policy is new or content has changed
+			changed = append(changed, pol)
+			e.policyHashMap[id] = newHash // Update tracked hash
+		}
+	}
+
+	return changed
+}
+
+// UpdatePolicyHashes updates the tracked hashes for a batch of policies
+// Phase 4.2: Used after policy reload to track current state
+// Returns number of policies tracked
+func (e *Engine) UpdatePolicyHashes(policies []*types.Policy) int {
+	if e.policyHashMap == nil {
+		return 0 // Hash tracking not enabled
+	}
+
+	e.hashMu.Lock()
+	defer e.hashMu.Unlock()
+
+	count := 0
+	for _, pol := range policies {
+		if pol == nil {
+			continue
+		}
+		text := embedding.SerializePolicyToText(pol)
+		hash := embedding.ComputePolicyHash(text)
+		e.policyHashMap[pol.Name] = hash
+		count++
+	}
+
+	return count
+}
+
+// ReEmbedChangedPolicies detects and re-embeds only policies that have changed
+// Phase 4.2: Optimized incremental update instead of re-embedding all policies
+// Returns number of policies submitted for re-embedding
+func (e *Engine) ReEmbedChangedPolicies(policyIDs []string, priority int) int {
+	if e.embedWorker == nil {
+		return 0 // Embedding worker not enabled
+	}
+
+	// Detect which policies actually changed
+	changedPolicies := e.DetectChangedPolicies(policyIDs)
+
+	// Submit only changed policies with specified priority
+	// Priority 2 = high (for incremental updates)
+	// Priority 1 = normal
+	// Priority 0 = low
+	submitted := 0
+	for _, pol := range changedPolicies {
+		if e.embedWorker.SubmitPolicy(pol, priority) {
+			submitted++
+		}
+	}
+
+	return submitted
 }
 
 // Shutdown gracefully shuts down the engine and background workers
