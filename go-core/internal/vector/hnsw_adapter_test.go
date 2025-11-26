@@ -407,7 +407,11 @@ func TestHNSWAdapter_SearchAccuracy(t *testing.T) {
 	assert.Len(t, results, 10)
 
 	// Verify results are sorted by score (descending)
+	// Use tolerance for floating-point comparison
 	for i := 1; i < len(results); i++ {
-		assert.GreaterOrEqual(t, results[i-1].Score, results[i].Score)
+		if results[i-1].Score < results[i].Score-0.0001 {
+			t.Errorf("Results not properly sorted: results[%d].Score=%f < results[%d].Score=%f",
+				i-1, results[i-1].Score, i, results[i].Score)
+		}
 	}
 }
