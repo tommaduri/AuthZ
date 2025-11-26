@@ -28,6 +28,7 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fogfish/faults v0.2.0 // indirect
 	github.com/fogfish/golem/pure v0.10.1 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/kelindar/binary v1.0.19 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
