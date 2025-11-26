@@ -19,6 +19,7 @@ type EmbeddingWorker struct {
 	store       policy.Store
 	vectorStore vector.VectorStore
 	embedFunc   EmbeddingFunction
+	cache       *EmbeddingCache // Optional caching layer
 
 	jobs    chan EmbeddingJob
 	workers []*worker
@@ -52,12 +53,15 @@ type worker struct {
 
 // Stats tracks embedding worker statistics
 type Stats struct {
-	JobsProcessed    int64
-	JobsFailed       int64
-	TotalDurationMs  int64
+	JobsProcessed     int64
+	JobsFailed        int64
+	TotalDurationMs   int64
 	AverageDurationMs float64
-	QueueDepth       int
-	WorkersActive    int
+	QueueDepth        int
+	WorkersActive     int
+	CacheHits         int64 // Cache hits (embeddings reused)
+	CacheMisses       int64 // Cache misses (embeddings generated)
+	CacheHitRate      float64 // Hit rate percentage
 }
 
 // Config configures the embedding worker
@@ -67,6 +71,7 @@ type Config struct {
 	BatchSize      int    // Policies to batch together (default: 10)
 	Dimension      int    // Embedding dimension (default: 384)
 	EmbeddingFunc  EmbeddingFunction // Custom embedding function
+	CacheConfig    *CacheConfig // Optional caching configuration (nil = no cache)
 }
 
 // DefaultConfig returns a default worker configuration
@@ -110,6 +115,11 @@ func NewEmbeddingWorker(cfg Config, policyStore policy.Store, vectorStore vector
 		stats: Stats{
 			WorkersActive: cfg.NumWorkers,
 		},
+	}
+
+	// Initialize cache if configured
+	if cfg.CacheConfig != nil {
+		w.cache = NewEmbeddingCache(*cfg.CacheConfig)
 	}
 
 	// Start workers
@@ -168,17 +178,42 @@ func (wk *worker) run() {
 func (wk *worker) processJob(job EmbeddingJob) error {
 	ctx := wk.ctx
 
-	// Generate embedding
-	embedding, err := wk.worker.embedFunc(job.PolicyText)
+	// Compute policy hash for cache key
+	policyHash := ComputePolicyHash(job.PolicyText)
+
+	// Check cache first (if enabled)
+	var embedding []float32
+	if wk.worker.cache != nil {
+		embedding = wk.worker.cache.Get(job.PolicyID, policyHash)
+		if embedding != nil {
+			// Cache hit - no need to generate or store
+			wk.worker.incrementCacheHit()
+			return nil
+		}
+		wk.worker.incrementCacheMiss()
+	}
+
+	// Cache miss or no cache - generate embedding
+	var err error
+	embedding, err = wk.worker.embedFunc(job.PolicyText)
 	if err != nil {
 		return fmt.Errorf("embedding generation failed: %w", err)
 	}
 
+	// Store in cache (if enabled)
+	if wk.worker.cache != nil {
+		if err := wk.worker.cache.Put(job.PolicyID, policyHash, embedding); err != nil {
+			// Log but don't fail the job
+			log.Printf("[EmbeddingWorker-%d] Cache put failed for policy %s: %v", wk.id, job.PolicyID, err)
+		}
+	}
+
 	// Store in vector database
 	metadata := map[string]interface{}{
-		"policy_id":  job.PolicyID,
+		"policy_id":   job.PolicyID,
 		"embedded_at": time.Now().Unix(),
 		"text_length": len(job.PolicyText),
+		"policy_hash": policyHash,
 	}
 
 	if err := wk.worker.vectorStore.Insert(ctx, job.PolicyID, embedding, metadata); err != nil {
@@ -279,6 +314,32 @@ func (w *EmbeddingWorker) incrementFailed() {
 	defer w.mu.Unlock()
 
 	w.stats.JobsFailed++
+}
+
+// incrementCacheHit updates cache hit statistics
+func (w *EmbeddingWorker) incrementCacheHit() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.stats.CacheHits++
+	// Update hit rate
+	total := w.stats.CacheHits + w.stats.CacheMisses
+	if total > 0 {
+		w.stats.CacheHitRate = float64(w.stats.CacheHits) / float64(total)
+	}
+}
+
+// incrementCacheMiss updates cache miss statistics
+func (w *EmbeddingWorker) incrementCacheMiss() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.stats.CacheMisses++
+	// Update hit rate
+	total := w.stats.CacheHits + w.stats.CacheMisses
+	if total > 0 {
+		w.stats.CacheHitRate = float64(w.stats.CacheHits) / float64(total)
+	}
 }
 
 // SerializePolicyToText converts a policy to embedding-friendly text
