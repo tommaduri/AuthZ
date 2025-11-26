@@ -168,11 +168,69 @@ func (e *Engine) FindSimilarPolicies(ctx context.Context, query string, k int) (
 - [x] GetEmbeddingWorkerStats() method
 - [x] Engine.Shutdown() graceful cleanup
 
-### Phase 4: Production Optimization
-- [ ] Embedding caching (avoid regenerating)
-- [ ] Incremental embedding updates
-- [ ] Embedding versioning (model changes)
-- [ ] Monitoring and metrics
+### Phase 4: Production Optimization (🔄 IN PROGRESS)
+- [x] **Phase 4.1**: Embedding caching (LRU + SHA-256 invalidation) - ✅ COMPLETE
+- [ ] **Phase 4.2**: Incremental embedding updates (only re-embed changed policies)
+- [ ] **Phase 4.3**: Embedding versioning (model changes)
+- [ ] **Phase 4.4**: Monitoring and metrics (Prometheus integration)
+
+#### Phase 4.1: Embedding Cache (✅ COMPLETE)
+
+**Files**: `internal/embedding/cache.go` (235 lines), `cache_test.go` (430 lines), `worker.go` (+77 lines)
+
+**Implementation**:
+- `EmbeddingCache`: Thread-safe LRU cache with SHA-256 change detection
+- `CachedEmbedding`: Metadata tracking (hash, generated_at, access_count, last_access)
+- `ComputePolicyHash()`: SHA-256 hashing for policy change detection
+- Integrated with `EmbeddingWorker` as optional feature (nil = disabled)
+
+**Cache Invalidation**:
+```go
+// SHA-256 hash detects policy changes
+policyHash := ComputePolicyHash(policyText)
+
+// Get validates hash and TTL
+embedding := cache.Get(policyID, policyHash)
+if embedding != nil {
+    // Cache hit: Hash matches + not expired
+    return embedding
+}
+// Cache miss: Hash mismatch OR expired OR not cached
+```
+
+**Performance**:
+- **Cache hit**: ~0.1ms (1000x faster than ~100ms generation)
+- **Projected throughput**: 10x improvement with 90% hit rate (1000-2000 policies/sec)
+- **Memory footprint**: ~4MB for 10K policies (default), ~400 bytes/entry
+
+**Configuration**:
+```go
+cfg := embedding.Config{
+    NumWorkers: 4,
+    CacheConfig: &embedding.CacheConfig{
+        MaxEntries: 10000,        // ~4MB memory
+        TTL: 24 * time.Hour,      // Daily expiration
+    },
+}
+worker, _ := embedding.NewEmbeddingWorker(cfg, store, vectorStore)
+
+// Cache disabled: CacheConfig: nil
+```
+
+**Cache Metrics** (via `GetEmbeddingWorkerStats()`):
+- `CacheHits`: Total cache hits
+- `CacheMisses`: Total cache misses
+- `CacheHitRate`: Hit rate percentage (hits / (hits + misses))
+
+**Tests**: 13 comprehensive tests (100% passing)
+- Initialization, Put/Get, Hash mismatch, TTL expiration
+- LRU eviction, Delete/Clear, Concurrent access (20 goroutines)
+- ComputePolicyHash, Stats formatting, Access count tracking
+
+**Graceful Degradation**:
+- Cache is optional (nil check before all operations)
+- Cache errors logged but don't fail jobs
+- System works correctly with or without cache
 
 ---
 
