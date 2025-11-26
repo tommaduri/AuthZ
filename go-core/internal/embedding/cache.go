@@ -11,12 +11,13 @@ import (
 
 // CachedEmbedding represents a cached policy embedding with metadata
 type CachedEmbedding struct {
-	PolicyID    string
-	PolicyHash  string    // SHA-256 hash of policy content
-	Embedding   []float32
-	GeneratedAt time.Time
-	AccessCount int64
-	LastAccess  time.Time
+	PolicyID     string
+	PolicyHash   string    // SHA-256 hash of policy content
+	ModelVersion string    // Embedding model version for invalidation
+	Embedding    []float32
+	GeneratedAt  time.Time
+	AccessCount  int64
+	LastAccess   time.Time
 }
 
 // EmbeddingCache provides thread-safe caching of policy embeddings
@@ -109,6 +110,60 @@ func (c *EmbeddingCache) Get(policyID string, policyHash string) []float32 {
 	return entry.Embedding
 }
 
+// GetWithVersion retrieves a cached embedding if it exists and model version matches
+// Returns nil if not found, expired, hash doesn't match, or version doesn't match
+func (c *EmbeddingCache) GetWithVersion(policyID string, policyHash string, modelVersion string) []float32 {
+	c.mu.RLock()
+	entry, exists := c.entries[policyID]
+	c.mu.RUnlock()
+
+	if !exists {
+		c.mu.Lock()
+		c.misses++
+		c.mu.Unlock()
+		return nil
+	}
+
+	// Check if policy has changed (hash mismatch)
+	if entry.PolicyHash != policyHash {
+		c.mu.Lock()
+		delete(c.entries, policyID) // Remove stale entry
+		c.misses++
+		c.evictions++
+		c.mu.Unlock()
+		return nil
+	}
+
+	// Check if model version has changed
+	if entry.ModelVersion != modelVersion {
+		c.mu.Lock()
+		delete(c.entries, policyID) // Remove outdated entry
+		c.misses++
+		c.evictions++
+		c.mu.Unlock()
+		return nil
+	}
+
+	// Check if entry has expired
+	if c.ttl > 0 && time.Since(entry.GeneratedAt) > c.ttl {
+		c.mu.Lock()
+		delete(c.entries, policyID)
+		c.misses++
+		c.evictions++
+		c.mu.Unlock()
+		return nil
+	}
+
+	// Cache hit - update access stats
+	c.mu.Lock()
+	entry.AccessCount++
+	entry.LastAccess = time.Now()
+	c.hits++
+	c.mu.Unlock()
+
+	return entry.Embedding
+}
+
 // Put stores an embedding in the cache
 // If cache is full, evicts least recently used (LRU) entry
 func (c *EmbeddingCache) Put(policyID string, policyHash string, embedding []float32) error {
@@ -132,6 +187,36 @@ func (c *EmbeddingCache) Put(policyID string, policyHash string, embedding []flo
 		GeneratedAt: time.Now(),
 		AccessCount: 0,
 		LastAccess:  time.Now(),
+	}
+	c.totalEntries++
+
+	return nil
+}
+
+// PutWithVersion stores an embedding in the cache with model version
+// If cache is full, evicts least recently used (LRU) entry
+func (c *EmbeddingCache) PutWithVersion(policyID string, policyHash string, embedding []float32, modelVersion string) error {
+	if len(embedding) == 0 {
+		return fmt.Errorf("embedding cannot be empty")
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Check if we need to evict entries (LRU)
+	if len(c.entries) >= c.maxEntries {
+		c.evictLRU()
+	}
+
+	// Store new entry with version
+	c.entries[policyID] = &CachedEmbedding{
+		PolicyID:     policyID,
+		PolicyHash:   policyHash,
+		ModelVersion: modelVersion,
+		Embedding:    embedding,
+		GeneratedAt:  time.Now(),
+		AccessCount:  0,
+		LastAccess:   time.Now(),
 	}
 	c.totalEntries++
 

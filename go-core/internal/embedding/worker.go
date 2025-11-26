@@ -16,10 +16,11 @@ import (
 
 // EmbeddingWorker generates embeddings for policies in the background
 type EmbeddingWorker struct {
-	store       policy.Store
-	vectorStore vector.VectorStore
-	embedFunc   EmbeddingFunction
-	cache       *EmbeddingCache // Optional caching layer
+	store        policy.Store
+	vectorStore  vector.VectorStore
+	embedFunc    EmbeddingFunction
+	cache        *EmbeddingCache // Optional caching layer
+	ModelVersion string          // Embedding model version for tracking
 
 	jobs    chan EmbeddingJob
 	workers []*worker
@@ -70,6 +71,7 @@ type Config struct {
 	QueueSize      int    // Job queue buffer size (default: 1000)
 	BatchSize      int    // Policies to batch together (default: 10)
 	Dimension      int    // Embedding dimension (default: 384)
+	ModelVersion   string // Embedding model version (default: "v1")
 	EmbeddingFunc  EmbeddingFunction // Custom embedding function
 	CacheConfig    *CacheConfig // Optional caching configuration (nil = no cache)
 }
@@ -81,6 +83,7 @@ func DefaultConfig() Config {
 		QueueSize:     1000,
 		BatchSize:     10,
 		Dimension:     384,
+		ModelVersion:  "v1", // Default version
 		EmbeddingFunc: DefaultEmbeddingFunction,
 	}
 }
@@ -104,14 +107,30 @@ func NewEmbeddingWorker(cfg Config, policyStore policy.Store, vectorStore vector
 	if cfg.EmbeddingFunc == nil {
 		cfg.EmbeddingFunc = DefaultEmbeddingFunction
 	}
+	if cfg.ModelVersion == "" {
+		cfg.ModelVersion = "v1" // Default version for backward compatibility
+	}
+
+	// Validate model version after applying defaults
+	if len(cfg.ModelVersion) > 200 {
+		return nil, fmt.Errorf("version too long (max 200 characters)")
+	}
+	// Basic validation: alphanumeric, dots, dashes, underscores only
+	for _, ch := range cfg.ModelVersion {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') || ch == '.' || ch == '-' || ch == '_') {
+			return nil, fmt.Errorf("invalid version format: only alphanumeric, dots, dashes, and underscores allowed")
+		}
+	}
 
 	w := &EmbeddingWorker{
-		store:       policyStore,
-		vectorStore: vectorStore,
-		embedFunc:   cfg.EmbeddingFunc,
-		jobs:        make(chan EmbeddingJob, cfg.QueueSize),
-		workers:     make([]*worker, 0, cfg.NumWorkers),
-		shutdown:    make(chan struct{}),
+		store:        policyStore,
+		vectorStore:  vectorStore,
+		embedFunc:    cfg.EmbeddingFunc,
+		ModelVersion: cfg.ModelVersion,
+		jobs:         make(chan EmbeddingJob, cfg.QueueSize),
+		workers:      make([]*worker, 0, cfg.NumWorkers),
+		shutdown:     make(chan struct{}),
 		stats: Stats{
 			WorkersActive: cfg.NumWorkers,
 		},
@@ -184,7 +203,7 @@ func (wk *worker) processJob(job EmbeddingJob) error {
 	// Check cache first (if enabled)
 	var embedding []float32
 	if wk.worker.cache != nil {
-		embedding = wk.worker.cache.Get(job.PolicyID, policyHash)
+		embedding = wk.worker.cache.GetWithVersion(job.PolicyID, policyHash, wk.worker.ModelVersion)
 		if embedding != nil {
 			// Cache hit - no need to generate or store
 			wk.worker.incrementCacheHit()
@@ -202,18 +221,19 @@ func (wk *worker) processJob(job EmbeddingJob) error {
 
 	// Store in cache (if enabled)
 	if wk.worker.cache != nil {
-		if err := wk.worker.cache.Put(job.PolicyID, policyHash, embedding); err != nil {
+		if err := wk.worker.cache.PutWithVersion(job.PolicyID, policyHash, embedding, wk.worker.ModelVersion); err != nil {
 			// Log but don't fail the job
 			log.Printf("[EmbeddingWorker-%d] Cache put failed for policy %s: %v", wk.id, job.PolicyID, err)
 		}
 	}
 
-	// Store in vector database
+	// Store in vector database with version metadata
 	metadata := map[string]interface{}{
-		"policy_id":   job.PolicyID,
-		"embedded_at": time.Now().Unix(),
-		"text_length": len(job.PolicyText),
-		"policy_hash": policyHash,
+		"policy_id":     job.PolicyID,
+		"embedded_at":   time.Now().Unix(),
+		"text_length":   len(job.PolicyText),
+		"policy_hash":   policyHash,
+		"model_version": wk.worker.ModelVersion, // Track embedding model version
 	}
 
 	if err := wk.worker.vectorStore.Insert(ctx, job.PolicyID, embedding, metadata); err != nil {
@@ -467,4 +487,19 @@ func normalize(vec []float32) {
 			vec[i] *= norm
 		}
 	}
+}
+
+// DetectVersionMismatch checks if a vector's model_version differs from worker's version
+func (w *EmbeddingWorker) DetectVersionMismatch(vec interface{}) bool {
+	// Handle *vector.Vector type from vector package
+	if v, ok := vec.(*vector.Vector); ok {
+		if storedVersion, exists := v.Metadata["model_version"]; exists {
+			if versionStr, ok := storedVersion.(string); ok {
+				return versionStr != w.ModelVersion
+			}
+		}
+	}
+
+	// No version metadata means legacy embedding (not a mismatch per se)
+	return false
 }

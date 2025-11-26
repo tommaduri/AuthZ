@@ -746,6 +746,43 @@ func (e *Engine) ReEmbedChangedPolicies(policyIDs []string, priority int) int {
 	return submitted
 }
 
+// CheckModelVersion compares current embedding model version with stored version
+// Phase 4.3: Returns true if versions match, false if upgrade needed
+func (e *Engine) CheckModelVersion(storedVersion string) bool {
+	if e.embedWorker == nil {
+		return true // No embedding worker, no version to check
+	}
+	return e.embedWorker.ModelVersion == storedVersion
+}
+
+// ReMigrateAllPolicies re-embeds all policies when model version changes
+// Phase 4.3: Used after model upgrade to regenerate embeddings with new model
+// Returns number of policies submitted for re-embedding
+func (e *Engine) ReMigrateAllPolicies(priority int) int {
+	if e.embedWorker == nil {
+		return 0 // Embedding worker not enabled
+	}
+
+	// Get all policies from store
+	policies := e.store.GetAll()
+
+	// Submit all policies for re-embedding with high priority
+	// This is a one-time migration operation
+	submitted := 0
+	for _, pol := range policies {
+		if e.embedWorker.SubmitPolicy(pol, priority) {
+			submitted++
+		}
+	}
+
+	// Update all policy hashes after migration
+	if e.policyHashMap != nil {
+		e.UpdatePolicyHashes(policies)
+	}
+
+	return submitted
+}
+
 // Shutdown gracefully shuts down the engine and background workers
 // Phase 5: Ensures embedding worker completes or times out gracefully
 func (e *Engine) Shutdown(ctx context.Context) error {
