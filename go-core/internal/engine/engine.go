@@ -235,7 +235,7 @@ func (e *Engine) Check(ctx context.Context, req *types.CheckRequest) (*types.Che
 
 	// Phase 4.4: Record metrics for cache miss and authorization check
 	duration := time.Since(start)
-	if !cacheHit {
+	if !cacheHit && e.cache != nil {
 		e.metrics.RecordCacheMiss()
 	}
 	// Record check metrics (get first result from map)

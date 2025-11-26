@@ -174,10 +174,11 @@ func TestE2E_ConcurrentActiveRequestsGauge(t *testing.T) {
 
 	// Monitor active requests during execution
 	monitorDone := make(chan struct{})
+	monitorStop := make(chan struct{})
 	go func() {
 		defer close(monitorDone)
 
-		ticker := time.NewTicker(10 * time.Millisecond)
+		ticker := time.NewTicker(1 * time.Millisecond) // Check very frequently
 		defer ticker.Stop()
 
 		for {
@@ -197,26 +198,23 @@ func TestE2E_ConcurrentActiveRequestsGauge(t *testing.T) {
 				}
 			case <-ctx.Done():
 				return
-			}
-
-			// Check if all goroutines completed
-			select {
-			case <-monitorDone:
+			case <-monitorStop:
 				return
-			default:
 			}
 		}
 	}()
 
-	// Start all goroutines simultaneously
+	// Start monitoring, then start all goroutines simultaneously
+	time.Sleep(10 * time.Millisecond) // Let monitor start
 	close(startBarrier)
 
 	// Wait for all to complete
 	wg.Wait()
 	time.Sleep(100 * time.Millisecond) // Let monitor catch final state
 
-	// Stop monitoring
-	close(monitorDone)
+	// Stop monitoring and wait for it to finish
+	close(monitorStop)
+	<-monitorDone
 
 	// Verify final state
 	handler := m.HTTPHandler()

@@ -150,17 +150,27 @@ func (v *DerivedRolesValidator) checkConditionSyntax(condition string) error {
 	}
 
 	// Try to compile the CEL expression
-	// We use a dummy context with expected variable types
+	// We use a very permissive dummy context that will accept most attribute accesses
 	dummyContext := &cel.EvalContext{
 		Principal: map[string]interface{}{
 			"id":    "user:test",
 			"roles": []string{"test"},
-			"attr":  map[string]interface{}{},
+			"attr": map[string]interface{}{
+				// Permissive attributes for validation
+				"age":      30,
+				"verified": true,
+				"ownerId":  "test",
+				"tags":     []string{"public"},
+			},
 		},
 		Resource: map[string]interface{}{
 			"kind": "test",
 			"id":   "test",
-			"attr": map[string]interface{}{},
+			"attr": map[string]interface{}{
+				"ownerId": "test",
+				"owners":  []string{"test"},
+				"tags":    []string{"public"},
+			},
 		},
 		Context: map[string]interface{}{},
 	}
@@ -168,13 +178,21 @@ func (v *DerivedRolesValidator) checkConditionSyntax(condition string) error {
 	// Attempt evaluation with dummy context to validate syntax
 	_, err := v.celEngine.EvaluateExpression(condition, dummyContext)
 	if err != nil {
-		// Check if error is due to syntax vs runtime issues
-		if strings.Contains(err.Error(), "undeclared reference") ||
-			strings.Contains(err.Error(), "type error") ||
-			strings.Contains(err.Error(), "parse") {
+		// Check if error is a parse/syntax error (not just missing runtime attributes)
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "Syntax error") ||
+			strings.Contains(errMsg, "parse error") ||
+			strings.Contains(errMsg, "unexpected token") ||
+			strings.Contains(errMsg, "mismatched input") {
 			return fmt.Errorf("CEL syntax error: %w", err)
 		}
-		// Other errors might be runtime-specific, allow them for now
+		// For runtime errors (missing attributes, etc), still return error
+		// but be more lenient if it's just about missing keys in our dummy data
+		if !strings.Contains(errMsg, "no such key") {
+			return fmt.Errorf("CEL condition error: %w", err)
+		}
+		// "no such key" errors in validation context are acceptable
+		// since we can't predict all possible attributes
 	}
 
 	return nil
