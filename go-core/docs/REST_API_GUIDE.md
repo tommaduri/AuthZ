@@ -40,7 +40,7 @@ The API is versioned using the URL path. The current version is `v1`, and all en
 **Base URLs:**
 - Production: `https://api.authz-engine.example.com/v1`
 - Staging: `https://staging-api.authz-engine.example.com/v1`
-- Local: `http://localhost:8080/v1`
+- Local: `http://localhost:8083/v1`
 
 ---
 
@@ -59,10 +59,10 @@ The API is versioned using the URL path. The current version is `v1`, and all en
 export JWT_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
 # 2. Check API health
-curl -X GET http://localhost:8080/health
+curl -X GET http://localhost:8082/health
 
 # 3. Perform an authorization check
-curl -X POST http://localhost:8080/v1/authorization/check \
+curl -X POST http://localhost:8083/v1/authorization/check \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -121,30 +121,45 @@ Authorization: Bearer <jwt-token>
 
 #### Obtaining a Token
 
-**Method 1: OAuth2 Client Credentials Flow**
+⚠️ **Token Issuance Coming Soon**: Authentication endpoints are currently under development.
+
+**Current Workarounds**:
+1. **Use External OAuth2 Provider**: Auth0, Okta, Keycloak, etc.
+2. **Generate JWT Manually**: Use a JWT library to create tokens with proper claims
+3. **Disable Authentication**: Set `AUTHZ_ENABLE_AUTH=false` for development only
+
+**Planned Endpoints** (not yet implemented):
 
 ```bash
-curl -X POST https://auth.authz-engine.example.com/oauth/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=client_credentials" \
-  -d "client_id=YOUR_CLIENT_ID" \
-  -d "client_secret=YOUR_CLIENT_SECRET"
+# Method 1: Username/Password Authentication (COMING SOON)
+curl -X POST http://localhost:8083/v1/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "user@example.com",
+    "password": "your-password",
+    "tenant_id": "acme-corp"
+  }'
+
+# Method 2: API Key Exchange (COMING SOON)
+curl -X POST http://localhost:8083/v1/auth/token \
+  -H "X-API-Key: YOUR_API_KEY"
+
+# Method 3: Refresh Token (COMING SOON)
+curl -X POST http://localhost:8083/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refresh_token": "your-refresh-token"
+  }'
 ```
 
-**Response:**
+**Expected Response Format** (when implemented):
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
   "token_type": "Bearer",
-  "expires_in": 3600
+  "expires_in": 3600,
+  "refresh_token": "refresh-token-here"
 }
-```
-
-**Method 2: API Key Exchange**
-
-```bash
-curl -X POST https://api.authz-engine.example.com/v1/auth/token \
-  -H "X-API-Key: YOUR_API_KEY"
 ```
 
 #### Token Claims
@@ -228,7 +243,7 @@ Check if a principal can perform an action on a resource.
 
 **curl Example:**
 ```bash
-curl -X POST http://localhost:8080/v1/authorization/check \
+curl -X POST http://localhost:8083/v1/authorization/check \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -394,7 +409,7 @@ Discover which actions a principal can perform on a resource.
 
 **Example:**
 ```bash
-curl -X GET "http://localhost:8080/v1/authorization/allowed-actions?\
+curl -X GET "http://localhost:8083/v1/authorization/allowed-actions?\
 principal_id=user123&\
 resource_kind=document&\
 resource_id=doc456&\
@@ -462,7 +477,7 @@ roles=developer,team-lead" \
 The engine caches policy evaluation results. Include cache headers:
 
 ```bash
-curl -X POST http://localhost:8080/v1/authorization/check \
+curl -X POST http://localhost:8083/v1/authorization/check \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -H "X-Cache-Control: max-age=60" \
@@ -580,7 +595,7 @@ Derived roles are dynamic roles assigned based on conditions.
 
 **Example:**
 ```bash
-curl -X GET "http://localhost:8080/v1/policies?\
+curl -X GET "http://localhost:8083/v1/policies?\
 page=1&\
 page_size=20&\
 resource_kind=document&\
@@ -620,7 +635,7 @@ order=desc" \
 
 **Example:**
 ```bash
-curl -X GET http://localhost:8080/v1/policies/policy-dev-read-docs \
+curl -X GET http://localhost:8083/v1/policies/policy-dev-read-docs \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
@@ -632,7 +647,7 @@ curl -X GET http://localhost:8080/v1/policies/policy-dev-read-docs \
 
 **Example - Resource Policy:**
 ```bash
-curl -X POST http://localhost:8080/v1/policies \
+curl -X POST http://localhost:8083/v1/policies \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -679,7 +694,7 @@ curl -X POST http://localhost:8080/v1/policies \
 
 **Example:**
 ```bash
-curl -X PUT http://localhost:8080/v1/policies/policy-dev-read-docs \
+curl -X PUT http://localhost:8083/v1/policies/policy-dev-read-docs \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -718,7 +733,7 @@ curl -X PUT http://localhost:8080/v1/policies/policy-dev-read-docs \
 
 **Example:**
 ```bash
-curl -X DELETE http://localhost:8080/v1/policies/policy-dev-read-docs \
+curl -X DELETE http://localhost:8083/v1/policies/policy-dev-read-docs \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
@@ -827,7 +842,7 @@ R.attr.sensitivity == "low" &&
 
 **Example:**
 ```bash
-curl -X GET http://localhost:8080/v1/principals/user123 \
+curl -X GET http://localhost:8083/v1/principals/user123 \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
@@ -837,7 +852,7 @@ curl -X GET http://localhost:8080/v1/principals/user123 \
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8080/v1/principals/user456 \
+curl -X POST http://localhost:8083/v1/principals/user456 \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -856,7 +871,7 @@ curl -X POST http://localhost:8080/v1/principals/user456 \
 
 **Example:**
 ```bash
-curl -X PUT http://localhost:8080/v1/principals/user123 \
+curl -X PUT http://localhost:8083/v1/principals/user123 \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -876,7 +891,7 @@ curl -X PUT http://localhost:8080/v1/principals/user123 \
 
 **Example:**
 ```bash
-curl -X DELETE http://localhost:8080/v1/principals/user123 \
+curl -X DELETE http://localhost:8083/v1/principals/user123 \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
@@ -913,7 +928,7 @@ Export policies to JSON or YAML format for backup or migration.
 
 **curl Example:**
 ```bash
-curl -X POST http://localhost:8080/v1/policies/export \
+curl -X POST http://localhost:8083/v1/policies/export \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -933,7 +948,7 @@ curl -X POST http://localhost:8080/v1/policies/export \
 
 **curl Example:**
 ```bash
-curl -X POST http://localhost:8080/v1/policies/export \
+curl -X POST http://localhost:8083/v1/policies/export \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"format": "yaml"}' > policies-export.yaml
@@ -1021,7 +1036,7 @@ Import policies from JSON or YAML format.
 
 **curl Example:**
 ```bash
-curl -X POST http://localhost:8080/v1/policies/import \
+curl -X POST http://localhost:8083/v1/policies/import \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d @policies-export.json
@@ -1091,7 +1106,7 @@ Test import without applying changes:
 POLICIES_FILE="policies-export.json"
 JWT_TOKEN="your-jwt-token"
 
-curl -X POST http://localhost:8080/v1/policies/import \
+curl -X POST http://localhost:8083/v1/policies/import \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d @"$POLICIES_FILE"
@@ -1106,7 +1121,7 @@ with open('policies-export.json', 'r') as f:
     data = json.load(f)
 
 response = requests.post(
-    'http://localhost:8080/v1/policies/import',
+    'http://localhost:8083/v1/policies/import',
     headers={
         'Authorization': f'Bearer {jwt_token}',
         'Content-Type': 'application/json'
@@ -1153,7 +1168,7 @@ curl -X POST https://prod-api.example.com/v1/policies/import \
 
 ```bash
 # Export specific policies
-curl -X POST http://localhost:8080/v1/policies/export \
+curl -X POST http://localhost:8083/v1/policies/export \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -d '{
     "policy_ids": ["policy-a", "policy-b", "policy-c"],
@@ -1171,7 +1186,7 @@ curl -X POST https://target-api.example.com/v1/policies/import \
 ```bash
 # Export to Git repository
 export DATE=$(date +%Y%m%d-%H%M%S)
-curl -X POST http://localhost:8080/v1/policies/export \
+curl -X POST http://localhost:8083/v1/policies/export \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -d '{"format": "yaml"}' > policies-$DATE.yaml
 
@@ -1182,7 +1197,7 @@ git push
 
 # Restore from Git
 git pull
-curl -X POST http://localhost:8080/v1/policies/import \
+curl -X POST http://localhost:8083/v1/policies/import \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -d @policies-20250127-103000.yaml
 ```
@@ -1208,7 +1223,7 @@ Create a complete backup of all policies and principals.
 
 **curl Example:**
 ```bash
-curl -X POST http://localhost:8080/v1/policies/backup \
+curl -X POST http://localhost:8083/v1/policies/backup \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1298,7 +1313,7 @@ Restore policies and principals from a backup.
 #### Actual Restore
 
 ```bash
-curl -X POST http://localhost:8080/v1/policies/restore \
+curl -X POST http://localhost:8083/v1/policies/restore \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1337,7 +1352,7 @@ curl -X POST http://localhost:8080/v1/policies/restore \
 #!/bin/bash
 
 # Configuration
-API_URL="http://localhost:8080/v1"
+API_URL="http://localhost:8083/v1"
 JWT_TOKEN="your-jwt-token"
 BACKUP_DIR="/backups"
 DATE=$(date +%Y%m%d-%H%M%S)
@@ -1685,7 +1700,7 @@ X-RateLimit-Reset: 1706356800
 
 **1. Check Headers:**
 ```bash
-curl -i -X POST http://localhost:8080/v1/authorization/check \
+curl -i -X POST http://localhost:8083/v1/authorization/check \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -d '...'
 
@@ -1780,7 +1795,7 @@ Subscribe to policy and principal change events.
 
 **Configuration:**
 ```bash
-curl -X POST http://localhost:8080/v1/webhooks \
+curl -X POST http://localhost:8083/v1/webhooks \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -d '{
     "url": "https://your-app.com/webhook",
@@ -1808,7 +1823,7 @@ curl -X POST http://localhost:8080/v1/webhooks \
 All list endpoints support pagination:
 
 ```bash
-curl -X GET "http://localhost:8080/v1/policies?\
+curl -X GET "http://localhost:8083/v1/policies?\
 page=2&\
 page_size=50&\
 sort=created_at&\
@@ -1836,17 +1851,17 @@ order=desc"
 
 **Filter by Resource Kind:**
 ```bash
-curl -X GET "http://localhost:8080/v1/policies?resource_kind=document"
+curl -X GET "http://localhost:8083/v1/policies?resource_kind=document"
 ```
 
 **Filter by Role:**
 ```bash
-curl -X GET "http://localhost:8080/v1/policies?principal_role=developer"
+curl -X GET "http://localhost:8083/v1/policies?principal_role=developer"
 ```
 
 **Combine Filters:**
 ```bash
-curl -X GET "http://localhost:8080/v1/policies?\
+curl -X GET "http://localhost:8083/v1/policies?\
 resource_kind=document&\
 principal_role=developer&\
 sort=updated_at&\
@@ -1859,7 +1874,7 @@ Long-running operations (import, restore) support async mode:
 
 **Request:**
 ```bash
-curl -X POST http://localhost:8080/v1/policies/import?async=true \
+curl -X POST http://localhost:8083/v1/policies/import?async=true \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -d @large-policies.json
 ```
@@ -1875,7 +1890,7 @@ curl -X POST http://localhost:8080/v1/policies/import?async=true \
 
 **Check Status:**
 ```bash
-curl -X GET http://localhost:8080/v1/operations/op-abc123 \
+curl -X GET http://localhost:8083/v1/operations/op-abc123 \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
@@ -1884,7 +1899,7 @@ curl -X GET http://localhost:8080/v1/operations/op-abc123 \
 Query audit logs for compliance and troubleshooting:
 
 ```bash
-curl -X GET "http://localhost:8080/v1/audit/logs?\
+curl -X GET "http://localhost:8083/v1/audit/logs?\
 start_date=2025-01-20&\
 end_date=2025-01-27&\
 event_type=policy.updated&\
@@ -1956,7 +1971,7 @@ Extend principals and resources with custom attributes:
 Use templates for common policy patterns:
 
 ```bash
-curl -X GET http://localhost:8080/v1/policy-templates \
+curl -X GET http://localhost:8083/v1/policy-templates \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
@@ -1969,7 +1984,7 @@ curl -X GET http://localhost:8080/v1/policy-templates \
 
 **Create from Template:**
 ```bash
-curl -X POST http://localhost:8080/v1/policies/from-template \
+curl -X POST http://localhost:8083/v1/policies/from-template \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -d '{
     "template": "role-based-access",
@@ -2020,7 +2035,7 @@ curl -X POST http://localhost:8080/v1/policies/from-template \
 Enable debug mode for detailed logs:
 
 ```bash
-curl -X POST http://localhost:8080/v1/authorization/check \
+curl -X POST http://localhost:8083/v1/authorization/check \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "X-Debug: true" \
   -d '...'
@@ -2069,15 +2084,19 @@ See [API_EXAMPLES.md](./API_EXAMPLES.md) for comprehensive examples.
 
 ### B. Client SDK Documentation
 
-- TypeScript/JavaScript: [clients/typescript/README.md](../clients/typescript/README.md)
-- Python: [clients/python/README.md](../clients/python/README.md)
-- Go: [clients/go/README.md](../clients/go/README.md)
+🚧 **Coming Soon**: Client SDKs for multiple languages
+
+- TypeScript/JavaScript SDK (Planned)
+- Python SDK (Planned)
+- Go SDK (Planned)
+
+For now, use the REST API directly with your preferred HTTP client.
 
 ### C. OpenAPI Specification
 
 Full specification: [api/openapi.yaml](../api/openapi.yaml)
 
-Interactive docs: http://localhost:8080/api-docs
+Interactive docs: http://localhost:8083/api-docs
 
 ### D. Postman Collection
 

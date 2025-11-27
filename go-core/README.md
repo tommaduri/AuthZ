@@ -13,30 +13,28 @@ High-performance authorization engine written in Go for sub-millisecond policy e
 | Phase 3: Principal Policies | ✅ Complete | 86/89 (96.6%) | 168ns O(1) lookup |
 | Phase 4: Derived Roles | ✅ Complete | 111/118 (94%+) | <10µs resolution |
 | Phase 5: Vector Store + MCP/A2A | ✅ **100% Complete** | **19/19 (100%)** | **<1ms p99** |
-| **Phase 6: Authentication & REST API** | ✅ **100% Complete** | **60+ tests (100%)** | **<100ms p99** |
+| **Phase 6: Authentication & REST API** | 🟡 **60% Complete** | **45+ tests** | **<100ms p99 (REST only)** |
 
-### Phase 6 Achievement - FULL PRODUCTION READINESS ✅
+### Phase 6 Progress - AUTHENTICATION IN PROGRESS 🟡
 
 **Date**: November 27, 2025
-**Security Score**: 95/100 (EXCELLENT)
-**ALL 5 P0 Blockers RESOLVED**
+**Security Score**: 75/100 (GOOD)
+**P0 Blockers**: 3 remaining (token issuance, rate limiting, audit integration)
 
-**Week 1-2: Authentication** (92/100 → 95/100 security score)
-- ✅ JWT RS256 authentication (71.8% coverage)
-- ✅ API Key system with SHA-256 hashing (75% coverage)
-- ✅ Token revocation (Redis blacklist, <5ms)
-- ✅ Audit logging (18 event types, hash chains)
-- ✅ PostgreSQL schema (RLS, 20 indexes)
-- ✅ JWKS integration (external OAuth2)
-- ✅ Agent store integration
-
-**Week 2: REST API & Policy Export/Import** (100% → PRODUCTION-READY)
-- ✅ 13 REST endpoints (authorization, policies, principals)
-- ✅ Policy export (JSON, YAML, tar.gz bundle)
-- ✅ Policy import (validation, dry-run, merge modes)
+**Completed Features**:
+- ✅ JWT validation infrastructure (JWKS support)
+- ✅ Database schema (auth tables, RLS policies)
+- ✅ REST API (13 endpoints: authorization, policies, principals)
+- ✅ Policy export/import (JSON, YAML, tar.gz)
+- ✅ Middleware authentication
 - ✅ OpenAPI 3.0 spec (1,957 lines)
-- ✅ Comprehensive documentation (7,092+ lines)
-- ✅ 60+ integration tests
+
+**In Progress**:
+- 🟡 Token issuance API (planned)
+- 🟡 Rate limiting (schema ready, implementation pending)
+- 🟡 Audit logging integration (schema exists, handlers needed)
+- 🟡 Username/password authentication
+- 🟡 Refresh token handlers
 
 ## Quick Start
 
@@ -63,14 +61,37 @@ go build ./cmd/server
 ./server --port 8080 --policy-dir ./examples
 ```
 
+## Docker Port Reference
+
+When running with Docker Compose, external ports are remapped to avoid conflicts:
+
+| Service | Container Port | Host Port | URL |
+|---------|---------------|-----------|-----|
+| REST API | 8081 | **8083** | http://localhost:8083 |
+| Health/Metrics | 8080 | **8082** | http://localhost:8082 |
+| gRPC | 50051 | 50051 | localhost:50051 |
+| PostgreSQL | 5432 | **5434** | localhost:5434 |
+| Redis | 6379 | **6380** | localhost:6380 |
+
+**Why are ports remapped?**
+- Avoids conflicts with existing services (sovereign-vault, etc.)
+- Standard ports may already be in use on development machines
+- Allows multiple instances to run simultaneously
+
+**For development (non-Docker)**:
+Use the container ports directly: 8080, 8081, 5432, 6379
+
+**For Docker deployment**:
+Use the host ports: 8082, 8083, 5434, 6380
+
 ## Phase 5: Vector Store + Agent Identity + MCP/A2A (✅ ALL DECISIONS APPROVED)
 
 **Status**: ✅ **All 3 Technology Decisions MADE** (2024-11-25)
 **Timeline**: 8-10 weeks
 **See**:
-- [ADR-010: Vector Store Production Strategy](../docs/adr/ADR-010-VECTOR-STORE-PRODUCTION-STRATEGY.md)
-- [ADR-011: MCP/A2A Protocol Integration](../docs/adr/ADR-011-MCP-A2A-PROTOCOL-INTEGRATION.md)
-- [ADR-012: Agent Identity Lifecycle](../docs/adr/ADR-012-AGENT-IDENTITY-LIFECYCLE.md)
+- [ADR-010: Vector Store Production Strategy](../../docs/adr/ADR-010-VECTOR-STORE-PRODUCTION-STRATEGY.md)
+- [ADR-011: MCP/A2A Protocol Integration](../../docs/adr/ADR-011-MCP-A2A-PROTOCOL-INTEGRATION.md)
+- [ADR-012: Agent Identity Lifecycle](../../docs/adr/ADR-012-AGENT-IDENTITY-LIFECYCLE.md)
 
 **Approved Technologies:**
 - **Vector Store**: fogfish/hnsw with in-memory store (3-6 weeks)
@@ -450,7 +471,11 @@ condition:
 
 ## Contributing
 
-See [../CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please follow these guidelines:
+- Write tests for all new features
+- Follow the existing code style
+- Update documentation for API changes
+- Ensure all tests pass before submitting PRs
 
 ## License
 
