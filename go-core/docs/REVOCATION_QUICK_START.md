@@ -72,7 +72,7 @@ import (
 func main() {
     // Setup Redis
     redisClient := redis.NewClient(&redis.Options{
-        Addr: "localhost:6379",
+        Addr: "localhost:6380",
     })
 
     // Create revoker
@@ -95,7 +95,7 @@ func main() {
 
 ```bash
 # Revoke single token
-curl -X POST http://localhost:8080/v1/auth/revoke \
+curl -X POST http://localhost:8083/v1/auth/revoke \
   -H "Content-Type: application/json" \
   -d '{"token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."}'
 
@@ -106,7 +106,7 @@ curl -X POST http://localhost:8080/v1/auth/revoke \
 }
 
 # Batch revoke
-curl -X POST http://localhost:8080/v1/auth/revoke/batch \
+curl -X POST http://localhost:8083/v1/auth/revoke/batch \
   -H "Content-Type: application/json" \
   -d '{"tokens": ["token1", "token2", "token3"]}'
 
@@ -204,7 +204,7 @@ BenchmarkRevokeToken-8            300000    2156 ns/op    Target: <10ms ✓
 
 ```go
 redisClient := redis.NewClient(&redis.Options{
-    Addr:         "redis.prod.example.com:6379",
+    Addr:         "redis.prod.example.com:6380",
     Password:     os.Getenv("REDIS_PASSWORD"),
     DB:           0,
     MaxRetries:   3,

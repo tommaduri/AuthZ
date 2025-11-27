@@ -22,10 +22,10 @@ go build -o authz-server ./cmd/authz-server
 
 ```bash
 # Health check
-curl http://localhost:8081/health
+curl http://localhost:8082/health
 
 # Authorization check
-curl -X POST http://localhost:8081/v1/authorization/check \
+curl -X POST http://localhost:8083/v1/authorization/check \
   -H "Content-Type: application/json" \
   -d '{
     "principal": {
@@ -207,7 +207,7 @@ Get all actions allowed for a principal on a resource.
 
 **Example:**
 ```bash
-curl "http://localhost:8081/v1/authorization/allowed-actions?\
+curl "http://localhost:8083/v1/authorization/allowed-actions?\
 principal.id=user123&\
 principal.roles=editor,viewer&\
 resource.kind=document&\
@@ -242,7 +242,7 @@ resource.attr.owner=user123"
 
 **Example:**
 ```bash
-curl "http://localhost:8081/v1/policies?limit=10&offset=0&kind=resource"
+curl "http://localhost:8083/v1/policies?limit=10&offset=0&kind=resource"
 ```
 
 **Response (200 OK):**
@@ -280,7 +280,7 @@ curl "http://localhost:8081/v1/policies?limit=10&offset=0&kind=resource"
 
 **Example:**
 ```bash
-curl http://localhost:8081/v1/policies/document-policy
+curl http://localhost:8083/v1/policies/document-policy
 ```
 
 **Response (200 OK):**
@@ -569,14 +569,14 @@ Every response includes performance metadata:
 import "net/http"
 
 client := &http.Client{}
-req, _ := http.NewRequest("POST", "http://localhost:8081/v1/authorization/check", body)
+req, _ := http.NewRequest("POST", "http://localhost:8083/v1/authorization/check", body)
 req.Header.Set("Content-Type", "application/json")
 resp, _ := client.Do(req)
 ```
 
 ### JavaScript/Node.js
 ```javascript
-fetch('http://localhost:8081/v1/authorization/check', {
+fetch('http://localhost:8083/v1/authorization/check', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(checkRequest)
@@ -588,14 +588,14 @@ fetch('http://localhost:8081/v1/authorization/check', {
 import requests
 
 response = requests.post(
-    'http://localhost:8081/v1/authorization/check',
+    'http://localhost:8083/v1/authorization/check',
     json=check_request
 )
 ```
 
 ### curl
 ```bash
-curl -X POST http://localhost:8081/v1/authorization/check \
+curl -X POST http://localhost:8083/v1/authorization/check \
   -H "Content-Type: application/json" \
   -d @request.json
 ```

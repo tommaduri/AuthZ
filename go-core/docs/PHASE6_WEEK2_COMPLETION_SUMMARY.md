@@ -573,7 +573,7 @@ The system is FULLY PRODUCTION-READY with:
 
 ```bash
 # Authorization check
-curl -X POST http://localhost:8080/v1/authorization/check \
+curl -X POST http://localhost:8083/v1/authorization/check \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -583,11 +583,11 @@ curl -X POST http://localhost:8080/v1/authorization/check \
   }'
 
 # List policies
-curl -X GET "http://localhost:8080/v1/policies?kind=resource&limit=10" \
+curl -X GET "http://localhost:8083/v1/policies?kind=resource&limit=10" \
   -H "Authorization: Bearer <token>"
 
 # Export policies to YAML
-curl -X POST http://localhost:8080/v1/policies/export \
+curl -X POST http://localhost:8083/v1/policies/export \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -596,7 +596,7 @@ curl -X POST http://localhost:8080/v1/policies/export \
   }' > policies.yaml
 
 # Import policies with validation
-curl -X POST http://localhost:8080/v1/policies/import \
+curl -X POST http://localhost:8083/v1/policies/import \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -613,7 +613,7 @@ curl -X POST http://localhost:8080/v1/policies/import \
 ```go
 import "github.com/yourusername/authz-engine/go-core/pkg/client"
 
-client := client.New("http://localhost:8080")
+client := client.New("http://localhost:8083")
 client.SetToken("your-jwt-token")
 
 // Authorization check

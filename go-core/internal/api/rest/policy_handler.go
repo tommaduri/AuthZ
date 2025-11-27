@@ -80,8 +80,14 @@ func (s *Server) listPoliciesHandler(w http.ResponseWriter, r *http.Request) {
 		nextOffset = &next
 	}
 
+	// Convert pointers to values for response
+	policies := make([]PolicyResponse, len(paginatedPolicies))
+	for i, p := range paginatedPolicies {
+		policies[i] = *p
+	}
+
 	response := PolicyListResponse{
-		Policies:   paginatedPolicies,
+		Policies:   policies,
 		Total:      total,
 		Offset:     offset,
 		Limit:      limit,
@@ -218,17 +224,8 @@ func (s *Server) updatePolicyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update policy (delete and add)
-	if err := s.policyStore.Delete(policyID); err != nil {
-		s.logger.Error("Failed to delete policy for update",
-			zap.String("policy_id", policyID),
-			zap.Error(err),
-		)
-		WriteError(w, http.StatusInternalServerError, "Failed to update policy", map[string]interface{}{
-			"error": err.Error(),
-		})
-		return
-	}
+	// Update policy by replacing it (store doesn't have Delete method, so we just Add which replaces)
+	// Note: The in-memory store replaces policies with the same name
 
 	if err := s.policyStore.Add(policy); err != nil {
 		s.logger.Error("Failed to add updated policy",
@@ -268,21 +265,13 @@ func (s *Server) deletePolicyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete policy
-	if err := s.policyStore.Delete(policyID); err != nil {
-		s.logger.Error("Failed to delete policy",
-			zap.String("policy_id", policyID),
-			zap.Error(err),
-		)
-		WriteError(w, http.StatusInternalServerError, "Failed to delete policy", map[string]interface{}{
-			"error": err.Error(),
-		})
-		return
-	}
+	// Delete policy (not implemented in Store interface yet - return 501)
+	WriteError(w, http.StatusNotImplemented, "Delete policy not yet implemented", map[string]interface{}{
+		"policy_id": policyID,
+		"note":      "Policy deletion will be available in a future release",
+	})
 
-	s.logger.Info("Policy deleted",
-		zap.String("policy_id", policyID),
-	)
-
-	w.WriteHeader(http.StatusNoContent)
+	// TODO: Implement Delete in Store interface
+	// This endpoint will be fully functional in a future release once the Store interface
+	// includes a Delete method for removing policies from the in-memory store.
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -117,11 +116,8 @@ func main() {
 	metricsCollector := server.NewMetricsCollector()
 	metricsHandler := server.NewMetricsHandler(metricsCollector)
 
-	// Create minimal engine for health checks
-	healthEngine := &server.Engine{
-		cacheEnabled: *cacheEnabled,
-	}
-	healthHandler := server.NewHealthHandler(healthEngine, logger)
+	// Create health handler (engine parameter not currently used, pass nil for now)
+	healthHandler := server.NewHealthHandler(nil, logger)
 
 	// Initialize HTTP mux for health/metrics
 	httpMux := http.NewServeMux()

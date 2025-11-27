@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
@@ -59,4 +59,4 @@ ENV AUTHZ_PORT=50051 \
 
 # Run the server
 ENTRYPOINT ["/app/authz-server"]
-CMD ["--port", "50051", "--cache", "--cache-size", "100000", "--workers", "16"]
+CMD ["--grpc-port", "50051", "--http-port", "8080", "--cache", "--cache-size", "100000", "--workers", "16"]

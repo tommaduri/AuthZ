@@ -249,9 +249,9 @@ func FromInternalPolicy(p *types.Policy) *PolicyResponse {
 		resp.Resources = make([]ResourceSelector, len(p.Resources))
 		for i, r := range p.Resources {
 			resp.Resources[i] = ResourceSelector{
-				Kind:       r.Kind,
-				IDPattern:  r.IDPattern,
-				Attributes: r.Attributes,
+				Kind: r.Kind,
+				// Note: types.ResourceSelector only has Kind and Scope fields
+				// IDPattern and Attributes are not in the internal type
 			}
 		}
 	}
@@ -307,9 +307,9 @@ func (pr *PolicyRequest) ToInternalPolicy() (*types.Policy, error) {
 		policy.Resources = make([]*types.ResourceSelector, len(pr.Resources))
 		for i, r := range pr.Resources {
 			policy.Resources[i] = &types.ResourceSelector{
-				Kind:       r.Kind,
-				IDPattern:  r.IDPattern,
-				Attributes: r.Attributes,
+				Kind: r.Kind,
+				// Note: types.ResourceSelector only has Kind and Scope fields
+				// IDPattern and Attributes from REST API are not yet supported in internal types
 			}
 		}
 	}

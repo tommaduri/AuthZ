@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/authz-engine/go-core/pkg/types"
 )
 
 // asyncLogger implements asynchronous audit logging with ring buffer
@@ -208,6 +211,31 @@ func (l *asyncLogger) Close() error {
 	close(l.doneCh)
 	time.Sleep(200 * time.Millisecond) // Give background goroutine time to flush
 	return l.writer.Close()
+}
+
+// Log asynchronously logs an authentication audit event (not supported in async logger)
+func (l *asyncLogger) Log(event *types.AuditEvent) error {
+	return fmt.Errorf("Log method not supported on async logger, use database-backed logger")
+}
+
+// LogSync synchronously logs an authentication audit event (not supported in async logger)
+func (l *asyncLogger) LogSync(ctx context.Context, event *types.AuditEvent) error {
+	return fmt.Errorf("LogSync method not supported on async logger, use database-backed logger")
+}
+
+// Query retrieves audit events (not supported in async logger)
+func (l *asyncLogger) Query(ctx context.Context, query *types.AuditQuery) (*types.AuditQueryResult, error) {
+	return nil, fmt.Errorf("Query method not supported on async logger, use database-backed logger")
+}
+
+// VerifyIntegrity verifies hash chain integrity (not supported in async logger)
+func (l *asyncLogger) VerifyIntegrity(ctx context.Context, tenantID string, startTime, endTime time.Time) (bool, error) {
+	return false, fmt.Errorf("VerifyIntegrity method not supported on async logger, use database-backed logger")
+}
+
+// GetStatistics retrieves aggregate statistics (not supported in async logger)
+func (l *asyncLogger) GetStatistics(ctx context.Context, tenantID string, timeRange time.Duration) (*types.AuditStatistics, error) {
+	return nil, fmt.Errorf("GetStatistics method not supported on async logger, use database-backed logger")
 }
 
 // Helper functions for extracting context values

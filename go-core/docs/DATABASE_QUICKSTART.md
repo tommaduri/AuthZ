@@ -48,7 +48,7 @@ Complete PostgreSQL database schema for authentication system with:
 **Option A: Docker (Recommended)**
 ```bash
 make docker-db-start
-# Starts PostgreSQL 15 in Docker on port 5432
+# Starts PostgreSQL 15 in Docker on port 5434 (Docker external)
 ```
 
 **Option B: Local PostgreSQL**

@@ -21,10 +21,10 @@ This document provides comprehensive code examples for interacting with the Auth
 export JWT_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
 # Health check (no auth required)
-curl -X GET http://localhost:8080/health
+curl -X GET http://localhost:8082/health
 
 # Status check (auth required)
-curl -X GET http://localhost:8080/v1/status \
+curl -X GET http://localhost:8083/v1/status \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
@@ -33,7 +33,7 @@ curl -X GET http://localhost:8080/v1/status \
 #### Basic Authorization Check
 
 ```bash
-curl -X POST http://localhost:8080/v1/authorization/check \
+curl -X POST http://localhost:8083/v1/authorization/check \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -52,7 +52,7 @@ curl -X POST http://localhost:8080/v1/authorization/check \
 #### Authorization Check with Attributes
 
 ```bash
-curl -X POST http://localhost:8080/v1/authorization/check \
+curl -X POST http://localhost:8083/v1/authorization/check \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -79,7 +79,7 @@ curl -X POST http://localhost:8080/v1/authorization/check \
 #### Batch Authorization Check
 
 ```bash
-curl -X POST http://localhost:8080/v1/authorization/check-resources \
+curl -X POST http://localhost:8083/v1/authorization/check-resources \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -99,7 +99,7 @@ curl -X POST http://localhost:8080/v1/authorization/check-resources \
 #### Get Allowed Actions
 
 ```bash
-curl -X GET "http://localhost:8080/v1/authorization/allowed-actions?\
+curl -X GET "http://localhost:8083/v1/authorization/allowed-actions?\
 principal_id=user123&\
 resource_kind=document&\
 resource_id=doc456&\
@@ -113,29 +113,29 @@ roles=developer,team-lead" \
 
 ```bash
 # List all policies (paginated)
-curl -X GET "http://localhost:8080/v1/policies?page=1&page_size=20" \
+curl -X GET "http://localhost:8083/v1/policies?page=1&page_size=20" \
   -H "Authorization: Bearer $JWT_TOKEN"
 
 # Filter by resource kind
-curl -X GET "http://localhost:8080/v1/policies?resource_kind=document" \
+curl -X GET "http://localhost:8083/v1/policies?resource_kind=document" \
   -H "Authorization: Bearer $JWT_TOKEN"
 
 # Filter by role
-curl -X GET "http://localhost:8080/v1/policies?principal_role=developer" \
+curl -X GET "http://localhost:8083/v1/policies?principal_role=developer" \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
 #### Get Policy by ID
 
 ```bash
-curl -X GET http://localhost:8080/v1/policies/policy-dev-read-docs \
+curl -X GET http://localhost:8083/v1/policies/policy-dev-read-docs \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
 #### Create Policy
 
 ```bash
-curl -X POST http://localhost:8080/v1/policies \
+curl -X POST http://localhost:8083/v1/policies \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -159,7 +159,7 @@ curl -X POST http://localhost:8080/v1/policies \
 #### Update Policy
 
 ```bash
-curl -X PUT http://localhost:8080/v1/policies/policy-dev-read-docs \
+curl -X PUT http://localhost:8083/v1/policies/policy-dev-read-docs \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -183,7 +183,7 @@ curl -X PUT http://localhost:8080/v1/policies/policy-dev-read-docs \
 #### Delete Policy
 
 ```bash
-curl -X DELETE http://localhost:8080/v1/policies/policy-dev-read-docs \
+curl -X DELETE http://localhost:8083/v1/policies/policy-dev-read-docs \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
@@ -192,7 +192,7 @@ curl -X DELETE http://localhost:8080/v1/policies/policy-dev-read-docs \
 #### Export All Policies
 
 ```bash
-curl -X POST http://localhost:8080/v1/policies/export \
+curl -X POST http://localhost:8083/v1/policies/export \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -205,7 +205,7 @@ curl -X POST http://localhost:8080/v1/policies/export \
 #### Export Specific Policies
 
 ```bash
-curl -X POST http://localhost:8080/v1/policies/export \
+curl -X POST http://localhost:8083/v1/policies/export \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -217,7 +217,7 @@ curl -X POST http://localhost:8080/v1/policies/export \
 #### Import Policies (Dry Run)
 
 ```bash
-curl -X POST http://localhost:8080/v1/policies/import \
+curl -X POST http://localhost:8083/v1/policies/import \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d @policies.json \
@@ -227,7 +227,7 @@ curl -X POST http://localhost:8080/v1/policies/import \
 #### Import Policies
 
 ```bash
-curl -X POST http://localhost:8080/v1/policies/import \
+curl -X POST http://localhost:8083/v1/policies/import \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   --data-binary @policies.json
@@ -238,7 +238,7 @@ curl -X POST http://localhost:8080/v1/policies/import \
 #### Create Backup
 
 ```bash
-curl -X POST http://localhost:8080/v1/policies/backup \
+curl -X POST http://localhost:8083/v1/policies/backup \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -251,7 +251,7 @@ curl -X POST http://localhost:8080/v1/policies/backup \
 #### Restore from Backup
 
 ```bash
-curl -X POST http://localhost:8080/v1/policies/restore \
+curl -X POST http://localhost:8083/v1/policies/restore \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -461,7 +461,7 @@ class AuthzClient:
 ```python
 # Initialize client
 client = AuthzClient(
-    base_url='http://localhost:8080/v1',
+    base_url='http://localhost:8083/v1',
     jwt_token='your-jwt-token'
 )
 
@@ -727,7 +727,7 @@ const fs = require('fs').promises;
 (async () => {
   // Initialize client
   const client = new AuthzClient(
-    'http://localhost:8080/v1',
+    'http://localhost:8083/v1',
     'your-jwt-token'
   );
 
@@ -1095,7 +1095,7 @@ func (c *AuthzClient) ExportPolicies(policyIDs []string, format string, includeP
 
 func main() {
     client := NewAuthzClient(
-        "http://localhost:8080/v1",
+        "http://localhost:8083/v1",
         "your-jwt-token",
     )
 
@@ -1270,7 +1270,7 @@ public class AuthzClient {
     public static void main(String[] args) {
         try {
             AuthzClient client = new AuthzClient(
-                "http://localhost:8080/v1",
+                "http://localhost:8083/v1",
                 "your-jwt-token"
             );
 

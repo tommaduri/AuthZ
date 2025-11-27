@@ -509,7 +509,7 @@ ulimit -n 10000
 - [Apache Bench Documentation](https://httpd.apache.org/docs/current/programs/ab.html)
 - [k6 Documentation](https://k6.io/docs/)
 - [Go Benchmarking Guide](https://golang.org/pkg/testing/#hdr-Benchmarks)
-- [Phase 4.5 Metrics Specification](../../docs/phase-4-5-metrics.md)
+- [Phase 4.5 Metrics Specification](../../../docs/PHASE4.5_SPECIFICATION.md)
 
 ## Support
 

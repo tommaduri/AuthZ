@@ -490,7 +490,7 @@ The Phase 6 Authentication SWARM has successfully **remediated ALL 11 P0 CRITICA
    go test ./tests/audit/... -v
 
    # Check health
-   curl http://localhost:8080/health
+   curl http://localhost:8083/health
    ```
 
 ### Monitoring

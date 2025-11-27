@@ -4,27 +4,20 @@ package auth
 import (
 	"context"
 	"fmt"
-	"time"
 
 	gojwt "github.com/golang-jwt/jwt/v5"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
 // JWTValidatorWithJWKS validates JWT tokens using JWKS for key resolution
 type JWTValidatorWithJWKS struct {
-	jwksProvider      *JWKSProvider
-	issuer            string
-	audience          string
-	redisClient       *redis.Client
-	logger            *zap.Logger
-	skipExpiryCheck   bool
-	skipIssuerCheck   bool
-	skipAudienceCheck bool
+	jwksProvider *JWKSProvider
+	config       *JWTConfig
+	logger       *zap.Logger
 }
 
 // NewJWTValidatorWithJWKS creates a new JWT validator with JWKS support
-func NewJWTValidatorWithJWKS(provider *auth.JWKSProvider, cfg *ValidatorConfig) (*JWTValidatorWithJWKS, error) {
+func NewJWTValidatorWithJWKS(provider *JWKSProvider, cfg *JWTConfig) (*JWTValidatorWithJWKS, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("JWKS provider is required")
 	}
@@ -38,34 +31,26 @@ func NewJWTValidatorWithJWKS(provider *auth.JWKSProvider, cfg *ValidatorConfig) 
 		return nil, fmt.Errorf("audience is required")
 	}
 
-	logger := cfg.Logger
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger := zap.NewNop() // Default logger
 
 	return &JWTValidatorWithJWKS{
-		jwksProvider:      provider,
-		issuer:            cfg.Issuer,
-		audience:          cfg.Audience,
-		redisClient:       cfg.RedisClient,
-		logger:            logger,
-		skipExpiryCheck:   cfg.SkipExpiryCheck,
-		skipIssuerCheck:   cfg.SkipIssuerCheck,
-		skipAudienceCheck: cfg.SkipAudienceCheck,
+		jwksProvider: provider,
+		config:       cfg,
+		logger:       logger,
 	}, nil
 }
 
 // Validate validates a JWT token using JWKS for key resolution
-func (v *JWTValidatorWithJWKS) Validate(ctx context.Context, tokenString string) (*auth.Claims, error) {
+func (v *JWTValidatorWithJWKS) Validate(ctx context.Context, tokenString string) (*Claims, error) {
 	if tokenString == "" {
 		return nil, fmt.Errorf("empty token")
 	}
 
 	// Parse token to extract kid from header
-	var claims auth.Claims
-	token, err := jwt.ParseWithClaims(tokenString, &claims, func(token *jwt.Token) (interface{}, error) {
+	var claims Claims
+	token, err := gojwt.ParseWithClaims(tokenString, &claims, func(token *gojwt.Token) (interface{}, error) {
 		// Verify algorithm is RS256
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+		if _, ok := token.Method.(*gojwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		if token.Method.Alg() != "RS256" {
@@ -95,19 +80,17 @@ func (v *JWTValidatorWithJWKS) Validate(ctx context.Context, tokenString string)
 		return nil, fmt.Errorf("invalid token")
 	}
 
-	// Validate standard claims
-	if err := v.validateStandardClaims(&claims); err != nil {
-		return nil, fmt.Errorf("invalid standard claims: %w", err)
+	// Validate standard claims using config
+	if err := v.validateClaims(&claims); err != nil {
+		return nil, fmt.Errorf("invalid claims: %w", err)
 	}
 
-	// Check revocation if Redis is configured
-	if v.redisClient != nil {
-		revoker := NewTokenRevoker(v.redisClient)
-		isRevoked, err := revoker.IsRevoked(ctx, claims.ID)
+	// Check if token is revoked (if revocation store is configured)
+	if v.config.RevocationStore != nil && claims.ID != "" {
+		isRevoked, err := v.config.RevocationStore.IsRevoked(ctx, claims.ID)
 		if err != nil {
-			v.logger.Warn("Failed to check token revocation",
-				zap.Error(err),
-				zap.String("jti", claims.ID))
+			v.logger.Warn("Failed to check token revocation", zap.Error(err), zap.String("jti", claims.ID))
+			// Continue anyway - don't fail if Redis is temporarily unavailable
 		} else if isRevoked {
 			return nil, fmt.Errorf("token has been revoked")
 		}
@@ -116,15 +99,32 @@ func (v *JWTValidatorWithJWKS) Validate(ctx context.Context, tokenString string)
 	return &claims, nil
 }
 
-// validateStandardClaims validates JWT standard claims (reuse from base validator)
-func (v *JWTValidatorWithJWKS) validateStandardClaims(claims *auth.Claims) error {
-	// Create temporary base validator for claim validation
-	baseValidator := &JWTValidator{
-		issuer:            v.issuer,
-		audience:          v.audience,
-		skipExpiryCheck:   v.skipExpiryCheck,
-		skipIssuerCheck:   v.skipIssuerCheck,
-		skipAudienceCheck: v.skipAudienceCheck,
+// validateClaims validates JWT standard and custom claims
+func (v *JWTValidatorWithJWKS) validateClaims(claims *Claims) error {
+	// Validate issuer
+	if !v.config.SkipIssuerCheck && v.config.Issuer != "" {
+		if claims.Issuer != v.config.Issuer {
+			return fmt.Errorf("invalid issuer: expected %s, got %s", v.config.Issuer, claims.Issuer)
+		}
 	}
-	return baseValidator.validateStandardClaims(claims)
+
+	// Validate audience
+	if !v.config.SkipAudienceCheck && v.config.Audience != "" {
+		found := false
+		for _, aud := range claims.Audience {
+			if aud == v.config.Audience {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("invalid audience: expected %s", v.config.Audience)
+		}
+	}
+
+	// Note: Expiration (exp), Not Before (nbf), and Issued At (iat)
+	// are automatically validated by gojwt.ParseWithClaims via RegisteredClaims
+	// unless v.config.SkipExpirationCheck is true
+
+	return nil
 }

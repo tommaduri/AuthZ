@@ -15,7 +15,7 @@ func BenchmarkAsyncLogger_LogAuthzCheck(b *testing.B) {
 		FlushInterval: 1 * time.Second, // Long interval to measure enqueue only
 	}
 
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(&cfg)
 	if err != nil {
 		b.Fatalf("create logger: %v", err)
 	}
@@ -50,7 +50,7 @@ func BenchmarkAsyncLogger_LogAuthzCheck_Parallel(b *testing.B) {
 		FlushInterval: 1 * time.Second,
 	}
 
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(&cfg)
 	if err != nil {
 		b.Fatalf("create logger: %v", err)
 	}
@@ -113,7 +113,7 @@ func BenchmarkStdoutWriter_Write(b *testing.B) {
 // BenchmarkNoopLogger measures overhead of disabled logging
 func BenchmarkNoopLogger(b *testing.B) {
 	cfg := Config{Enabled: false}
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(&cfg)
 	if err != nil {
 		b.Fatalf("create logger: %v", err)
 	}
@@ -144,7 +144,7 @@ func BenchmarkLogPolicyChange(b *testing.B) {
 		FlushInterval: 1 * time.Second,
 	}
 
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(&cfg)
 	if err != nil {
 		b.Fatalf("create logger: %v", err)
 	}
@@ -180,7 +180,7 @@ func BenchmarkLogAgentAction(b *testing.B) {
 		FlushInterval: 1 * time.Second,
 	}
 
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(&cfg)
 	if err != nil {
 		b.Fatalf("create logger: %v", err)
 	}

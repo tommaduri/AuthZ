@@ -2,8 +2,11 @@ package audit
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/authz-engine/go-core/pkg/types"
 )
 
 // Logger logs audit events
@@ -17,6 +20,21 @@ type Logger interface {
 	// LogAgentAction logs agent operations
 	LogAgentAction(ctx context.Context, action *AgentAction)
 
+	// Log asynchronously logs an authentication audit event
+	Log(event *types.AuditEvent) error
+
+	// LogSync synchronously logs an authentication audit event
+	LogSync(ctx context.Context, event *types.AuditEvent) error
+
+	// Query retrieves audit events based on query criteria
+	Query(ctx context.Context, query *types.AuditQuery) (*types.AuditQueryResult, error)
+
+	// VerifyIntegrity verifies the hash chain integrity
+	VerifyIntegrity(ctx context.Context, tenantID string, startTime, endTime time.Time) (bool, error)
+
+	// GetStatistics retrieves aggregate statistics
+	GetStatistics(ctx context.Context, tenantID string, timeRange time.Duration) (*types.AuditStatistics, error)
+
 	// Flush flushes pending logs
 	Flush() error
 
@@ -29,7 +47,7 @@ type Config struct {
 	// Enabled enables audit logging
 	Enabled bool
 
-	// Output type: stdout, file, syslog
+	// Output type: stdout, file, syslog, db (database)
 	Type string
 
 	// For file output
@@ -42,9 +60,13 @@ type Config struct {
 	SyslogAddr     string
 	SyslogProtocol string // tcp, udp, unix
 
+	// For database output (authentication audit logging with hash chains)
+	DB *sql.DB
+
 	// Performance tuning
 	BufferSize    int           // Ring buffer size (default: 1000)
 	FlushInterval time.Duration // Batch interval (default: 100ms)
+	BatchSize     int           // Batch size for database writes (default: 100)
 }
 
 // DefaultConfig returns default configuration
@@ -94,13 +116,33 @@ func (c *Config) Validate() error {
 }
 
 // NewLogger creates a new audit logger
-func NewLogger(cfg Config) (Logger, error) {
+func NewLogger(cfg *Config) (Logger, error) {
+	if cfg == nil {
+		cfg = &Config{}
+		*cfg = DefaultConfig()
+	}
+
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	if !cfg.Enabled {
+	if !cfg.Enabled && cfg.DB == nil {
 		return &noopLogger{}, nil
+	}
+
+	// If DB is provided, use the auth audit logger with hash chains
+	if cfg.DB != nil {
+		authCfg := &AuthAuditConfig{
+			DB:            cfg.DB,
+			BufferSize:    cfg.BufferSize,
+			FlushInterval: cfg.FlushInterval,
+			BatchSize:     cfg.BatchSize,
+		}
+		authLogger, err := NewAuthAuditLogger(authCfg)
+		if err != nil {
+			return nil, fmt.Errorf("create auth audit logger: %w", err)
+		}
+		return &unifiedLogger{authLogger: authLogger}, nil
 	}
 
 	var writer Writer
@@ -123,14 +165,73 @@ func NewLogger(cfg Config) (Logger, error) {
 		return nil, fmt.Errorf("unsupported audit type: %s", cfg.Type)
 	}
 
-	return newAsyncLogger(writer, cfg), nil
+	return newAsyncLogger(writer, *cfg), nil
 }
 
 // noopLogger is a no-op logger used when audit logging is disabled
 type noopLogger struct{}
 
-func (n *noopLogger) LogAuthzCheck(ctx context.Context, event *AuthzCheckEvent)    {}
-func (n *noopLogger) LogPolicyChange(ctx context.Context, change *PolicyChange)   {}
-func (n *noopLogger) LogAgentAction(ctx context.Context, action *AgentAction)     {}
-func (n *noopLogger) Flush() error                                                { return nil }
-func (n *noopLogger) Close() error                                                { return nil }
+func (n *noopLogger) LogAuthzCheck(ctx context.Context, event *AuthzCheckEvent) {}
+func (n *noopLogger) LogPolicyChange(ctx context.Context, change *PolicyChange) {}
+func (n *noopLogger) LogAgentAction(ctx context.Context, action *AgentAction)   {}
+func (n *noopLogger) Log(event *types.AuditEvent) error                         { return nil }
+func (n *noopLogger) LogSync(ctx context.Context, event *types.AuditEvent) error {
+	return nil
+}
+func (n *noopLogger) Query(ctx context.Context, query *types.AuditQuery) (*types.AuditQueryResult, error) {
+	return &types.AuditQueryResult{}, nil
+}
+func (n *noopLogger) VerifyIntegrity(ctx context.Context, tenantID string, startTime, endTime time.Time) (bool, error) {
+	return true, nil
+}
+func (n *noopLogger) GetStatistics(ctx context.Context, tenantID string, timeRange time.Duration) (*types.AuditStatistics, error) {
+	return &types.AuditStatistics{}, nil
+}
+func (n *noopLogger) Flush() error { return nil }
+func (n *noopLogger) Close() error { return nil }
+
+// unifiedLogger wraps AuthAuditLogger and provides compatibility with both APIs
+type unifiedLogger struct {
+	authLogger *AuthAuditLogger
+}
+
+func (u *unifiedLogger) LogAuthzCheck(ctx context.Context, event *AuthzCheckEvent) {
+	// Convert AuthzCheckEvent to AuditEvent (not implemented for now)
+}
+
+func (u *unifiedLogger) LogPolicyChange(ctx context.Context, change *PolicyChange) {
+	// Convert PolicyChange to AuditEvent (not implemented for now)
+}
+
+func (u *unifiedLogger) LogAgentAction(ctx context.Context, action *AgentAction) {
+	// Convert AgentAction to AuditEvent (not implemented for now)
+}
+
+func (u *unifiedLogger) Log(event *types.AuditEvent) error {
+	return u.authLogger.LogAuthEvent(event)
+}
+
+func (u *unifiedLogger) LogSync(ctx context.Context, event *types.AuditEvent) error {
+	return u.authLogger.LogAuthEventSync(ctx, event)
+}
+
+func (u *unifiedLogger) Query(ctx context.Context, query *types.AuditQuery) (*types.AuditQueryResult, error) {
+	return u.authLogger.Query(ctx, query)
+}
+
+func (u *unifiedLogger) VerifyIntegrity(ctx context.Context, tenantID string, startTime, endTime time.Time) (bool, error) {
+	return u.authLogger.VerifyIntegrity(ctx, tenantID, startTime, endTime)
+}
+
+func (u *unifiedLogger) GetStatistics(ctx context.Context, tenantID string, timeRange time.Duration) (*types.AuditStatistics, error) {
+	return u.authLogger.GetStatistics(ctx, tenantID, timeRange)
+}
+
+func (u *unifiedLogger) Flush() error {
+	// AuthAuditLogger handles flushing automatically
+	return nil
+}
+
+func (u *unifiedLogger) Close() error {
+	return u.authLogger.Close()
+}

@@ -68,7 +68,7 @@ COMMENT ON COLUMN refresh_tokens.parent_token_id IS 'Links to previous token in 
 -- Auth Audit Logs table
 -- Comprehensive authentication event logging
 CREATE TABLE IF NOT EXISTS auth_audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID DEFAULT uuid_generate_v4(),
     event_type TEXT NOT NULL,
     user_id TEXT,
     agent_id TEXT,
@@ -81,6 +81,9 @@ CREATE TABLE IF NOT EXISTS auth_audit_logs (
     tenant_id TEXT NOT NULL,
     request_id TEXT,
     metadata JSONB DEFAULT '{}'::jsonb,
+
+    -- Composite primary key including timestamp for future partitioning support
+    PRIMARY KEY (id, timestamp),
 
     -- Constraints
     CONSTRAINT auth_audit_logs_event_type_check CHECK (event_type IN (

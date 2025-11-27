@@ -267,10 +267,10 @@ func (s *Server) statusHandler(w http.ResponseWriter, r *http.Request) {
 	// Add cache stats if available
 	if stats := s.engine.GetCacheStats(); stats != nil {
 		response.CacheStats = map[string]interface{}{
-			"hits":      stats.Hits,
-			"misses":    stats.Misses,
-			"evictions": stats.Evictions,
-			"size":      stats.Size,
+			"hits":     stats.Hits,
+			"misses":   stats.Misses,
+			"hit_rate": stats.HitRate,
+			"size":     stats.Size,
 		}
 	}
 

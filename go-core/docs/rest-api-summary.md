@@ -362,7 +362,7 @@ Service status and metrics.
 
 ```bash
 # Authorization check
-curl -X POST http://localhost:8081/v1/authorization/check \
+curl -X POST http://localhost:8083/v1/authorization/check \
   -H "Content-Type: application/json" \
   -d '{
     "principal": {"id": "user123", "roles": ["viewer"]},
@@ -371,15 +371,15 @@ curl -X POST http://localhost:8081/v1/authorization/check \
   }'
 
 # List policies
-curl http://localhost:8081/v1/policies?limit=10
+curl http://localhost:8083/v1/policies?limit=10
 
 # Create policy
-curl -X POST http://localhost:8081/v1/policies \
+curl -X POST http://localhost:8083/v1/policies \
   -H "Content-Type: application/json" \
   -d @policy.json
 
 # Health check
-curl http://localhost:8081/health
+curl http://localhost:8082/health
 ```
 
 ## Integration with Existing System

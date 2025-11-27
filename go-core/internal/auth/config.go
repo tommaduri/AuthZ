@@ -22,6 +22,9 @@ type JWTConfig struct {
 	Issuer   string
 	Audience string
 
+	// Token revocation
+	RevocationStore RevocationStore // Optional: Redis-based token revocation
+
 	// Optional: Custom validation
 	SkipExpirationCheck bool // For testing only
 	SkipIssuerCheck     bool // For testing only

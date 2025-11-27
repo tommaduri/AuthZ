@@ -37,8 +37,9 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens USING bt
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_tenant_id ON refresh_tokens USING btree (tenant_id);
 
 -- Active tokens lookup (non-revoked, non-expired)
+-- Note: Cannot use NOW() in partial index (not IMMUTABLE). Query will filter at runtime.
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_active ON refresh_tokens USING btree (tenant_id, user_id, revoked_at, expires_at)
-    WHERE revoked_at IS NULL AND expires_at > NOW();
+    WHERE revoked_at IS NULL;
 
 -- Token rotation chain lookup
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_parent ON refresh_tokens USING btree (parent_token_id)

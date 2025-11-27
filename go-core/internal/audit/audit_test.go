@@ -113,7 +113,7 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestNoopLogger(t *testing.T) {
 	cfg := Config{Enabled: false}
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(&cfg)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -206,7 +206,7 @@ func TestAsyncLogger(t *testing.T) {
 		FlushInterval: 50 * time.Millisecond,
 	}
 
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(&cfg)
 	require.NoError(t, err)
 	defer logger.Close()
 
@@ -241,7 +241,7 @@ func TestAsyncLoggerBufferOverflow(t *testing.T) {
 		FlushInterval: 1 * time.Second, // Long interval to prevent auto-flush
 	}
 
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(&cfg)
 	require.NoError(t, err)
 	defer logger.Close()
 
@@ -273,7 +273,7 @@ func TestLogPolicyChange(t *testing.T) {
 		FlushInterval: 50 * time.Millisecond,
 	}
 
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(&cfg)
 	require.NoError(t, err)
 	defer logger.Close()
 
@@ -308,7 +308,7 @@ func TestLogAgentAction(t *testing.T) {
 		FlushInterval: 50 * time.Millisecond,
 	}
 
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(&cfg)
 	require.NoError(t, err)
 	defer logger.Close()
 
@@ -416,7 +416,7 @@ func TestConcurrentLogging(t *testing.T) {
 		FlushInterval: 100 * time.Millisecond,
 	}
 
-	logger, err := NewLogger(cfg)
+	logger, err := NewLogger(&cfg)
 	require.NoError(t, err)
 	defer logger.Close()
 
