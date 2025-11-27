@@ -8,10 +8,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisLimiter implements rate limiting using Redis with a sliding window algorithm
+// RedisLimiter implements rate limiting using Redis with a token bucket algorithm
 type RedisLimiter struct {
-	client *redis.Client
-	config *Config
+	client      *redis.Client
+	config      *Config
+	luaScriptSHA string
+	tokenBucketScript *redis.Script
 }
 
 // NewRedisLimiter creates a new Redis-backed rate limiter
@@ -19,9 +21,62 @@ func NewRedisLimiter(client *redis.Client, config *Config) *RedisLimiter {
 	if config == nil {
 		config = DefaultConfig()
 	}
+
+	// Token bucket Lua script for atomic operations
+	tokenBucketScript := redis.NewScript(`
+		-- Token bucket rate limiter (executed atomically in Redis)
+		-- KEYS[1] = rate limit key
+		-- ARGV[1] = current time (float seconds)
+		-- ARGV[2] = refill rate (tokens per second)
+		-- ARGV[3] = capacity (max tokens)
+		-- ARGV[4] = cost (tokens to consume, default 1)
+
+		local key = KEYS[1]
+		local now = tonumber(ARGV[1])
+		local rate = tonumber(ARGV[2])
+		local capacity = tonumber(ARGV[3])
+		local cost = tonumber(ARGV[4]) or 1
+
+		-- Get current state
+		local tokens = tonumber(redis.call('HGET', key, 'tokens'))
+		local last_refill = tonumber(redis.call('HGET', key, 'last_refill'))
+
+		-- Initialize if doesn't exist
+		if tokens == nil then
+			tokens = capacity
+			last_refill = now
+		end
+
+		-- Calculate tokens to add
+		local elapsed = now - last_refill
+		local added_tokens = elapsed * rate
+		tokens = math.min(tokens + added_tokens, capacity)
+
+		-- Check if enough tokens
+		local allowed = tokens >= cost
+		if allowed then
+			tokens = tokens - cost
+		end
+
+		-- Update state
+		redis.call('HSET', key, 'tokens', tokens)
+		redis.call('HSET', key, 'last_refill', now)
+		redis.call('EXPIRE', key, math.ceil(capacity / rate * 2))
+
+		-- Calculate retry-after
+		local retry_after = 0
+		if not allowed then
+			retry_after = (cost - tokens) / rate
+		end
+
+		-- Return: allowed, remaining, retry_after
+		return {allowed and 1 or 0, math.floor(tokens), math.ceil(retry_after)}
+	`)
+
 	return &RedisLimiter{
 		client: client,
 		config: config,
+		tokenBucketScript: tokenBucketScript,
 	}
 }
 
@@ -30,74 +85,59 @@ func (rl *RedisLimiter) Allow(ctx context.Context, key string) (bool, int, time.
 	return rl.AllowN(ctx, key, 1)
 }
 
-// AllowN checks if N requests are allowed using sliding window algorithm
+// AllowN checks if N requests are allowed using token bucket algorithm
 func (rl *RedisLimiter) AllowN(ctx context.Context, key string, n int) (bool, int, time.Time, error) {
 	now := time.Now()
-	windowStart := now.Add(-rl.config.Window)
 
-	// Determine the limit based on the key type
-	limit := rl.getLimit(key)
+	// Determine the limit (refill rate) based on the key type
+	limit := rl.config.GetLimit(key)
 
-	// Redis key for the sorted set
+	// Determine capacity (bucket size)
+	// For token bucket: capacity should equal the burst allowance
+	capacity := limit // Default: capacity = limit (no burst)
+
+	// If BurstFactor is set, multiply limit by factor
+	if rl.config.BurstFactor > 1 {
+		capacity = limit * rl.config.BurstFactor
+	}
+
+	// If Burst is explicitly set and different from calculated, use explicit value
+	// But only for keys that don't have specific limits (ip: and default keys)
+	if rl.config.Burst > 0 && (len(key) < 3 || key[:3] == "ip:") {
+		capacity = rl.config.Burst
+	}
+
+	// Redis key with prefix
 	redisKey := fmt.Sprintf("%s:%s", rl.config.KeyPrefix, key)
 
-	// Use Lua script for atomic operations
-	script := redis.NewScript(`
-		local key = KEYS[1]
-		local now = tonumber(ARGV[1])
-		local window_start = tonumber(ARGV[2])
-		local limit = tonumber(ARGV[3])
-		local n = tonumber(ARGV[4])
-		local window_ms = tonumber(ARGV[5])
+	// Calculate refill rate (tokens per second)
+	// Rate = limit / window (in seconds)
+	windowSeconds := rl.config.Window.Seconds()
+	if windowSeconds == 0 {
+		windowSeconds = 1.0 // Default to 1 second
+	}
+	refillRate := float64(limit) / windowSeconds
 
-		-- Remove old entries outside the window
-		redis.call('ZREMRANGEBYSCORE', key, '-inf', window_start)
-
-		-- Count current requests in window
-		local current = redis.call('ZCARD', key)
-
-		-- Check if we can allow N requests
-		if current + n <= limit then
-			-- Add N entries with unique scores
-			for i = 1, n do
-				local score = now + (i / 1000000)  -- Microsecond precision
-				redis.call('ZADD', key, score, score)
-			end
-
-			-- Set expiration
-			redis.call('PEXPIRE', key, window_ms)
-
-			-- Return: allowed=1, remaining, reset_time
-			return {1, limit - current - n, now + window_ms}
-		else
-			-- Return: allowed=0, remaining, reset_time
-			-- Calculate reset time (when oldest entry expires)
-			local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
-			local reset_time = now + window_ms
-			if #oldest >= 2 then
-				reset_time = tonumber(oldest[2]) + window_ms
-			end
-			return {0, limit - current, reset_time}
-		end
-	`)
-
-	windowMs := rl.config.Window.Milliseconds()
-	result, err := script.Run(
+	// Execute token bucket Lua script
+	result, err := rl.tokenBucketScript.Run(
 		ctx,
 		rl.client,
 		[]string{redisKey},
-		now.UnixMilli(),
-		windowStart.UnixMilli(),
-		limit,
-		n,
-		windowMs,
+		float64(now.Unix()) + float64(now.Nanosecond())/1e9, // Current time in seconds with decimal
+		refillRate,
+		capacity,
+		n, // Number of tokens to consume
 	).Result()
 
 	if err != nil {
+		// Fail open if configured and Redis is unavailable
+		if rl.config.FailOpen {
+			return true, 0, now.Add(rl.config.Window), nil
+		}
 		return false, 0, time.Time{}, fmt.Errorf("rate limit check failed: %w", err)
 	}
 
-	// Parse result
+	// Parse result: {allowed, remaining, retry_after_seconds}
 	resultSlice, ok := result.([]interface{})
 	if !ok || len(resultSlice) != 3 {
 		return false, 0, time.Time{}, fmt.Errorf("invalid script result")
@@ -105,8 +145,13 @@ func (rl *RedisLimiter) AllowN(ctx context.Context, key string, n int) (bool, in
 
 	allowed := resultSlice[0].(int64) == 1
 	remaining := int(resultSlice[1].(int64))
-	resetTimeMs := resultSlice[2].(int64)
-	resetTime := time.UnixMilli(resetTimeMs)
+	retryAfterSecs := resultSlice[2].(int64)
+
+	// Calculate reset time
+	resetTime := now.Add(time.Duration(retryAfterSecs) * time.Second)
+	if retryAfterSecs == 0 {
+		resetTime = now.Add(rl.config.Window)
+	}
 
 	return allowed, remaining, resetTime, nil
 }
@@ -122,18 +167,9 @@ func (rl *RedisLimiter) GetLimit(ctx context.Context, key string) (int, error) {
 	return rl.getLimit(key), nil
 }
 
-// getLimit determines the limit based on key type
+// getLimit determines the limit based on key type (deprecated, use config.GetLimit)
 func (rl *RedisLimiter) getLimit(key string) int {
-	// Check if this is an auth endpoint
-	if len(key) > 5 && key[:5] == "auth:" {
-		return rl.config.AuthRPS
-	}
-	// Check if this is a user-specific limit
-	if len(key) > 5 && key[:5] == "user:" {
-		return 1000 // Per-user limit
-	}
-	// Default IP-based limit
-	return rl.config.DefaultRPS
+	return rl.config.GetLimit(key)
 }
 
 // Close releases Redis client resources

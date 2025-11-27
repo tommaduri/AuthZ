@@ -43,8 +43,20 @@ func (m *RateLimitMiddleware) Handler(next http.Handler) http.Handler {
 		allowed, remaining, resetTime, err := m.limiter.Allow(r.Context(), key)
 
 		if err != nil {
-			// Log error but allow request (fail open)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			// Log error
+			if m.audit != nil {
+				m.audit.Log(r.Context(), map[string]interface{}{
+					"type":      "rate_limit_error",
+					"error":     err.Error(),
+					"ip":        clientIP,
+					"endpoint":  r.URL.Path,
+					"timestamp": time.Now(),
+				})
+			}
+
+			// Fail open - allow request but log the error
+			// In production, you might want to fail closed for critical endpoints
+			next.ServeHTTP(w, r)
 			return
 		}
 
@@ -110,18 +122,30 @@ func (m *RateLimitMiddleware) extractClientIP(r *http.Request) string {
 
 // buildRateLimitKey constructs the rate limit key based on endpoint and client
 func (m *RateLimitMiddleware) buildRateLimitKey(r *http.Request, clientIP string) string {
-	// Check if this is an auth endpoint
+	// 1. Check for /v1/auth/token endpoint - strictest limit (5 req/sec per IP)
+	if r.Method == "POST" && r.URL.Path == "/v1/auth/token" {
+		return fmt.Sprintf("auth:/v1/auth/token:%s", clientIP)
+	}
+
+	// 2. Check for other auth endpoints (10 req/sec per IP)
 	if strings.HasPrefix(r.URL.Path, "/v1/auth/") {
-		// Use stricter rate limiting for auth endpoints
 		return fmt.Sprintf("auth:%s:%s", r.URL.Path, clientIP)
 	}
 
-	// Check if we have an authenticated user
+	// 3. Check for authorization check endpoint (100 req/sec per user)
+	if r.URL.Path == "/v1/authorization/check" {
+		if userID := m.extractUserID(r); userID != "" {
+			return fmt.Sprintf("authcheck:user:%s", userID)
+		}
+		return fmt.Sprintf("authcheck:ip:%s", clientIP)
+	}
+
+	// 4. Check if we have an authenticated user (1000 req/sec)
 	if userID := m.extractUserID(r); userID != "" {
 		return fmt.Sprintf("user:%s", userID)
 	}
 
-	// Default to IP-based rate limiting
+	// 5. Default to IP-based rate limiting (100 req/sec)
 	return fmt.Sprintf("ip:%s", clientIP)
 }
 

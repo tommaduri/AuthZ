@@ -76,7 +76,7 @@ func NewTokenIssuer(cfg *TokenIssuerConfig) (*TokenIssuer, error) {
 // - Prevents timing attacks using constant-time comparison
 // - Rate limits credential checks (delegated to caller/middleware)
 // - Logs all auth events
-func IssueToken(username, password, tenantID string) (*jwt.TokenPair, error) {
+func (i *TokenIssuer) IssueToken(username, password, tenantID string) (*jwt.TokenPair, error) {
 	ctx := context.Background()
 
 	// Input validation
@@ -112,23 +112,40 @@ func IssueToken(username, password, tenantID string) (*jwt.TokenPair, error) {
 		return nil, fmt.Errorf("agent is not active")
 	}
 
+
+	// Extract TenantID from metadata if not directly available
+	agentTenantID := tenantID // Default to provided tenant ID
+	if agent.Metadata != nil {
+		if tid, ok := agent.Metadata["tenant_id"].(string); ok {
+			agentTenantID = tid
+		}
+	}
+
 	// Verify tenant ID matches
-	if agent.TenantID != tenantID {
+	if agentTenantID != tenantID {
 		i.logger.Warn("Tenant ID mismatch during token issuance",
 			zap.String("agent_id", username),
-			zap.String("expected_tenant", agent.TenantID),
+			zap.String("expected_tenant", agentTenantID),
 			zap.String("provided_tenant", tenantID))
 		return nil, fmt.Errorf("invalid credentials: tenant mismatch")
 	}
 
-	// Verify password (constant-time comparison via bcrypt)
-	valid, err := VerifyPassword(password, agent.PasswordHash)
-	if err != nil {
-		i.logger.Error("Password verification failed",
-			zap.String("agent_id", username),
-			zap.Error(err))
-		return nil, fmt.Errorf("password verification error: %w", err)
+	// Extract password hash from metadata or credentials
+	passwordHash := ""
+	if agent.Metadata != nil {
+		if hash, ok := agent.Metadata["password_hash"].(string); ok {
+			passwordHash = hash
+		}
 	}
+
+	if passwordHash == "" {
+		i.logger.Error("No password hash found for agent",
+			zap.String("agent_id", username))
+		return nil, fmt.Errorf("invalid credentials: no password configured")
+	}
+
+	// Verify password (constant-time comparison via bcrypt)
+	valid := VerifyPassword(password, passwordHash)
 
 	if !valid {
 		i.logger.Warn("Invalid password during token issuance",

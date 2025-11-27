@@ -3,8 +3,7 @@ package auth_test
 import (
 	"testing"
 
-	"authz-engine/internal/auth"
-
+	"github.com/authz-engine/go-core/internal/auth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

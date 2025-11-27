@@ -27,35 +27,6 @@ type Limiter interface {
 	Close() error
 }
 
-// Config holds rate limiter configuration
-type Config struct {
-	// DefaultRPS is the default requests per second
-	DefaultRPS int
-
-	// Burst is the burst capacity
-	Burst int
-
-	// AuthRPS is the rate limit for auth endpoints
-	AuthRPS int
-
-	// Window is the time window for rate limiting
-	Window time.Duration
-
-	// KeyPrefix is the Redis key prefix
-	KeyPrefix string
-}
-
-// DefaultConfig returns default rate limiter configuration
-func DefaultConfig() *Config {
-	return &Config{
-		DefaultRPS: 100,
-		Burst:      200,
-		AuthRPS:    10,
-		Window:     time.Second,
-		KeyPrefix:  "ratelimit",
-	}
-}
-
 // Result holds the result of a rate limit check
 type Result struct {
 	Allowed   bool
