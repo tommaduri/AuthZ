@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"authz-engine/internal/auth"
+	"github.com/authz-engine/go-core/internal/auth"
 )
 
 // OAuth2Config holds configuration for OAuth2 endpoints
