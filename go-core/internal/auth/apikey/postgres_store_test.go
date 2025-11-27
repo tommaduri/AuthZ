@@ -3,6 +3,7 @@ package apikey
 import (
 	"context"
 	"database/sql"
+	"sync"
 	"testing"
 	"time"
 
@@ -252,6 +253,374 @@ func TestPostgresStore_Revoke(t *testing.T) {
 	})
 }
 
+func TestPostgresStore_UpdateLastUsed(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	store, err := NewPostgresStore(db)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	gen := NewGenerator()
+	_, keyHash, _ := gen.Generate()
+
+	key := &APIKey{
+		ID:           "update-last-used-id",
+		KeyHash:      keyHash,
+		Name:         "Update Last Used",
+		AgentID:      "agent-update",
+		Scopes:       []string{"read:*"},
+		RateLimitRPS: 100,
+	}
+	store.Create(ctx, key)
+
+	t.Run("updates last used timestamp", func(t *testing.T) {
+		time.Sleep(10 * time.Millisecond)
+
+		err := store.UpdateLastUsed(ctx, key.ID)
+		require.NoError(t, err)
+
+		// Verify update
+		retrieved, err := store.GetByID(ctx, key.ID)
+		require.NoError(t, err)
+		assert.NotNil(t, retrieved.LastUsedAt)
+	})
+
+	t.Run("updating non-existent key succeeds", func(t *testing.T) {
+		err := store.UpdateLastUsed(ctx, "non-existent-id")
+		assert.NoError(t, err) // SQL UPDATE succeeds with 0 rows affected
+	})
+}
+
+func TestPostgresStore_Delete(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	store, err := NewPostgresStore(db)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	gen := NewGenerator()
+	_, keyHash, _ := gen.Generate()
+
+	key := &APIKey{
+		ID:           "delete-test-id",
+		KeyHash:      keyHash,
+		Name:         "Delete Test",
+		AgentID:      "agent-delete",
+		Scopes:       []string{"read:*"},
+		RateLimitRPS: 100,
+	}
+	store.Create(ctx, key)
+
+	t.Run("deletes key permanently", func(t *testing.T) {
+		err := store.Delete(ctx, key.ID)
+		require.NoError(t, err)
+
+		// Verify deleted
+		_, err = store.GetByID(ctx, key.ID)
+		assert.ErrorIs(t, err, ErrAPIKeyNotFound)
+	})
+
+	t.Run("deleting non-existent key returns error", func(t *testing.T) {
+		err := store.Delete(ctx, "non-existent-id")
+		assert.ErrorIs(t, err, ErrAPIKeyNotFound)
+	})
+}
+
+func TestPostgresStore_ConcurrentOperations(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	store, err := NewPostgresStore(db)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	gen := NewGenerator()
+
+	t.Run("concurrent creates of unique keys", func(t *testing.T) {
+		agentID := "agent-concurrent"
+		count := 20
+
+		errors := make([]error, count)
+		var wg sync.WaitGroup
+
+		for i := 0; i < count; i++ {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+
+				_, keyHash, _ := gen.Generate()
+				key := &APIKey{
+					KeyHash:      keyHash,
+					Name:         "Concurrent Key",
+					AgentID:      agentID,
+					Scopes:       []string{"read:*"},
+					RateLimitRPS: 100,
+				}
+				errors[idx] = store.Create(ctx, key)
+			}(i)
+		}
+
+		wg.Wait()
+
+		// All should succeed
+		for i, err := range errors {
+			assert.NoError(t, err, "concurrent create %d should succeed", i)
+		}
+
+		// Verify all exist
+		keys, err := store.List(ctx, agentID, false)
+		require.NoError(t, err)
+		assert.Len(t, keys, count)
+	})
+
+	t.Run("concurrent reads of same key", func(t *testing.T) {
+		_, keyHash, _ := gen.Generate()
+		key := &APIKey{
+			ID:           "concurrent-read-key",
+			KeyHash:      keyHash,
+			Name:         "Concurrent Read",
+			AgentID:      "agent-read",
+			Scopes:       []string{"read:*"},
+			RateLimitRPS: 100,
+		}
+		store.Create(ctx, key)
+
+		readCount := 50
+		var wg sync.WaitGroup
+
+		for i := 0; i < readCount; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				retrieved, err := store.Get(ctx, keyHash)
+				assert.NoError(t, err)
+				assert.Equal(t, key.ID, retrieved.ID)
+			}()
+		}
+
+		wg.Wait()
+	})
+
+	t.Run("concurrent revokes handled correctly", func(t *testing.T) {
+		_, keyHash, _ := gen.Generate()
+		key := &APIKey{
+			ID:           "concurrent-revoke-key",
+			KeyHash:      keyHash,
+			Name:         "Concurrent Revoke",
+			AgentID:      "agent-revoke",
+			Scopes:       []string{"read:*"},
+			RateLimitRPS: 100,
+		}
+		store.Create(ctx, key)
+
+		var wg sync.WaitGroup
+		errors := make([]error, 5)
+
+		for i := 0; i < 5; i++ {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				errors[idx] = store.Revoke(ctx, key.ID)
+			}(i)
+		}
+
+		wg.Wait()
+
+		// At least one should succeed, others might fail with not found
+		successCount := 0
+		for _, err := range errors {
+			if err == nil {
+				successCount++
+			}
+		}
+		assert.GreaterOrEqual(t, successCount, 1, "at least one revoke should succeed")
+
+		// Verify key is revoked
+		retrieved, err := store.Get(ctx, keyHash)
+		require.NoError(t, err)
+		assert.True(t, retrieved.IsRevoked())
+	})
+}
+
+func TestPostgresStore_ErrorHandling(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	ctx := context.Background()
+
+	t.Run("nil database connection", func(t *testing.T) {
+		_, err := NewPostgresStore(nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "nil")
+	})
+
+	t.Run("nil API key in Create", func(t *testing.T) {
+		store, err := NewPostgresStore(db)
+		require.NoError(t, err)
+
+		err = store.Create(ctx, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "nil")
+	})
+
+	t.Run("empty key hash in Create", func(t *testing.T) {
+		store, err := NewPostgresStore(db)
+		require.NoError(t, err)
+
+		key := &APIKey{
+			ID:           "empty-hash-test",
+			KeyHash:      "",
+			Name:         "Empty Hash",
+			AgentID:      "agent-empty",
+			Scopes:       []string{"read:*"},
+			RateLimitRPS: 100,
+		}
+
+		err = store.Create(ctx, key)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "required")
+	})
+
+	t.Run("invalid hash length in Create", func(t *testing.T) {
+		store, err := NewPostgresStore(db)
+		require.NoError(t, err)
+
+		key := &APIKey{
+			ID:           "invalid-hash-length",
+			KeyHash:      "tooshort",
+			Name:         "Invalid Hash Length",
+			AgentID:      "agent-invalid",
+			Scopes:       []string{"read:*"},
+			RateLimitRPS: 100,
+		}
+
+		err = store.Create(ctx, key)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "64 characters")
+	})
+}
+
+func TestPostgresStore_MetadataHandling(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	store, err := NewPostgresStore(db)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	gen := NewGenerator()
+
+	t.Run("stores and retrieves complex metadata", func(t *testing.T) {
+		_, keyHash, _ := gen.Generate()
+
+		metadata := map[string]interface{}{
+			"env":         "production",
+			"team":        "platform",
+			"cost_center": 12345,
+			"tags":        []string{"api", "external"},
+			"config": map[string]interface{}{
+				"timeout": 30,
+				"retries": 3,
+			},
+		}
+
+		key := &APIKey{
+			ID:           "metadata-test-id",
+			KeyHash:      keyHash,
+			Name:         "Metadata Test",
+			AgentID:      "agent-metadata",
+			Scopes:       []string{"read:*"},
+			RateLimitRPS: 100,
+			Metadata:     metadata,
+		}
+
+		err := store.Create(ctx, key)
+		require.NoError(t, err)
+
+		retrieved, err := store.Get(ctx, keyHash)
+		require.NoError(t, err)
+		assert.NotNil(t, retrieved.Metadata)
+		assert.Equal(t, "production", retrieved.Metadata["env"])
+		assert.Equal(t, "platform", retrieved.Metadata["team"])
+	})
+
+	t.Run("handles nil metadata", func(t *testing.T) {
+		_, keyHash, _ := gen.Generate()
+
+		key := &APIKey{
+			ID:           "nil-metadata-id",
+			KeyHash:      keyHash,
+			Name:         "Nil Metadata",
+			AgentID:      "agent-nil",
+			Scopes:       []string{"read:*"},
+			RateLimitRPS: 100,
+			Metadata:     nil,
+		}
+
+		err := store.Create(ctx, key)
+		require.NoError(t, err)
+
+		retrieved, err := store.Get(ctx, keyHash)
+		require.NoError(t, err)
+		assert.NotNil(t, retrieved)
+	})
+}
+
+func TestPostgresStore_ScopesHandling(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	store, err := NewPostgresStore(db)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	gen := NewGenerator()
+
+	t.Run("stores and retrieves multiple scopes", func(t *testing.T) {
+		_, keyHash, _ := gen.Generate()
+
+		scopes := []string{"read:*", "write:policies", "admin:users"}
+
+		key := &APIKey{
+			ID:           "scopes-test-id",
+			KeyHash:      keyHash,
+			Name:         "Scopes Test",
+			AgentID:      "agent-scopes",
+			Scopes:       scopes,
+			RateLimitRPS: 100,
+		}
+
+		err := store.Create(ctx, key)
+		require.NoError(t, err)
+
+		retrieved, err := store.Get(ctx, keyHash)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, scopes, retrieved.Scopes)
+	})
+
+	t.Run("handles empty scopes", func(t *testing.T) {
+		_, keyHash, _ := gen.Generate()
+
+		key := &APIKey{
+			ID:           "empty-scopes-id",
+			KeyHash:      keyHash,
+			Name:         "Empty Scopes",
+			AgentID:      "agent-empty-scopes",
+			Scopes:       []string{},
+			RateLimitRPS: 100,
+		}
+
+		err := store.Create(ctx, key)
+		require.NoError(t, err)
+
+		retrieved, err := store.Get(ctx, keyHash)
+		require.NoError(t, err)
+		assert.NotNil(t, retrieved.Scopes)
+	})
+}
+
 func BenchmarkPostgresStore_Get(b *testing.B) {
 	db := setupTestDB(&testing.T{})
 	defer db.Close()
@@ -273,5 +642,27 @@ func BenchmarkPostgresStore_Get(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = store.Get(ctx, keyHash)
+	}
+}
+
+func BenchmarkPostgresStore_Create(b *testing.B) {
+	db := setupTestDB(&testing.T{})
+	defer db.Close()
+
+	store, _ := NewPostgresStore(db)
+	ctx := context.Background()
+	gen := NewGenerator()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, keyHash, _ := gen.Generate()
+		key := &APIKey{
+			KeyHash:      keyHash,
+			Name:         "Benchmark Key",
+			AgentID:      "agent-bench",
+			Scopes:       []string{"read:*"},
+			RateLimitRPS: 1000,
+		}
+		store.Create(ctx, key)
 	}
 }

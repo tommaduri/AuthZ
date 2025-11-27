@@ -6,15 +6,26 @@ import (
 )
 
 // Claims represents JWT claims with standard and custom fields
+// Unified Claims structure supporting both user and agent authentication
 type Claims struct {
 	jwt.RegisteredClaims
 
-	// Custom claims
+	// User claims
 	UserID   string   `json:"user_id,omitempty"`
 	Username string   `json:"username,omitempty"`
 	Email    string   `json:"email,omitempty"`
+
+	// Authorization claims
 	Roles    []string `json:"roles,omitempty"`
-	Scope    string   `json:"scope,omitempty"`
+	Scope    string   `json:"scope,omitempty"` // Single scope string for backward compatibility
+	TenantID string   `json:"tenant_id,omitempty"`
+	Scopes   []string `json:"scopes,omitempty"` // Array of scopes (OAuth2 standard)
+
+	// Agent claims (for agent-to-agent authentication)
+	AgentID      string   `json:"agent_id,omitempty"`
+	AgentType    string   `json:"agent_type,omitempty"`
+	AgentStatus  string   `json:"agent_status,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // HasRole checks if the claims contain a specific role

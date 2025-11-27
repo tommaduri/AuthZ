@@ -2,10 +2,13 @@ package auth
 
 import (
 	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -52,7 +55,7 @@ func NewJWKSProvider(url string, cacheTTL time.Duration) (*JWKSProvider, error) 
 		url:      url,
 		cacheTTL: cacheTTL,
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 30 * time.Second, // 30-second timeout for external OAuth2 providers
 		},
 		keys:   make(map[string]*rsa.PublicKey),
 		stopCh: make(chan struct{}),
@@ -185,16 +188,57 @@ func (p *JWKSProvider) Close() error {
 }
 
 // ToRSAPublicKey converts a JWK to an RSA public key
+// Implements RFC 7517 (JSON Web Key) Section 6.3.1 for RSA keys
 func (jwk *JWK) ToRSAPublicKey() (*rsa.PublicKey, error) {
-	// For now, we'll use the jwt library's built-in JWK support
-	// This is a simplified implementation
-	// In production, use a proper JWK library like github.com/lestrrat-go/jwx
-
-	if jwk.N == "" || jwk.E == "" {
-		return nil, fmt.Errorf("JWK missing n or e parameters")
+	if jwk.Kty != "RSA" {
+		return nil, fmt.Errorf("unsupported key type: %s (expected RSA)", jwk.Kty)
 	}
 
-	// Use jwt library's JWK parsing
-	// Note: This is a placeholder - in production use proper JWK parsing
-	return nil, fmt.Errorf("JWK parsing not implemented - use github.com/lestrrat-go/jwx in production")
+	if jwk.N == "" || jwk.E == "" {
+		return nil, fmt.Errorf("JWK missing required RSA parameters (n or e)")
+	}
+
+	// Decode base64url-encoded modulus (n)
+	nBytes, err := decodeBase64URL(jwk.N)
+	if err != nil {
+		return nil, fmt.Errorf("decode modulus (n): %w", err)
+	}
+
+	// Decode base64url-encoded exponent (e)
+	eBytes, err := decodeBase64URL(jwk.E)
+	if err != nil {
+		return nil, fmt.Errorf("decode exponent (e): %w", err)
+	}
+
+	// Convert bytes to big.Int
+	n := new(big.Int).SetBytes(nBytes)
+	e := new(big.Int).SetBytes(eBytes)
+
+	// RSA exponent must fit in an int
+	if !e.IsInt64() {
+		return nil, fmt.Errorf("exponent too large")
+	}
+
+	return &rsa.PublicKey{
+		N: n,
+		E: int(e.Int64()),
+	}, nil
+}
+
+// decodeBase64URL decodes a base64url-encoded string (RFC 4648)
+func decodeBase64URL(s string) ([]byte, error) {
+	// base64url uses - and _ instead of + and /
+	// and omits padding (=)
+	s = strings.ReplaceAll(s, "-", "+")
+	s = strings.ReplaceAll(s, "_", "/")
+
+	// Add padding if needed
+	switch len(s) % 4 {
+	case 2:
+		s += "=="
+	case 3:
+		s += "="
+	}
+
+	return base64.StdEncoding.DecodeString(s)
 }

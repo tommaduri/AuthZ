@@ -10,6 +10,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/authz-engine/go-core/internal/agent"
+	"github.com/authz-engine/go-core/internal/cache"
+	"github.com/authz-engine/go-core/pkg/types"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -27,9 +30,13 @@ type TokenPair struct {
 // Claims represents JWT claims structure per SDD specification
 type Claims struct {
 	jwt.RegisteredClaims
-	Roles    []string `json:"roles"`
-	TenantID string   `json:"tenant_id"`
-	Scopes   []string `json:"scopes"`
+	Roles        []string `json:"roles"`
+	TenantID     string   `json:"tenant_id"`
+	Scopes       []string `json:"scopes"`
+	AgentID      string   `json:"agent_id,omitempty"`
+	AgentType    string   `json:"agent_type,omitempty"`
+	AgentStatus  string   `json:"agent_status,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // IssuerConfig contains configuration for JWT token issuance
@@ -40,6 +47,8 @@ type IssuerConfig struct {
 	AccessTTL     time.Duration
 	RefreshTTL    time.Duration
 	RefreshStore  RefreshTokenStore
+	AgentStore    agent.AgentStore
+	AgentCache    cache.Cache
 	Logger        *zap.Logger
 }
 
@@ -51,6 +60,8 @@ type JWTIssuer struct {
 	accessTTL    time.Duration
 	refreshTTL   time.Duration
 	refreshStore RefreshTokenStore
+	agentStore   agent.AgentStore
+	agentCache   cache.Cache
 	logger       *zap.Logger
 }
 
@@ -100,6 +111,12 @@ func NewJWTIssuer(cfg *IssuerConfig) (*JWTIssuer, error) {
 		cfg.Logger = zap.NewNop()
 	}
 
+	// Create default agent cache if not provided but agent store is
+	agentCache := cfg.AgentCache
+	if agentCache == nil && cfg.AgentStore != nil {
+		agentCache = cache.NewLRU(1000, 5*time.Minute) // 5 min TTL for agent metadata
+	}
+
 	return &JWTIssuer{
 		privateKey:   cfg.PrivateKey,
 		issuer:       cfg.Issuer,
@@ -107,6 +124,8 @@ func NewJWTIssuer(cfg *IssuerConfig) (*JWTIssuer, error) {
 		accessTTL:    cfg.AccessTTL,
 		refreshTTL:   cfg.RefreshTTL,
 		refreshStore: cfg.RefreshStore,
+		agentStore:   cfg.AgentStore,
+		agentCache:   agentCache,
 		logger:       cfg.Logger,
 	}, nil
 }
@@ -114,6 +133,16 @@ func NewJWTIssuer(cfg *IssuerConfig) (*JWTIssuer, error) {
 // IssueToken generates a new access token and refresh token pair
 func (i *JWTIssuer) IssueToken(ctx context.Context, agentID string, roles []string, tenantID string, scopes []string) (*TokenPair, error) {
 	now := time.Now()
+
+	// Load agent metadata if agent store is configured
+	var agentMetadata *agentMetadata
+	if i.agentStore != nil {
+		metadata, err := i.getAgentMetadata(ctx, agentID)
+		if err != nil {
+			return nil, fmt.Errorf("get agent metadata: %w", err)
+		}
+		agentMetadata = metadata
+	}
 
 	// Generate unique JTI (JWT ID) for access token
 	jti, err := generateSecureID()
@@ -134,6 +163,14 @@ func (i *JWTIssuer) IssueToken(ctx context.Context, agentID string, roles []stri
 		Roles:    roles,
 		TenantID: tenantID,
 		Scopes:   scopes,
+	}
+
+	// Add agent metadata to claims if available
+	if agentMetadata != nil {
+		claims.AgentID = agentMetadata.ID
+		claims.AgentType = agentMetadata.Type
+		claims.AgentStatus = agentMetadata.Status
+		claims.Capabilities = agentMetadata.Capabilities
 	}
 
 	// Sign access token with RS256
@@ -229,13 +266,51 @@ func (i *JWTIssuer) RefreshToken(ctx context.Context, refreshTokenStr string) (*
 		return nil, fmt.Errorf("refresh token has expired")
 	}
 
-	// TODO: Load agent details to get roles, tenant_id, scopes
-	// For now, issue token with minimal claims - this should be enhanced to fetch from agent store
-	// This is a placeholder that assumes we'll integrate with the agent service
+	// Load agent metadata from agent store
 	agentID := refreshToken.AgentID
-	roles := []string{} // Should be loaded from agent store
-	tenantID := ""      // Should be loaded from agent store
-	scopes := []string{} // Should be loaded from agent store
+	var roles []string
+	var tenantID string
+	var scopes []string
+
+	if i.agentStore != nil {
+		metadata, err := i.getAgentMetadata(ctx, agentID)
+		if err != nil {
+			return nil, fmt.Errorf("get agent metadata: %w", err)
+		}
+
+		// Extract roles from agent metadata
+		roles = metadata.Capabilities
+
+		// Add base role for agent type
+		roles = append(roles, "agent:"+metadata.Type)
+
+		// Extract tenant ID if available in metadata
+		if metadata.Metadata != nil {
+			if tid, ok := metadata.Metadata["tenant_id"].(string); ok {
+				tenantID = tid
+			}
+			// Extract custom roles from metadata
+			if customRoles, ok := metadata.Metadata["roles"].([]string); ok {
+				roles = append(roles, customRoles...)
+			} else if rolesAny, ok := metadata.Metadata["roles"].([]interface{}); ok {
+				for _, r := range rolesAny {
+					if roleStr, ok := r.(string); ok {
+						roles = append(roles, roleStr)
+					}
+				}
+			}
+			// Extract scopes from metadata
+			if scopesInterface, ok := metadata.Metadata["scopes"].([]string); ok {
+				scopes = scopesInterface
+			} else if scopesAny, ok := metadata.Metadata["scopes"].([]interface{}); ok {
+				for _, s := range scopesAny {
+					if scopeStr, ok := s.(string); ok {
+						scopes = append(scopes, scopeStr)
+					}
+				}
+			}
+		}
+	}
 
 	// Issue new token pair
 	newPair, err := i.IssueToken(ctx, agentID, roles, tenantID, scopes)
@@ -284,4 +359,86 @@ func generateUUID() string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+}
+
+// agentMetadata represents cached agent metadata for JWT claims
+type agentMetadata struct {
+	ID           string
+	Type         string
+	Status       string
+	Capabilities []string
+	Metadata     map[string]interface{}
+}
+
+// getAgentMetadata retrieves agent metadata from cache or agent store
+// Returns error if agent is not found or not active
+func (i *JWTIssuer) getAgentMetadata(ctx context.Context, agentID string) (*agentMetadata, error) {
+	// Check cache first
+	if i.agentCache != nil {
+		if cached, ok := i.agentCache.Get("agent:" + agentID); ok {
+			if metadata, ok := cached.(*agentMetadata); ok {
+				// Verify agent is still active
+				if metadata.Status != types.StatusActive {
+					return nil, fmt.Errorf("agent %s is not active (status: %s)", agentID, metadata.Status)
+				}
+				return metadata, nil
+			}
+		}
+	}
+
+	// Load from agent store
+	agent, err := i.agentStore.Get(ctx, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("agent not found: %w", err)
+	}
+
+	// Validate agent is active
+	if !agent.IsActive() {
+		return nil, fmt.Errorf("agent %s is not active (status: %s)", agentID, agent.Status)
+	}
+
+	// Check if agent is expired
+	if agent.IsExpired() {
+		// Update status to expired
+		_ = i.agentStore.UpdateStatus(ctx, agentID, types.StatusExpired)
+		return nil, fmt.Errorf("agent %s has expired", agentID)
+	}
+
+	// Extract capabilities from agent metadata or credentials
+	capabilities := []string{}
+	if agent.Metadata != nil {
+		if caps, ok := agent.Metadata["capabilities"].([]string); ok {
+			capabilities = caps
+		} else if capsAny, ok := agent.Metadata["capabilities"].([]interface{}); ok {
+			for _, c := range capsAny {
+				if capStr, ok := c.(string); ok {
+					capabilities = append(capabilities, capStr)
+				}
+			}
+		}
+	}
+
+	// Create metadata object
+	metadata := &agentMetadata{
+		ID:           agent.ID,
+		Type:         agent.Type,
+		Status:       agent.Status,
+		Capabilities: capabilities,
+		Metadata:     agent.Metadata,
+	}
+
+	// Store in cache
+	if i.agentCache != nil {
+		i.agentCache.Set("agent:"+agentID, metadata)
+	}
+
+	return metadata, nil
+}
+
+// InvalidateAgentCache removes an agent from the cache
+// Should be called when agent status changes
+func (i *JWTIssuer) InvalidateAgentCache(agentID string) {
+	if i.agentCache != nil {
+		i.agentCache.Delete("agent:" + agentID)
+	}
 }

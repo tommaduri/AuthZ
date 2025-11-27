@@ -14,26 +14,28 @@ import (
 
 // ValidatorConfig contains configuration for JWT token validation
 type ValidatorConfig struct {
-	PublicKey         *rsa.PublicKey
-	Issuer            string
-	Audience          string
-	RedisClient       *redis.Client
-	Logger            *zap.Logger
-	SkipExpiryCheck   bool // For testing only
-	SkipIssuerCheck   bool // For testing only
-	SkipAudienceCheck bool // For testing only
+	PublicKey          *rsa.PublicKey
+	Issuer             string
+	Audience           string
+	RedisClient        *redis.Client
+	Logger             *zap.Logger
+	SkipExpiryCheck    bool // For testing only
+	SkipIssuerCheck    bool // For testing only
+	SkipAudienceCheck  bool // For testing only
+	SkipAgentStatusCheck bool // For testing only
 }
 
 // JWTValidator validates JWT tokens
 type JWTValidator struct {
-	publicKey         *rsa.PublicKey
-	issuer            string
-	audience          string
-	redisClient       *redis.Client
-	logger            *zap.Logger
-	skipExpiryCheck   bool
-	skipIssuerCheck   bool
-	skipAudienceCheck bool
+	publicKey            *rsa.PublicKey
+	issuer               string
+	audience             string
+	redisClient          *redis.Client
+	logger               *zap.Logger
+	skipExpiryCheck      bool
+	skipIssuerCheck      bool
+	skipAudienceCheck    bool
+	skipAgentStatusCheck bool
 }
 
 // NewJWTValidator creates a new JWT token validator
@@ -55,14 +57,15 @@ func NewJWTValidator(cfg *ValidatorConfig) (*JWTValidator, error) {
 	}
 
 	return &JWTValidator{
-		publicKey:         cfg.PublicKey,
-		issuer:            cfg.Issuer,
-		audience:          cfg.Audience,
-		redisClient:       cfg.RedisClient,
-		logger:            cfg.Logger,
-		skipExpiryCheck:   cfg.SkipExpiryCheck,
-		skipIssuerCheck:   cfg.SkipIssuerCheck,
-		skipAudienceCheck: cfg.SkipAudienceCheck,
+		publicKey:            cfg.PublicKey,
+		issuer:               cfg.Issuer,
+		audience:             cfg.Audience,
+		redisClient:          cfg.RedisClient,
+		logger:               cfg.Logger,
+		skipExpiryCheck:      cfg.SkipExpiryCheck,
+		skipIssuerCheck:      cfg.SkipIssuerCheck,
+		skipAudienceCheck:    cfg.SkipAudienceCheck,
+		skipAgentStatusCheck: cfg.SkipAgentStatusCheck,
 	}, nil
 }
 
@@ -112,6 +115,11 @@ func (v *JWTValidator) Validate(ctx context.Context, tokenString string) (*Claim
 		} else if isRevoked {
 			return nil, fmt.Errorf("token has been revoked")
 		}
+	}
+
+	// Validate agent status if present in claims
+	if err := v.validateAgentStatus(claims); err != nil {
+		return nil, fmt.Errorf("invalid agent status: %w", err)
 	}
 
 	return claims, nil
@@ -215,4 +223,19 @@ type Principal struct {
 	Roles    []string
 	TenantID string
 	Scopes   []string
+}
+
+// validateAgentStatus validates agent status claim if present
+func (v *JWTValidator) validateAgentStatus(claims *Claims) error {
+	// Skip if no agent metadata in token or if check is disabled
+	if claims.AgentStatus == "" || v.skipAgentStatusCheck {
+		return nil
+	}
+
+	// Agent must be active
+	if claims.AgentStatus != "active" {
+		return fmt.Errorf("agent is not active (status: %s)", claims.AgentStatus)
+	}
+
+	return nil
 }
