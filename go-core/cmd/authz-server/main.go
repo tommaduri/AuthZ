@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/authz-engine/go-core/internal/api/rest"
 	"github.com/authz-engine/go-core/internal/engine"
 	"github.com/authz-engine/go-core/internal/policy"
 	"github.com/authz-engine/go-core/internal/server"
@@ -32,6 +33,7 @@ func main() {
 	var (
 		grpcPort        = flag.Int("grpc-port", 50051, "gRPC server port")
 		httpPort        = flag.Int("http-port", 8080, "HTTP server port for health/metrics")
+		restPort        = flag.Int("rest-port", 8081, "REST API server port")
 		cacheEnabled    = flag.Bool("cache", true, "Enable decision cache")
 		cacheSize       = flag.Int("cache-size", 100000, "Maximum cache entries")
 		cacheTTL        = flag.Duration("cache-ttl", 5*time.Minute, "Cache TTL")
@@ -41,6 +43,8 @@ func main() {
 		showVersion     = flag.Bool("version", false, "Show version information")
 		policyDir       = flag.String("policy-dir", "", "Directory to load policies from")
 		enableReflect   = flag.Bool("reflection", true, "Enable gRPC reflection")
+		enableREST      = flag.Bool("enable-rest", true, "Enable REST API server")
+		enableCORS      = flag.Bool("enable-cors", true, "Enable CORS for REST API")
 		gracefulTimeout = flag.Duration("shutdown-timeout", 30*time.Second, "Graceful shutdown timeout")
 	)
 	flag.Parse()
@@ -65,6 +69,8 @@ func main() {
 		zap.String("version", Version),
 		zap.Int("grpc_port", *grpcPort),
 		zap.Int("http_port", *httpPort),
+		zap.Int("rest_port", *restPort),
+		zap.Bool("rest_enabled", *enableREST),
 	)
 
 	// Initialize policy store
@@ -131,8 +137,34 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
+	// Initialize REST API server if enabled
+	var restSrv *rest.Server
+	if *enableREST {
+		restConfig := rest.Config{
+			Port:         *restPort,
+			ReadTimeout:  15 * time.Second,
+			WriteTimeout: 15 * time.Second,
+			IdleTimeout:  60 * time.Second,
+			EnableCORS:   *enableCORS,
+			CORSOrigins:  []string{"*"},
+			EnableAuth:   false, // Auth can be enabled via middleware
+			Version:      Version,
+		}
+
+		var err error
+		restSrv, err = rest.New(restConfig, eng, store, logger)
+		if err != nil {
+			logger.Fatal("Failed to create REST API server", zap.Error(err))
+		}
+
+		logger.Info("REST API server initialized",
+			zap.Int("port", *restPort),
+			zap.Bool("cors_enabled", *enableCORS),
+		)
+	}
+
 	// Channels for error handling
-	errChan := make(chan error, 2)
+	errChan := make(chan error, 3)
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -147,6 +179,14 @@ func main() {
 		logger.Info("Starting HTTP server for health/metrics", zap.Int("port", *httpPort))
 		errChan <- httpSrv.ListenAndServe()
 	}()
+
+	// Start REST API server if enabled
+	if *enableREST && restSrv != nil {
+		go func() {
+			logger.Info("Starting REST API server", zap.Int("port", *restPort))
+			errChan <- restSrv.Start()
+		}()
+	}
 
 	// Wait for shutdown signal or error
 	select {
@@ -175,6 +215,12 @@ func main() {
 		// Stop HTTP server
 		logger.Info("Stopping HTTP server")
 		httpSrv.Shutdown(ctx)
+
+		// Stop REST API server if enabled
+		if *enableREST && restSrv != nil {
+			logger.Info("Stopping REST API server")
+			restSrv.Shutdown(ctx)
+		}
 	}
 
 	logger.Info("Server stopped successfully")

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authorization Engine API Documentation</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui.css">
+    <style>
+        html {
+            box-sizing: border-box;
+            overflow: -moz-scrollbars-vertical;
+            overflow-y: scroll;
+        }
+
+        *,
+        *:before,
+        *:after {
+            box-sizing: inherit;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        .topbar {
+            display: none;
+        }
+
+        .swagger-ui .info .title {
+            font-size: 36px;
+        }
+
+        .swagger-ui .scheme-container {
+            background: #f7f7f7;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, .15);
+            margin: 0 0 20px;
+            padding: 30px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="swagger-ui"></div>
+
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            // Build a system
+            const ui = SwaggerUIBundle({
+                url: "/api/openapi.yaml",
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                defaultModelsExpandDepth: 1,
+                defaultModelExpandDepth: 1,
+                displayRequestDuration: true,
+                filter: true,
+                tryItOutEnabled: true,
+                persistAuthorization: true,
+                onComplete: function() {
+                    // Check for saved JWT token
+                    const savedToken = localStorage.getItem('jwt_token');
+                    if (savedToken) {
+                        ui.preauthorizeApiKey('BearerAuth', savedToken);
+                    }
+                },
+                requestInterceptor: function(request) {
+                    // Save JWT token to localStorage
+                    const authHeader = request.headers['Authorization'];
+                    if (authHeader && authHeader.startsWith('Bearer ')) {
+                        const token = authHeader.substring(7);
+                        localStorage.setItem('jwt_token', token);
+                    }
+                    return request;
+                }
+            });
+
+            window.ui = ui;
+
+            // Add custom header
+            const header = document.createElement('div');
+            header.style.cssText = 'background: #1b1b1b; color: white; padding: 20px; text-align: center;';
+            header.innerHTML = `
+                <h1 style="margin: 0; font-size: 28px;">Authorization Engine REST API</h1>
+                <p style="margin: 10px 0 0 0; opacity: 0.8;">
+                    Comprehensive API for policy-based access control
+                </p>
+            `;
+            document.body.insertBefore(header, document.getElementById('swagger-ui'));
+        }
+    </script>
+</body>
+</html>

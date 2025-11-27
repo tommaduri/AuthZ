@@ -1,0 +1,1957 @@
+openapi: 3.0.3
+info:
+  title: Authorization Engine REST API
+  description: |
+    Comprehensive REST API for the Authorization Engine providing policy-based access control,
+    principal management, and policy import/export functionality.
+
+    ## Features
+    - **Authorization Checks**: Validate permissions for principals and resources
+    - **Policy Management**: Full CRUD operations for authorization policies
+    - **Principal Management**: Manage users, roles, and attributes
+    - **Export/Import**: Backup, restore, and migrate policies
+    - **Versioning**: API versioning with backward compatibility
+
+    ## Authentication
+    All endpoints (except `/health`) require JWT Bearer token authentication.
+    Include the token in the Authorization header:
+    ```
+    Authorization: Bearer <your-jwt-token>
+    ```
+
+    ## Rate Limiting
+    - 100 requests per minute per IP address
+    - 1000 requests per hour per authenticated user
+    - Rate limit headers included in all responses
+
+    ## Versioning
+    Current version: v1
+    Base path: `/v1`
+
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@authz-engine.example.com
+    url: https://github.com/authz-engine/go-core
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://api.authz-engine.example.com/v1
+    description: Production server
+  - url: https://staging-api.authz-engine.example.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Local development server
+
+tags:
+  - name: Authorization
+    description: Authorization check operations
+  - name: Policies
+    description: Policy management operations
+  - name: Principals
+    description: Principal management operations
+  - name: Health
+    description: Health check and status endpoints
+
+security:
+  - BearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check if the API is running and healthy
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "healthy"
+                timestamp: "2025-01-27T10:30:00Z"
+                version: "1.0.0"
+                uptime: 3600
+
+  /status:
+    get:
+      tags:
+        - Health
+      summary: Detailed status
+      description: Get detailed status information including metrics
+      operationId: getStatus
+      responses:
+        '200':
+          description: Detailed status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+              example:
+                status: "healthy"
+                timestamp: "2025-01-27T10:30:00Z"
+                version: "1.0.0"
+                uptime: 3600
+                metrics:
+                  total_policies: 150
+                  total_principals: 1000
+                  requests_per_minute: 45
+                  cache_hit_rate: 0.85
+
+  /authorization/check:
+    post:
+      tags:
+        - Authorization
+      summary: Check authorization
+      description: |
+        Check if a principal is authorized to perform an action on a resource.
+        Returns a boolean decision with optional debug information.
+      operationId: checkAuthorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationCheckRequest'
+            examples:
+              simple:
+                summary: Simple authorization check
+                value:
+                  principal:
+                    id: "user123"
+                    roles: ["developer"]
+                  action: "read"
+                  resource:
+                    kind: "document"
+                    id: "doc456"
+              with_attributes:
+                summary: Check with principal attributes
+                value:
+                  principal:
+                    id: "user123"
+                    roles: ["developer", "team-lead"]
+                    attributes:
+                      department: "engineering"
+                      level: "senior"
+                      location: "US"
+                  action: "write"
+                  resource:
+                    kind: "repository"
+                    id: "repo789"
+                    attributes:
+                      visibility: "private"
+                      team: "backend"
+              with_context:
+                summary: Check with request context
+                value:
+                  principal:
+                    id: "user123"
+                    roles: ["developer"]
+                  action: "deploy"
+                  resource:
+                    kind: "application"
+                    id: "app001"
+                  context:
+                    ip_address: "192.168.1.100"
+                    time: "2025-01-27T10:30:00Z"
+                    environment: "production"
+      responses:
+        '200':
+          description: Authorization decision
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Request limit per window
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Remaining requests in current window
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Unix timestamp when the rate limit resets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationCheckResponse'
+              examples:
+                allowed:
+                  summary: Access granted
+                  value:
+                    allowed: true
+                    decision_time_ms: 5
+                    matched_policies:
+                      - "policy-dev-read-docs"
+                denied:
+                  summary: Access denied
+                  value:
+                    allowed: false
+                    decision_time_ms: 3
+                    reason: "No matching policy found"
+                denied_explicit:
+                  summary: Explicitly denied
+                  value:
+                    allowed: false
+                    decision_time_ms: 4
+                    reason: "Denied by policy: prod-deny-deploy"
+                    matched_policies:
+                      - "policy-prod-deny-deploy"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /authorization/check-resources:
+    post:
+      tags:
+        - Authorization
+      summary: Batch check multiple resources
+      description: |
+        Check authorization for a principal across multiple resources.
+        Returns a list of decisions, one for each resource.
+      operationId: checkResourcesAuthorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchAuthorizationCheckRequest'
+            example:
+              principal:
+                id: "user123"
+                roles: ["developer"]
+              action: "read"
+              resources:
+                - kind: "document"
+                  id: "doc456"
+                - kind: "document"
+                  id: "doc789"
+                - kind: "repository"
+                  id: "repo123"
+      responses:
+        '200':
+          description: Batch authorization decisions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchAuthorizationCheckResponse'
+              example:
+                results:
+                  - resource:
+                      kind: "document"
+                      id: "doc456"
+                    allowed: true
+                    decision_time_ms: 3
+                  - resource:
+                      kind: "document"
+                      id: "doc789"
+                    allowed: false
+                    decision_time_ms: 2
+                    reason: "No matching policy"
+                  - resource:
+                      kind: "repository"
+                      id: "repo123"
+                    allowed: true
+                    decision_time_ms: 4
+                total_time_ms: 9
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /authorization/allowed-actions:
+    get:
+      tags:
+        - Authorization
+      summary: Get allowed actions
+      description: |
+        Get all actions that a principal is allowed to perform on a resource.
+        Useful for UI rendering and permission discovery.
+      operationId: getAllowedActions
+      parameters:
+        - name: principal_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Principal identifier
+          example: "user123"
+        - name: resource_kind
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Resource kind
+          example: "document"
+        - name: resource_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Resource identifier
+          example: "doc456"
+        - name: roles
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Principal roles
+          example: ["developer", "admin"]
+      responses:
+        '200':
+          description: List of allowed actions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllowedActionsResponse'
+              example:
+                allowed_actions:
+                  - "read"
+                  - "write"
+                  - "comment"
+                denied_actions:
+                  - "delete"
+                  - "share"
+                decision_time_ms: 8
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /policies:
+    get:
+      tags:
+        - Policies
+      summary: List policies
+      description: |
+        List all policies with optional filtering and pagination.
+        Supports filtering by resource kind, principal roles, and policy type.
+      operationId: listPolicies
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Number of items per page
+        - name: resource_kind
+          in: query
+          schema:
+            type: string
+          description: Filter by resource kind
+          example: "document"
+        - name: principal_role
+          in: query
+          schema:
+            type: string
+          description: Filter by principal role
+          example: "developer"
+        - name: policy_type
+          in: query
+          schema:
+            type: string
+            enum: [resource, principal, derived_role]
+          description: Filter by policy type
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [id, created_at, updated_at]
+            default: created_at
+          description: Sort field
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort order
+      responses:
+        '200':
+          description: List of policies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyListResponse'
+              example:
+                policies:
+                  - id: "policy-dev-read-docs"
+                    version: "1.0"
+                    description: "Developers can read documentation"
+                    resource_policy:
+                      resource: "document"
+                      version: "1.0"
+                      rules:
+                        - actions: ["read"]
+                          effect: "EFFECT_ALLOW"
+                          roles: ["developer"]
+                    metadata:
+                      created_at: "2025-01-20T10:00:00Z"
+                      updated_at: "2025-01-20T10:00:00Z"
+                      created_by: "admin"
+                  - id: "policy-admin-all"
+                    version: "1.0"
+                    description: "Admins have full access"
+                    principal_policy:
+                      principal: "role:admin"
+                      version: "1.0"
+                      rules:
+                        - resource: "*"
+                          actions:
+                            - name: "*"
+                              effect: "EFFECT_ALLOW"
+                    metadata:
+                      created_at: "2025-01-20T09:00:00Z"
+                      updated_at: "2025-01-20T09:00:00Z"
+                      created_by: "admin"
+                pagination:
+                  page: 1
+                  page_size: 20
+                  total_items: 150
+                  total_pages: 8
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Policies
+      summary: Create policy
+      description: |
+        Create a new authorization policy.
+        Supports resource policies, principal policies, and derived roles.
+      operationId: createPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Policy'
+            examples:
+              resource_policy:
+                summary: Resource policy
+                value:
+                  id: "policy-dev-read-docs"
+                  version: "1.0"
+                  description: "Developers can read documentation"
+                  resource_policy:
+                    resource: "document"
+                    version: "1.0"
+                    rules:
+                      - actions: ["read", "list"]
+                        effect: "EFFECT_ALLOW"
+                        roles: ["developer"]
+                        condition:
+                          match:
+                            expr: "resource.attr.visibility == 'public'"
+              principal_policy:
+                summary: Principal policy
+                value:
+                  id: "policy-user123-admin"
+                  version: "1.0"
+                  description: "User123 admin permissions"
+                  principal_policy:
+                    principal: "user123"
+                    version: "1.0"
+                    rules:
+                      - resource: "document"
+                        actions:
+                          - name: "*"
+                            effect: "EFFECT_ALLOW"
+              derived_role:
+                summary: Derived role
+                value:
+                  id: "derived-role-senior-dev"
+                  version: "1.0"
+                  description: "Senior developer derived role"
+                  derived_roles:
+                    name: "senior_developer"
+                    definitions:
+                      - name: "senior_developer"
+                        parent_roles:
+                          - "developer"
+                        condition:
+                          match:
+                            expr: "P.attr.level == 'senior' && P.attr.tenure_years >= 2"
+      responses:
+        '201':
+          description: Policy created successfully
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URL of the created policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyResponse'
+              example:
+                id: "policy-dev-read-docs"
+                version: "1.0"
+                created_at: "2025-01-27T10:30:00Z"
+                message: "Policy created successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Policy already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "POLICY_ALREADY_EXISTS"
+                  message: "A policy with ID 'policy-dev-read-docs' already exists"
+                  details:
+                    existing_policy_id: "policy-dev-read-docs"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /policies/{id}:
+    get:
+      tags:
+        - Policies
+      summary: Get policy by ID
+      description: Retrieve a specific policy by its identifier
+      operationId: getPolicy
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+      responses:
+        '200':
+          description: Policy details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+              example:
+                id: "policy-dev-read-docs"
+                version: "1.0"
+                description: "Developers can read documentation"
+                resource_policy:
+                  resource: "document"
+                  version: "1.0"
+                  rules:
+                    - actions: ["read"]
+                      effect: "EFFECT_ALLOW"
+                      roles: ["developer"]
+                metadata:
+                  created_at: "2025-01-20T10:00:00Z"
+                  updated_at: "2025-01-20T10:00:00Z"
+                  created_by: "admin"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Policies
+      summary: Update policy
+      description: |
+        Update an existing policy. The entire policy is replaced.
+        To partially update, retrieve the policy first, modify it, then send the complete updated policy.
+      operationId: updatePolicy
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Policy'
+            example:
+              id: "policy-dev-read-docs"
+              version: "1.1"
+              description: "Developers can read and comment on documentation"
+              resource_policy:
+                resource: "document"
+                version: "1.1"
+                rules:
+                  - actions: ["read", "comment"]
+                    effect: "EFFECT_ALLOW"
+                    roles: ["developer"]
+      responses:
+        '200':
+          description: Policy updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyResponse'
+              example:
+                id: "policy-dev-read-docs"
+                version: "1.1"
+                updated_at: "2025-01-27T10:30:00Z"
+                message: "Policy updated successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Policies
+      summary: Delete policy
+      description: |
+        Delete a policy by ID. This action is irreversible.
+        Consider creating a backup before deleting important policies.
+      operationId: deletePolicy
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+      responses:
+        '204':
+          description: Policy deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /policies/export:
+    post:
+      tags:
+        - Policies
+      summary: Export policies
+      description: |
+        Export policies in JSON or YAML format.
+        Supports filtering by IDs or exporting all policies.
+        Can create a complete backup bundle with metadata.
+      operationId: exportPolicies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportPoliciesRequest'
+            examples:
+              export_specific:
+                summary: Export specific policies
+                value:
+                  policy_ids:
+                    - "policy-dev-read-docs"
+                    - "policy-admin-all"
+                  format: "json"
+              export_all:
+                summary: Export all policies
+                value:
+                  format: "yaml"
+              export_bundle:
+                summary: Export as bundle with metadata
+                value:
+                  format: "json"
+                  include_metadata: true
+                  include_principals: true
+      responses:
+        '200':
+          description: Exported policies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportPoliciesResponse'
+              example:
+                format: "json"
+                policies:
+                  - id: "policy-dev-read-docs"
+                    version: "1.0"
+                    description: "Developers can read documentation"
+                    resource_policy:
+                      resource: "document"
+                      version: "1.0"
+                      rules:
+                        - actions: ["read"]
+                          effect: "EFFECT_ALLOW"
+                          roles: ["developer"]
+                metadata:
+                  exported_at: "2025-01-27T10:30:00Z"
+                  exported_by: "admin"
+                  total_policies: 1
+                  format_version: "1.0"
+            application/x-yaml:
+              schema:
+                type: string
+              example: |
+                format: yaml
+                policies:
+                  - id: policy-dev-read-docs
+                    version: "1.0"
+                    description: Developers can read documentation
+                    resource_policy:
+                      resource: document
+                      version: "1.0"
+                      rules:
+                        - actions: [read]
+                          effect: EFFECT_ALLOW
+                          roles: [developer]
+                metadata:
+                  exported_at: "2025-01-27T10:30:00Z"
+                  exported_by: admin
+                  total_policies: 1
+                  format_version: "1.0"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /policies/import:
+    post:
+      tags:
+        - Policies
+      summary: Import policies
+      description: |
+        Import policies from JSON or YAML format.
+        Supports dry-run mode for validation without applying changes.
+        Supports both overwrite and merge strategies.
+      operationId: importPolicies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportPoliciesRequest'
+            examples:
+              import_new:
+                summary: Import new policies
+                value:
+                  format: "json"
+                  policies:
+                    - id: "policy-new-dev"
+                      version: "1.0"
+                      description: "New developer policy"
+                      resource_policy:
+                        resource: "document"
+                        version: "1.0"
+                        rules:
+                          - actions: ["read"]
+                            effect: "EFFECT_ALLOW"
+                            roles: ["developer"]
+                  mode: "create_only"
+              import_overwrite:
+                summary: Import with overwrite
+                value:
+                  format: "json"
+                  policies:
+                    - id: "policy-dev-read-docs"
+                      version: "1.1"
+                      description: "Updated developer policy"
+                      resource_policy:
+                        resource: "document"
+                        version: "1.1"
+                        rules:
+                          - actions: ["read", "comment"]
+                            effect: "EFFECT_ALLOW"
+                            roles: ["developer"]
+                  mode: "overwrite"
+              import_dry_run:
+                summary: Dry run (validation only)
+                value:
+                  format: "json"
+                  policies:
+                    - id: "policy-test"
+                      version: "1.0"
+                      resource_policy:
+                        resource: "test"
+                        version: "1.0"
+                        rules:
+                          - actions: ["read"]
+                            effect: "EFFECT_ALLOW"
+                            roles: ["tester"]
+                  dry_run: true
+      responses:
+        '200':
+          description: Policies imported successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportPoliciesResponse'
+              examples:
+                successful_import:
+                  summary: Successful import
+                  value:
+                    success: true
+                    imported_count: 5
+                    skipped_count: 0
+                    failed_count: 0
+                    dry_run: false
+                    message: "Successfully imported 5 policies"
+                partial_import:
+                  summary: Partial import with errors
+                  value:
+                    success: false
+                    imported_count: 3
+                    skipped_count: 1
+                    failed_count: 1
+                    dry_run: false
+                    message: "Imported 3 policies, skipped 1, failed 1"
+                    errors:
+                      - policy_id: "policy-invalid"
+                        error: "Invalid policy format: missing resource field"
+                    skipped:
+                      - policy_id: "policy-existing"
+                        reason: "Policy already exists (mode: create_only)"
+                dry_run:
+                  summary: Dry run validation
+                  value:
+                    success: true
+                    imported_count: 0
+                    skipped_count: 0
+                    failed_count: 0
+                    dry_run: true
+                    message: "Validation successful: 5 policies are valid and ready to import"
+                    validation_details:
+                      - policy_id: "policy-test"
+                        status: "valid"
+                        message: "Policy format is valid"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /policies/backup:
+    post:
+      tags:
+        - Policies
+      summary: Create backup
+      description: |
+        Create a complete backup of all policies and optionally principals.
+        The backup includes metadata and can be used for restore operations.
+      operationId: createBackup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBackupRequest'
+            example:
+              name: "daily-backup-2025-01-27"
+              description: "Daily backup before maintenance"
+              include_principals: true
+      responses:
+        '201':
+          description: Backup created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupResponse'
+              example:
+                backup_id: "backup-20250127-103000"
+                name: "daily-backup-2025-01-27"
+                created_at: "2025-01-27T10:30:00Z"
+                size_bytes: 1048576
+                policy_count: 150
+                principal_count: 1000
+                format: "json"
+                checksum: "sha256:abc123..."
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /policies/restore:
+    post:
+      tags:
+        - Policies
+      summary: Restore from backup
+      description: |
+        Restore policies from a backup.
+        Supports dry-run mode and different restore strategies.
+      operationId: restoreBackup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreBackupRequest'
+            examples:
+              restore_full:
+                summary: Full restore (replace all)
+                value:
+                  backup_id: "backup-20250127-103000"
+                  mode: "replace_all"
+              restore_merge:
+                summary: Merge with existing
+                value:
+                  backup_id: "backup-20250127-103000"
+                  mode: "merge"
+                  conflict_resolution: "keep_existing"
+              restore_dry_run:
+                summary: Dry run validation
+                value:
+                  backup_id: "backup-20250127-103000"
+                  mode: "replace_all"
+                  dry_run: true
+      responses:
+        '200':
+          description: Restore completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestoreBackupResponse'
+              example:
+                success: true
+                restored_policies: 150
+                restored_principals: 1000
+                skipped_count: 0
+                failed_count: 0
+                dry_run: false
+                message: "Successfully restored 150 policies and 1000 principals"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Backup not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "BACKUP_NOT_FOUND"
+                  message: "Backup with ID 'backup-20250127-103000' not found"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /principals/{id}:
+    get:
+      tags:
+        - Principals
+      summary: Get principal by ID
+      description: Retrieve principal information including roles and attributes
+      operationId: getPrincipal
+      parameters:
+        - $ref: '#/components/parameters/PrincipalId'
+      responses:
+        '200':
+          description: Principal details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Principal'
+              example:
+                id: "user123"
+                roles:
+                  - "developer"
+                  - "team-lead"
+                attributes:
+                  department: "engineering"
+                  level: "senior"
+                  location: "US"
+                  tenure_years: 3
+                metadata:
+                  created_at: "2024-01-15T08:00:00Z"
+                  updated_at: "2025-01-20T14:30:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Principals
+      summary: Create principal
+      description: Create a new principal with roles and attributes
+      operationId: createPrincipal
+      parameters:
+        - $ref: '#/components/parameters/PrincipalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Principal'
+            example:
+              roles:
+                - "developer"
+              attributes:
+                department: "engineering"
+                level: "junior"
+                location: "US"
+      responses:
+        '201':
+          description: Principal created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalResponse'
+              example:
+                id: "user123"
+                created_at: "2025-01-27T10:30:00Z"
+                message: "Principal created successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Principal already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "PRINCIPAL_ALREADY_EXISTS"
+                  message: "Principal with ID 'user123' already exists"
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Principals
+      summary: Update principal
+      description: Update principal roles and attributes
+      operationId: updatePrincipal
+      parameters:
+        - $ref: '#/components/parameters/PrincipalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Principal'
+            example:
+              roles:
+                - "developer"
+                - "team-lead"
+              attributes:
+                department: "engineering"
+                level: "senior"
+                location: "US"
+                tenure_years: 3
+      responses:
+        '200':
+          description: Principal updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalResponse'
+              example:
+                id: "user123"
+                updated_at: "2025-01-27T10:30:00Z"
+                message: "Principal updated successfully"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Principals
+      summary: Delete principal
+      description: Delete a principal by ID
+      operationId: deletePrincipal
+      parameters:
+        - $ref: '#/components/parameters/PrincipalId'
+      responses:
+        '204':
+          description: Principal deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT Bearer token authentication. Include the token in the Authorization header:
+        ```
+        Authorization: Bearer <your-jwt-token>
+        ```
+
+  parameters:
+    PolicyId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Policy identifier
+      example: "policy-dev-read-docs"
+
+    PrincipalId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Principal identifier
+      example: "user123"
+
+  schemas:
+    # Health and Status
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+          description: Service health status
+        timestamp:
+          type: string
+          format: date-time
+          description: Current server timestamp
+        version:
+          type: string
+          description: API version
+        uptime:
+          type: integer
+          description: Server uptime in seconds
+
+    StatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/HealthResponse'
+        - type: object
+          properties:
+            metrics:
+              type: object
+              properties:
+                total_policies:
+                  type: integer
+                  description: Total number of policies
+                total_principals:
+                  type: integer
+                  description: Total number of principals
+                requests_per_minute:
+                  type: number
+                  format: float
+                  description: Current request rate
+                cache_hit_rate:
+                  type: number
+                  format: float
+                  minimum: 0
+                  maximum: 1
+                  description: Cache hit rate (0-1)
+
+    # Authorization
+    Principal:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Principal identifier (user ID, service account, etc.)
+          example: "user123"
+        roles:
+          type: array
+          items:
+            type: string
+          description: List of roles assigned to the principal
+          example: ["developer", "team-lead"]
+        attributes:
+          type: object
+          additionalProperties: true
+          description: Custom attributes for policy evaluation
+          example:
+            department: "engineering"
+            level: "senior"
+            location: "US"
+        metadata:
+          type: object
+          properties:
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    Resource:
+      type: object
+      required:
+        - kind
+        - id
+      properties:
+        kind:
+          type: string
+          description: Resource type/kind
+          example: "document"
+        id:
+          type: string
+          description: Resource identifier
+          example: "doc456"
+        attributes:
+          type: object
+          additionalProperties: true
+          description: Resource attributes for policy evaluation
+          example:
+            visibility: "private"
+            owner: "user123"
+            team: "backend"
+
+    AuthorizationCheckRequest:
+      type: object
+      required:
+        - principal
+        - action
+        - resource
+      properties:
+        principal:
+          $ref: '#/components/schemas/Principal'
+        action:
+          type: string
+          description: Action to be performed
+          example: "read"
+        resource:
+          $ref: '#/components/schemas/Resource'
+        context:
+          type: object
+          additionalProperties: true
+          description: Additional context for policy evaluation
+          example:
+            ip_address: "192.168.1.100"
+            time: "2025-01-27T10:30:00Z"
+            environment: "production"
+
+    AuthorizationCheckResponse:
+      type: object
+      required:
+        - allowed
+      properties:
+        allowed:
+          type: boolean
+          description: Whether the action is allowed
+        decision_time_ms:
+          type: integer
+          description: Time taken to make decision in milliseconds
+        matched_policies:
+          type: array
+          items:
+            type: string
+          description: List of policy IDs that matched
+        reason:
+          type: string
+          description: Reason for denial (if not allowed)
+
+    BatchAuthorizationCheckRequest:
+      type: object
+      required:
+        - principal
+        - action
+        - resources
+      properties:
+        principal:
+          $ref: '#/components/schemas/Principal'
+        action:
+          type: string
+          description: Action to be performed on all resources
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+          minItems: 1
+          maxItems: 100
+        context:
+          type: object
+          additionalProperties: true
+
+    BatchAuthorizationCheckResponse:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required:
+              - resource
+              - allowed
+            properties:
+              resource:
+                $ref: '#/components/schemas/Resource'
+              allowed:
+                type: boolean
+              decision_time_ms:
+                type: integer
+              matched_policies:
+                type: array
+                items:
+                  type: string
+              reason:
+                type: string
+        total_time_ms:
+          type: integer
+          description: Total time for all checks
+
+    AllowedActionsResponse:
+      type: object
+      required:
+        - allowed_actions
+      properties:
+        allowed_actions:
+          type: array
+          items:
+            type: string
+          description: List of allowed actions
+        denied_actions:
+          type: array
+          items:
+            type: string
+          description: List of explicitly denied actions
+        decision_time_ms:
+          type: integer
+
+    # Policies
+    Policy:
+      type: object
+      required:
+        - id
+        - version
+      properties:
+        id:
+          type: string
+          description: Unique policy identifier
+          example: "policy-dev-read-docs"
+        version:
+          type: string
+          description: Policy version
+          example: "1.0"
+        description:
+          type: string
+          description: Human-readable policy description
+          example: "Developers can read documentation"
+        resource_policy:
+          $ref: '#/components/schemas/ResourcePolicy'
+        principal_policy:
+          $ref: '#/components/schemas/PrincipalPolicy'
+        derived_roles:
+          $ref: '#/components/schemas/DerivedRoles'
+        metadata:
+          type: object
+          properties:
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+            created_by:
+              type: string
+            tags:
+              type: array
+              items:
+                type: string
+
+    ResourcePolicy:
+      type: object
+      required:
+        - resource
+        - version
+        - rules
+      properties:
+        resource:
+          type: string
+          description: Resource kind this policy applies to
+          example: "document"
+        version:
+          type: string
+          example: "1.0"
+        scope:
+          type: string
+          description: Optional scope to limit policy application
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceRule'
+
+    ResourceRule:
+      type: object
+      required:
+        - actions
+        - effect
+      properties:
+        actions:
+          type: array
+          items:
+            type: string
+          description: Actions this rule applies to
+          example: ["read", "write"]
+        effect:
+          type: string
+          enum: [EFFECT_ALLOW, EFFECT_DENY]
+          description: Whether to allow or deny
+        roles:
+          type: array
+          items:
+            type: string
+          description: Roles this rule applies to
+        derived_roles:
+          type: array
+          items:
+            type: string
+          description: Derived roles this rule applies to
+        condition:
+          $ref: '#/components/schemas/Condition'
+
+    PrincipalPolicy:
+      type: object
+      required:
+        - principal
+        - version
+        - rules
+      properties:
+        principal:
+          type: string
+          description: Principal ID or role this policy applies to
+          example: "user123"
+        version:
+          type: string
+          example: "1.0"
+        scope:
+          type: string
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrincipalRule'
+
+    PrincipalRule:
+      type: object
+      required:
+        - resource
+        - actions
+      properties:
+        resource:
+          type: string
+          description: Resource kind
+          example: "document"
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Action'
+
+    Action:
+      type: object
+      required:
+        - name
+        - effect
+      properties:
+        name:
+          type: string
+          description: Action name or wildcard
+          example: "read"
+        effect:
+          type: string
+          enum: [EFFECT_ALLOW, EFFECT_DENY]
+        condition:
+          $ref: '#/components/schemas/Condition'
+
+    DerivedRoles:
+      type: object
+      required:
+        - name
+        - definitions
+      properties:
+        name:
+          type: string
+          description: Derived role set name
+          example: "senior_roles"
+        definitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleDefinition'
+
+    RoleDefinition:
+      type: object
+      required:
+        - name
+        - parent_roles
+      properties:
+        name:
+          type: string
+          description: Derived role name
+          example: "senior_developer"
+        parent_roles:
+          type: array
+          items:
+            type: string
+          description: Parent roles required
+          example: ["developer"]
+        condition:
+          $ref: '#/components/schemas/Condition'
+
+    Condition:
+      type: object
+      properties:
+        match:
+          type: object
+          properties:
+            expr:
+              type: string
+              description: CEL expression for condition
+              example: "P.attr.level == 'senior'"
+            all:
+              type: object
+              properties:
+                of:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Condition'
+            any:
+              type: object
+              properties:
+                of:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Condition'
+            none:
+              type: object
+              properties:
+                of:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Condition'
+
+    PolicyListResponse:
+      type: object
+      required:
+        - policies
+        - pagination
+      properties:
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Policy'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+
+    PaginationInfo:
+      type: object
+      required:
+        - page
+        - page_size
+        - total_items
+        - total_pages
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total_items:
+          type: integer
+          minimum: 0
+        total_pages:
+          type: integer
+          minimum: 0
+
+    PolicyResponse:
+      type: object
+      required:
+        - id
+        - message
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        message:
+          type: string
+
+    # Export/Import
+    ExportPoliciesRequest:
+      type: object
+      required:
+        - format
+      properties:
+        policy_ids:
+          type: array
+          items:
+            type: string
+          description: Specific policy IDs to export (empty = all)
+        format:
+          type: string
+          enum: [json, yaml]
+          description: Export format
+        include_metadata:
+          type: boolean
+          default: true
+          description: Include export metadata
+        include_principals:
+          type: boolean
+          default: false
+          description: Include principal definitions
+
+    ExportPoliciesResponse:
+      type: object
+      required:
+        - format
+        - policies
+      properties:
+        format:
+          type: string
+          enum: [json, yaml]
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Policy'
+        principals:
+          type: array
+          items:
+            $ref: '#/components/schemas/Principal'
+        metadata:
+          type: object
+          properties:
+            exported_at:
+              type: string
+              format: date-time
+            exported_by:
+              type: string
+            total_policies:
+              type: integer
+            format_version:
+              type: string
+
+    ImportPoliciesRequest:
+      type: object
+      required:
+        - format
+        - policies
+      properties:
+        format:
+          type: string
+          enum: [json, yaml]
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Policy'
+        principals:
+          type: array
+          items:
+            $ref: '#/components/schemas/Principal'
+        mode:
+          type: string
+          enum: [create_only, overwrite, merge]
+          default: create_only
+          description: |
+            Import mode:
+            - create_only: Only create new policies, skip existing
+            - overwrite: Replace existing policies
+            - merge: Merge with existing policies
+        dry_run:
+          type: boolean
+          default: false
+          description: Validate without applying changes
+
+    ImportPoliciesResponse:
+      type: object
+      required:
+        - success
+        - imported_count
+        - skipped_count
+        - failed_count
+      properties:
+        success:
+          type: boolean
+          description: Overall import success
+        imported_count:
+          type: integer
+          description: Number of successfully imported policies
+        skipped_count:
+          type: integer
+          description: Number of skipped policies
+        failed_count:
+          type: integer
+          description: Number of failed imports
+        dry_run:
+          type: boolean
+          description: Whether this was a dry run
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              policy_id:
+                type: string
+              error:
+                type: string
+        skipped:
+          type: array
+          items:
+            type: object
+            properties:
+              policy_id:
+                type: string
+              reason:
+                type: string
+        validation_details:
+          type: array
+          items:
+            type: object
+            properties:
+              policy_id:
+                type: string
+              status:
+                type: string
+              message:
+                type: string
+
+    # Backup/Restore
+    CreateBackupRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Backup name
+        description:
+          type: string
+          description: Backup description
+        include_principals:
+          type: boolean
+          default: true
+
+    BackupResponse:
+      type: object
+      required:
+        - backup_id
+        - created_at
+      properties:
+        backup_id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        size_bytes:
+          type: integer
+        policy_count:
+          type: integer
+        principal_count:
+          type: integer
+        format:
+          type: string
+        checksum:
+          type: string
+
+    RestoreBackupRequest:
+      type: object
+      required:
+        - backup_id
+        - mode
+      properties:
+        backup_id:
+          type: string
+        mode:
+          type: string
+          enum: [replace_all, merge]
+          description: |
+            Restore mode:
+            - replace_all: Delete all existing data and restore from backup
+            - merge: Merge backup data with existing data
+        conflict_resolution:
+          type: string
+          enum: [keep_existing, overwrite, fail]
+          default: fail
+          description: How to handle conflicts in merge mode
+        dry_run:
+          type: boolean
+          default: false
+
+    RestoreBackupResponse:
+      type: object
+      required:
+        - success
+        - restored_policies
+      properties:
+        success:
+          type: boolean
+        restored_policies:
+          type: integer
+        restored_principals:
+          type: integer
+        skipped_count:
+          type: integer
+        failed_count:
+          type: integer
+        dry_run:
+          type: boolean
+        message:
+          type: string
+
+    PrincipalResponse:
+      type: object
+      required:
+        - id
+        - message
+      properties:
+        id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        message:
+          type: string
+
+    # Error Responses
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Error code
+            message:
+              type: string
+              description: Error message
+            details:
+              type: object
+              description: Additional error details
+            trace_id:
+              type: string
+              description: Request trace ID for debugging
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid parameters or request body
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            validation_error:
+              summary: Validation error
+              value:
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Invalid request: missing required field 'principal.id'"
+                  details:
+                    field: "principal.id"
+                    constraint: "required"
+            invalid_format:
+              summary: Invalid format
+              value:
+                error:
+                  code: "INVALID_FORMAT"
+                  message: "Invalid policy format: resource_policy.rules must be an array"
+
+    Unauthorized:
+      description: Unauthorized - missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "UNAUTHORIZED"
+              message: "Authentication required. Please provide a valid JWT token."
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "FORBIDDEN"
+              message: "Insufficient permissions to perform this operation"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            policy_not_found:
+              summary: Policy not found
+              value:
+                error:
+                  code: "POLICY_NOT_FOUND"
+                  message: "Policy with ID 'policy-dev-read-docs' not found"
+            principal_not_found:
+              summary: Principal not found
+              value:
+                error:
+                  code: "PRINCIPAL_NOT_FOUND"
+                  message: "Principal with ID 'user123' not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "INTERNAL_SERVER_ERROR"
+              message: "An unexpected error occurred. Please try again later."
+              trace_id: "abc123-def456-ghi789"
