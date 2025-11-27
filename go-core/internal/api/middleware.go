@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap"
 )
 
@@ -102,10 +104,16 @@ func (s *Server) maxBodySizeMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// authMiddleware validates JWT tokens (placeholder for future implementation)
+// authMiddleware validates JWT tokens
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !s.config.EnableAuth {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Skip authentication for health check
+		if r.URL.Path == "/api/v1/health" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -126,8 +134,30 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// TODO: Validate JWT token with s.config.JWTSecret
-		// For now, just pass through
+		tokenString := parts[1]
+
+		// Parse and validate JWT token
+		token, err := s.validateJWT(tokenString)
+		if err != nil {
+			s.respondError(w, http.StatusUnauthorized, "INVALID_TOKEN",
+				"Invalid or expired token", err.Error())
+			return
+		}
+
+		if !token.Valid {
+			s.respondError(w, http.StatusUnauthorized, "TOKEN_INVALID",
+				"Token is not valid", "")
+			return
+		}
+
+		// Extract claims and add to context
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			ctx := r.Context()
+			if agentID, exists := claims["agent_id"]; exists {
+				ctx = context.WithValue(ctx, "agent_id", agentID)
+				r = r.WithContext(ctx)
+			}
+		}
 
 		next.ServeHTTP(w, r)
 	})

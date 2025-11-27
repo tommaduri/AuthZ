@@ -6,7 +6,9 @@ require (
 	github.com/fogfish/hnsw v0.0.5
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/google/cel-go v0.20.1
+	github.com/google/uuid v1.6.0
 	github.com/kshard/vector v0.1.1
+	github.com/lib/pq v1.10.9
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/go-redis/v9 v9.5.0
 	github.com/stretchr/testify v1.11.1

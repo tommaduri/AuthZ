@@ -35,6 +35,19 @@ const (
 	MaxDelegationHops = 5
 )
 
+// Delegation represents a simple agent-to-agent delegation relationship
+// Simpler than DelegationChain, used for storage and basic delegation management
+type Delegation struct {
+	ID          string    `json:"id"`
+	FromAgentID string    `json:"fromAgentId"`
+	ToAgentID   string    `json:"toAgentId"`
+	Scopes      []string  `json:"scopes"`
+	MaxHops     int       `json:"maxHops"`
+	CreatedAt   time.Time `json:"createdAt"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+	Active      bool      `json:"active"`
+}
+
 // IsExpired checks if the delegation chain has expired
 func (dc *DelegationChain) IsExpired() bool {
 	return time.Now().After(dc.ExpiresAt)

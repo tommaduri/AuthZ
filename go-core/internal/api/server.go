@@ -8,9 +8,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 
+	"github.com/authz-engine/go-core/internal/agent"
+	"github.com/authz-engine/go-core/internal/api/handlers"
+	"github.com/authz-engine/go-core/internal/delegation"
+	"github.com/authz-engine/go-core/internal/engine"
 	"github.com/authz-engine/go-core/internal/policy"
 	"github.com/authz-engine/go-core/pkg/types"
 )
@@ -150,6 +155,139 @@ func (s *Server) Stop(ctx context.Context) error {
 // Router returns the underlying router for testing
 func (s *Server) Router() *mux.Router {
 	return s.router
+}
+
+// validateJWT validates a JWT token and returns the parsed token
+func (s *Server) validateJWT(tokenString string) (*jwt.Token, error) {
+	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Validate signing method
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(s.config.JWTSecret), nil
+	})
+}
+
+// NewWithAgentHandlers creates a new REST API server with agent handlers
+func NewWithAgentHandlers(
+	cfg Config,
+	policyStore policy.Store,
+	agentStore agent.Store,
+	delegationStore delegation.Store,
+	eng *engine.Engine,
+	logger *zap.Logger,
+) (*Server, error) {
+	if policyStore == nil {
+		return nil, fmt.Errorf("policy store is required")
+	}
+	if agentStore == nil {
+		return nil, fmt.Errorf("agent store is required")
+	}
+	if delegationStore == nil {
+		return nil, fmt.Errorf("delegation store is required")
+	}
+	if eng == nil {
+		return nil, fmt.Errorf("engine is required")
+	}
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
+	// Create validator and rollback manager for policy operations
+	validationCfg := policy.ValidationConfig{
+		StrictMode:   false,
+		ValidateCEL:  true,
+		MaxRuleDepth: 10,
+	}
+	validator := policy.NewEnhancedValidator(validationCfg)
+
+	// Create version store and basic validator for rollback manager
+	versionStore := policy.NewVersionStore(100) // Max 100 versions
+	basicValidator := policy.NewValidator()
+	rm := policy.NewRollbackManager(policyStore, versionStore, basicValidator)
+
+	s := &Server{
+		router:          mux.NewRouter(),
+		logger:          logger,
+		policyStore:     policyStore,
+		validator:       validator,
+		rollbackManager: rm,
+		config:          cfg,
+	}
+
+	// Setup routes (including agent routes)
+	s.setupRoutesWithAgents(agentStore, delegationStore, eng)
+
+	// Create HTTP server
+	s.httpServer = &http.Server{
+		Addr:           fmt.Sprintf(":%d", cfg.Port),
+		Handler:        s.router,
+		ReadTimeout:    cfg.ReadTimeout,
+		WriteTimeout:   cfg.WriteTimeout,
+		IdleTimeout:    cfg.IdleTimeout,
+		MaxHeaderBytes: 1 << 20, // 1MB
+	}
+
+	return s, nil
+}
+
+// setupRoutesWithAgents configures all API routes including agent endpoints
+func (s *Server) setupRoutesWithAgents(agentStore agent.Store, delegationStore delegation.Store, eng *engine.Engine) {
+	// Apply middleware
+	s.router.Use(s.loggingMiddleware)
+	s.router.Use(s.recoveryMiddleware)
+	if s.config.EnableCORS {
+		s.router.Use(s.corsMiddleware)
+	}
+	s.router.Use(s.maxBodySizeMiddleware)
+
+	// API v1 routes
+	api := s.router.PathPrefix("/api/v1").Subrouter()
+
+	// Policy CRUD endpoints
+	api.HandleFunc("/policies", s.listPolicies).Methods("GET")
+	api.HandleFunc("/policies", s.createPolicy).Methods("POST")
+	api.HandleFunc("/policies/{name}", s.getPolicy).Methods("GET")
+	api.HandleFunc("/policies/{name}", s.updatePolicy).Methods("PUT")
+	api.HandleFunc("/policies/{name}", s.deletePolicy).Methods("DELETE")
+
+	// Batch operations
+	api.HandleFunc("/policies/batch", s.batchCreatePolicies).Methods("POST")
+	api.HandleFunc("/policies/batch/validate", s.batchValidatePolicies).Methods("POST")
+
+	// Validation endpoints
+	api.HandleFunc("/policies/{name}/validate", s.validatePolicy).Methods("POST")
+	api.HandleFunc("/policies/validate", s.validatePolicyPayload).Methods("POST")
+
+	// Version management
+	api.HandleFunc("/versions", s.listVersions).Methods("GET")
+	api.HandleFunc("/versions/{version}", s.getVersion).Methods("GET")
+	api.HandleFunc("/versions/{version}/rollback", s.rollbackToVersion).Methods("POST")
+	api.HandleFunc("/versions/current", s.getCurrentVersion).Methods("GET")
+	api.HandleFunc("/versions/previous/rollback", s.rollbackToPrevious).Methods("POST")
+
+	// Statistics
+	api.HandleFunc("/stats", s.getStats).Methods("GET")
+
+	// Health check
+	api.HandleFunc("/health", s.healthCheck).Methods("GET")
+
+	// Agent endpoints (with JWT authentication)
+	agentHandler := handlers.NewAgentHandler(agentStore, delegationStore, eng, []byte(s.config.JWTSecret), s.logger)
+
+	// Register endpoint doesn't require auth
+	api.HandleFunc("/agent/register", agentHandler.RegisterAgent).Methods("POST")
+
+	// Protected agent endpoints
+	agentAPI := api.PathPrefix("/agent").Subrouter()
+	if s.config.EnableAuth {
+		agentAPI.Use(s.authMiddleware)
+	}
+
+	agentAPI.HandleFunc("/delegate", agentHandler.CreateDelegation).Methods("POST")
+	agentAPI.HandleFunc("/check", agentHandler.CheckAuthorization).Methods("POST")
+	agentAPI.HandleFunc("/{id}", agentHandler.GetAgent).Methods("GET")
+	agentAPI.HandleFunc("/{id}/revoke", agentHandler.RevokeAgent).Methods("DELETE")
 }
 
 // Response helpers

@@ -107,6 +107,15 @@ func (a *HNSWAdapter) Search(ctx context.Context, query []float32, k int) ([]*ve
 		return nil, ctx.Err()
 	}
 
+	// Check if index is empty (prevent panic on empty index)
+	a.backend.Mu.RLock()
+	isEmpty := len(a.backend.Vectors) == 0
+	a.backend.Mu.RUnlock()
+
+	if isEmpty {
+		return []*vector.SearchResult{}, nil
+	}
+
 	// Perform search with configurable efSearch
 	neighbors := a.index.Search(query, k, a.efSearch)
 

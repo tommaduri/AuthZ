@@ -105,16 +105,108 @@ profile-mem:
 mocks:
 	mockgen -source=internal/policy/store.go -destination=internal/policy/mock_store.go -package=policy
 
+# Database configuration
+DB_HOST ?= localhost
+DB_PORT ?= 5432
+DB_USER ?= postgres
+DB_PASSWORD ?= postgres
+DB_NAME ?= authz
+DB_SSL_MODE ?= disable
+DB_URL = postgres://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=$(DB_SSL_MODE)
+
+TEST_DB_NAME ?= authz_test
+TEST_DB_URL = postgres://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(TEST_DB_NAME)?sslmode=$(DB_SSL_MODE)
+
+MIGRATIONS_DIR = ./migrations
+
+# Database Migrations
+migrate-install:
+	@echo "Installing golang-migrate..."
+	go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+migrate-up:
+	@echo "Running migrations..."
+	migrate -database "$(DB_URL)" -path $(MIGRATIONS_DIR) up
+
+migrate-down:
+	@echo "Rolling back last migration..."
+	migrate -database "$(DB_URL)" -path $(MIGRATIONS_DIR) down 1
+
+migrate-version:
+	@migrate -database "$(DB_URL)" -path $(MIGRATIONS_DIR) version
+
+migrate-force:
+	@if [ -z "$(VERSION)" ]; then echo "Error: VERSION required. Usage: make migrate-force VERSION=1"; exit 1; fi
+	@migrate -database "$(DB_URL)" -path $(MIGRATIONS_DIR) force $(VERSION)
+
+migrate-create:
+	@if [ -z "$(NAME)" ]; then echo "Error: NAME required. Usage: make migrate-create NAME=add_table"; exit 1; fi
+	@migrate create -ext sql -dir $(MIGRATIONS_DIR) -seq $(NAME)
+
+# Database Management
+db-create:
+	@psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d postgres -c "CREATE DATABASE $(DB_NAME);"
+
+db-drop:
+	@psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d postgres -c "DROP DATABASE IF EXISTS $(DB_NAME);"
+
+db-reset: db-drop db-create migrate-up
+
+db-shell:
+	@psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME)
+
+# Test Database
+test-db-create:
+	@psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d postgres -c "DROP DATABASE IF EXISTS $(TEST_DB_NAME);"
+	@psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d postgres -c "CREATE DATABASE $(TEST_DB_NAME);"
+
+test-db-migrate: test-db-create
+	@migrate -database "$(TEST_DB_URL)" -path $(MIGRATIONS_DIR) up
+
+test-db: test-db-create test-db-migrate
+	@$(GOTEST) ./tests/db/... -v
+
+# Docker Database
+docker-db-start:
+	@docker run -d --name authz-postgres \
+		-e POSTGRES_USER=$(DB_USER) \
+		-e POSTGRES_PASSWORD=$(DB_PASSWORD) \
+		-e POSTGRES_DB=$(DB_NAME) \
+		-p $(DB_PORT):5432 postgres:15-alpine
+	@echo "Waiting for database..."
+	@sleep 3
+
+docker-db-stop:
+	@docker stop authz-postgres || true
+	@docker rm authz-postgres || true
+
 # Help
 help:
 	@echo "Available targets:"
-	@echo "  build        - Build the server and CLI binaries"
-	@echo "  test         - Run all tests with race detection"
-	@echo "  bench        - Run benchmarks"
-	@echo "  lint         - Run linter"
-	@echo "  proto        - Generate protobuf code"
-	@echo "  docker       - Build Docker image"
-	@echo "  run          - Build and run the server"
-	@echo "  dev          - Run in development mode"
-	@echo "  clean        - Clean build artifacts"
-	@echo "  coverage     - Generate coverage report"
+	@echo "  build             - Build the server and CLI binaries"
+	@echo "  test              - Run all tests with race detection"
+	@echo "  bench             - Run benchmarks"
+	@echo "  lint              - Run linter"
+	@echo "  proto             - Generate protobuf code"
+	@echo "  docker            - Build Docker image"
+	@echo "  run               - Build and run the server"
+	@echo "  dev               - Run in development mode"
+	@echo "  clean             - Clean build artifacts"
+	@echo "  coverage          - Generate coverage report"
+	@echo ""
+	@echo "Database Migrations:"
+	@echo "  migrate-install   - Install golang-migrate tool"
+	@echo "  migrate-up        - Run all pending migrations"
+	@echo "  migrate-down      - Rollback last migration"
+	@echo "  migrate-version   - Show current migration version"
+	@echo "  migrate-force     - Force migration version (VERSION=n)"
+	@echo "  migrate-create    - Create new migration (NAME=xxx)"
+	@echo ""
+	@echo "Database Management:"
+	@echo "  db-create         - Create database"
+	@echo "  db-drop           - Drop database"
+	@echo "  db-reset          - Reset database (drop, create, migrate)"
+	@echo "  db-shell          - Open PostgreSQL shell"
+	@echo "  test-db           - Run database tests"
+	@echo "  docker-db-start   - Start PostgreSQL in Docker"
+	@echo "  docker-db-stop    - Stop PostgreSQL Docker container"

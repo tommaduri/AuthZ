@@ -31,6 +31,13 @@ type AgentStore interface {
 	RevokeCredential(ctx context.Context, agentID string, credentialID string) error
 }
 
+// Store extends AgentStore with simpler non-context methods for compatibility
+type Store interface {
+	Add(agent *types.Agent) error
+	Get(id string) (*types.Agent, error)
+	Update(agent *types.Agent) error
+}
+
 // AgentFilters supports querying agents
 type AgentFilters struct {
 	Type   string // Filter by agent type

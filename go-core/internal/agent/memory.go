@@ -24,6 +24,44 @@ func NewInMemoryAgentStore() *InMemoryAgentStore {
 	}
 }
 
+// NewInMemoryStore creates a new in-memory agent store (alias for compatibility)
+func NewInMemoryStore() Store {
+	return &InMemoryAgentStore{
+		agents: make(map[string]*types.Agent),
+	}
+}
+
+// Add creates a new agent (simpler non-context version)
+func (s *InMemoryAgentStore) Add(agent *types.Agent) error {
+	return s.Register(context.Background(), agent)
+}
+
+// Update updates an existing agent
+func (s *InMemoryAgentStore) Update(agent *types.Agent) error {
+	if agent == nil {
+		return errors.New("agent cannot be nil")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.agents[agent.ID]; !exists {
+		return fmt.Errorf("agent with ID %s not found", agent.ID)
+	}
+
+	// Make a copy to avoid external mutations
+	agentCopy := *agent
+	if agent.Metadata != nil {
+		agentCopy.Metadata = make(map[string]interface{})
+		for k, v := range agent.Metadata {
+			agentCopy.Metadata[k] = v
+		}
+	}
+
+	s.agents[agent.ID] = &agentCopy
+	return nil
+}
+
 // Register creates a new agent with credentials
 func (s *InMemoryAgentStore) Register(ctx context.Context, agent *types.Agent) error {
 	if agent == nil {
@@ -56,8 +94,8 @@ func (s *InMemoryAgentStore) Register(ctx context.Context, agent *types.Agent) e
 	return nil
 }
 
-// Get retrieves an agent by ID (O(1) lookup)
-func (s *InMemoryAgentStore) Get(ctx context.Context, id string) (*types.Agent, error) {
+// Get retrieves an agent by ID (O(1) lookup) - non-context version
+func (s *InMemoryAgentStore) Get(id string) (*types.Agent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -76,6 +114,11 @@ func (s *InMemoryAgentStore) Get(ctx context.Context, id string) (*types.Agent, 
 	}
 
 	return &agentCopy, nil
+}
+
+// GetWithContext retrieves an agent by ID (O(1) lookup) - context version for AgentStore interface
+func (s *InMemoryAgentStore) GetWithContext(ctx context.Context, id string) (*types.Agent, error) {
+	return s.Get(id)
 }
 
 // UpdateStatus updates agent status (active, suspended, revoked, expired)
