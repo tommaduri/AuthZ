@@ -67,3 +67,6 @@ redis-data/
 # Prometheus/Grafana data
 prometheus-data/
 grafana-data/
+
+# SWARM coordination memory (large binary file)
+.swarm/memory.db
