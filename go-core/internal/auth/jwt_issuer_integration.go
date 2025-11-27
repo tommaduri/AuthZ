@@ -124,9 +124,16 @@ func (ji *JWTIssuer) VerifyToken(ctx context.Context, tokenString string) (*Toke
 		return nil, fmt.Errorf("invalid issuer: expected %s, got %s", ji.issuer, claims.Issuer)
 	}
 
-	// Verify audience
-	if !claims.VerifyAudience(ji.audience, true) {
-		return nil, fmt.Errorf("invalid audience")
+	// Verify audience (manual check since VerifyAudience method doesn't exist)
+	audienceValid := false
+	for _, aud := range claims.Audience {
+		if aud == ji.audience {
+			audienceValid = true
+			break
+		}
+	}
+	if !audienceValid {
+		return nil, fmt.Errorf("invalid audience: expected %s", ji.audience)
 	}
 
 	return claims, nil

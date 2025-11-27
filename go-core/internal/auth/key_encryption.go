@@ -67,8 +67,9 @@ func (e *AESKeyEncryptor) Decrypt(ciphertext string) ([]byte, error) {
 		return nil, fmt.Errorf("ciphertext too short")
 	}
 
-	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	nonce := data[:nonceSize]
+	encryptedData := data[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, encryptedData, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt: %w", err)
 	}

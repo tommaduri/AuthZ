@@ -10,22 +10,6 @@ import (
 	"math/big"
 )
 
-// JWK represents a JSON Web Key
-type JWK struct {
-	KID       string `json:"kid"`
-	Kty       string `json:"kty"`
-	Alg       string `json:"alg"`
-	Use       string `json:"use"`
-	N         string `json:"n"`
-	E         string `json:"e"`
-	X5t       string `json:"x5t,omitempty"`
-}
-
-// JWKS represents a JSON Web Key Set
-type JWKS struct {
-	Keys []JWK `json:"keys"`
-}
-
 // JWKSManager manages the JWKS endpoint with multi-key support
 type JWKSManager struct {
 	rotationMgr *KeyRotationManager
@@ -102,17 +86,13 @@ func (jm *JWKSManager) convertToJWK(key *SigningKey) (*JWK, error) {
 	n := base64.RawURLEncoding.EncodeToString(rsaKey.N.Bytes())
 	e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(rsaKey.E)).Bytes())
 
-	// Calculate thumbprint (x5t)
-	thumbprint := jm.calculateThumbprint(rsaKey)
-
 	return &JWK{
-		KID: key.KID,
+		Kid: key.KID,
 		Kty: "RSA",
 		Alg: key.Algorithm,
 		Use: "sig",
 		N:   n,
 		E:   e,
-		X5t: thumbprint,
 	}, nil
 }
 
@@ -157,20 +137,20 @@ func (jm *JWKSManager) ValidateJWKS(jwks *JWKS) error {
 	}
 
 	for i, key := range jwks.Keys {
-		if key.KID == "" {
+		if key.Kid == "" {
 			return fmt.Errorf("key at index %d has empty KID", i)
 		}
 		if key.Kty != "RSA" {
-			return fmt.Errorf("key %s has invalid kty: %s", key.KID, key.Kty)
+			return fmt.Errorf("key %s has invalid kty: %s", key.Kid, key.Kty)
 		}
 		if key.Alg == "" {
-			return fmt.Errorf("key %s has empty alg", key.KID)
+			return fmt.Errorf("key %s has empty alg", key.Kid)
 		}
 		if key.Use != "sig" {
-			return fmt.Errorf("key %s has invalid use: %s", key.KID, key.Use)
+			return fmt.Errorf("key %s has invalid use: %s", key.Kid, key.Use)
 		}
 		if key.N == "" || key.E == "" {
-			return fmt.Errorf("key %s has empty modulus or exponent", key.KID)
+			return fmt.Errorf("key %s has empty modulus or exponent", key.Kid)
 		}
 	}
 
