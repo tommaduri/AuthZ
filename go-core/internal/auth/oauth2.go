@@ -42,12 +42,17 @@ var (
 // OAuth2Handler handles OAuth2 client credentials flow (RFC 6749 Section 4.4)
 type OAuth2Handler struct {
 	store       OAuth2ClientStore
-	jwtIssuer   *JWTIssuer
+	jwtIssuer   OAuth2JWTIssuer
 	tokenExpiry time.Duration
 }
 
+// OAuth2JWTIssuer interface for token issuance (allows mocking in tests)
+type OAuth2JWTIssuer interface {
+	IssueTokenWithClaims(ctx context.Context, subject, tenantID string, scopes []string, extra map[string]interface{}) (string, error)
+}
+
 // NewOAuth2Handler creates a new OAuth2 handler
-func NewOAuth2Handler(store OAuth2ClientStore, jwtIssuer *JWTIssuer) *OAuth2Handler {
+func NewOAuth2Handler(store OAuth2ClientStore, jwtIssuer OAuth2JWTIssuer) *OAuth2Handler {
 	return &OAuth2Handler{
 		store:       store,
 		jwtIssuer:   jwtIssuer,
@@ -133,22 +138,19 @@ func (h *OAuth2Handler) IssueToken(ctx context.Context, req *TokenRequest) (*Tok
 		requestedScopes = client.Scopes
 	}
 
-	// Issue JWT access token
-	now := time.Now()
-	expiresAt := now.Add(h.tokenExpiry)
+	// Issue JWT access token with OAuth2 client credentials
+	extra := map[string]interface{}{
+		"client_name": client.Name,
+		"grant_type":  GrantTypeClientCredentials,
+	}
 
-	token, err := h.jwtIssuer.IssueToken(&TokenClaims{
-		Subject:   client.ClientID.String(),
-		TenantID:  client.TenantID,
-		Scopes:    requestedScopes,
-		IssuedAt:  now,
-		ExpiresAt: expiresAt,
-		TokenType: "access_token",
-		Extra: map[string]interface{}{
-			"client_name": client.Name,
-			"grant_type":  GrantTypeClientCredentials,
-		},
-	})
+	token, err := h.jwtIssuer.IssueTokenWithClaims(
+		ctx,
+		client.ClientID.String(),
+		client.TenantID,
+		requestedScopes,
+		extra,
+	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to issue token: %w", err)
