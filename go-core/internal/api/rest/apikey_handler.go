@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/yourusername/authz-engine/internal/auth"
+	"github.com/authz-engine/go-core/internal/auth"
 )
 
 // APIKeyHandler handles API key management endpoints

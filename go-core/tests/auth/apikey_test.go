@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/yourusername/authz-engine/internal/auth"
+	"github.com/authz-engine/go-core/internal/auth"
 )
 
 func TestGenerateAPIKey(t *testing.T) {
