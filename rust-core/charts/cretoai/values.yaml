@@ -1,0 +1,201 @@
+# Default values for CretoAI Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global settings
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: "standard"
+
+# Consensus node configuration
+node:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    repository: cretoai/node
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 1
+      memory: 2Gi
+      storage: 100Gi
+    limits:
+      cpu: 2
+      memory: 4Gi
+
+  # Node configuration
+  config:
+    logLevel: "info"
+    consensus:
+      algorithm: "bft"
+      quorumThreshold: 0.67
+      finalityTimeoutMs: 500
+      maxPendingVertices: 10000
+    network:
+      listenAddr: "0.0.0.0:9000"
+      quicPort: 9001
+      maxConnections: 100
+    storage:
+      backend: "rocksdb"
+      cacheSizeMb: 512
+      writeBufferMb: 128
+      enableCompression: true
+    crypto:
+      signatureAlgorithm: "ml-dsa-87"
+      hashAlgorithm: "blake3"
+    metrics:
+      enabled: true
+      port: 9090
+
+  # Persistent volume configuration
+  persistence:
+    enabled: true
+    storageClass: ""  # Use global.storageClass if empty
+    size: 100Gi
+    accessMode: ReadWriteOnce
+
+  # Pod affinity/anti-affinity
+  affinity:
+    podAntiAffinity:
+      enabled: true
+      type: "required"  # or "preferred"
+
+  # Health checks
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    p2pPort: 9000
+    quicPort: 9001
+    metricsPort: 9090
+    annotations: {}
+
+# REST API configuration
+api:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    repository: cretoai/api
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1
+      memory: 2Gi
+
+  config:
+    logLevel: "info"
+    port: 8080
+    enableSwagger: true
+    corsOrigins: "*"
+
+  service:
+    type: LoadBalancer
+    port: 80
+    targetPort: 8080
+    annotations:
+      # AWS
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      # GCP
+      cloud.google.com/load-balancer-type: "External"
+
+  autoscaling:
+    enabled: false
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: api.cretoai.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: cretoai-api-tls
+      hosts:
+        - api.cretoai.example.com
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+
+  # Prometheus ServiceMonitor
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    scrapeTimeout: 10s
+
+  # Prometheus alerts
+  prometheusRule:
+    enabled: true
+
+  # Grafana dashboard
+  grafanaDashboard:
+    enabled: true
+
+# Security settings
+security:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop:
+        - ALL
+
+# Network policies
+networkPolicy:
+  enabled: false
+  policyTypes:
+    - Ingress
+    - Egress
+
+# Additional labels
+labels: {}
+
+# Additional annotations
+annotations: {}
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Priority class
+priorityClassName: ""

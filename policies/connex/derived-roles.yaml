@@ -1,0 +1,79 @@
+# Avatar Connex - Derived Roles
+#
+# Derived roles are computed at runtime based on the relationship
+# between the principal and the resource being accessed.
+
+apiVersion: authz.engine/v1
+kind: DerivedRoles
+metadata:
+  name: connex-derived-roles
+  description: Dynamic roles computed from context
+  version: "1.0.0"
+
+spec:
+  definitions:
+    # Owner: The principal owns the resource
+    - name: owner
+      parentRoles: [user, fan, influencer]
+      condition:
+        expression: resource.ownerId == principal.id
+
+    # Subscriber: The principal has an active subscription
+    - name: subscriber
+      parentRoles: [fan, user]
+      condition:
+        expression: principal.id in resource.subscriberIds
+
+    # Participant: The principal is a participant in a conversation/room
+    - name: participant
+      parentRoles: [user, fan, influencer]
+      condition:
+        expression: principal.id in resource.participants
+
+    # ContentCreator: The influencer created this content
+    - name: content_creator
+      parentRoles: [influencer]
+      condition:
+        expression: resource.creatorId == principal.id || resource.influencerId == principal.id
+
+    # AgencyMember: The principal belongs to the agency that manages this resource
+    - name: agency_member
+      parentRoles: [agency]
+      condition:
+        expression: resource.agencyId == principal.agencyId
+
+    # VerifiedInfluencer: Influencer with completed verification
+    - name: verified_influencer
+      parentRoles: [influencer]
+      condition:
+        expression: principal.verificationStatus == "verified"
+
+    # PremiumUser: User with premium subscription
+    - name: premium_user
+      parentRoles: [fan, user]
+      condition:
+        expression: principal.subscriptionTier == "premium" || principal.subscriptionTier == "vip"
+
+    # Moderator: User with moderation privileges for this resource
+    - name: moderator
+      parentRoles: [user, influencer, admin]
+      condition:
+        expression: principal.id in resource.moderatorIds
+
+    # ActiveSubscriber: User with an active subscription
+    - name: active_subscriber
+      parentRoles: [fan, user, subscriber]
+      condition:
+        expression: principal.attr.subscriptionStatus == "active" && timestamp(principal.attr.subscriptionExpiresAt) > now()
+
+    # TeamMember: User who belongs to the resource's team
+    - name: team_member
+      parentRoles: [user, influencer, admin]
+      condition:
+        expression: principal.id in resource.teamIds
+
+    # FinanceApprover: Finance role with high-value approval capability
+    - name: finance_approver
+      parentRoles: [finance]
+      condition:
+        expression: "finance" in principal.roles && principal.attr.approvalLimit >= 1000

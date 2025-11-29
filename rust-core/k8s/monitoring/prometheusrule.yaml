@@ -1,0 +1,210 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cretoai-alerts
+  namespace: cretoai
+  labels:
+    app: cretoai
+    component: monitoring
+spec:
+  groups:
+    - name: cretoai.consensus
+      interval: 30s
+      rules:
+        - alert: HighFinalityLatency
+          expr: histogram_quantile(0.99, rate(cretoai_finality_time_seconds_bucket[5m])) > 1.0
+          for: 5m
+          labels:
+            severity: warning
+            component: consensus
+          annotations:
+            summary: "High finality latency detected"
+            description: "P99 finality time is {{ $value }}s (threshold: 1s) for pod {{ $labels.pod }}"
+            runbook_url: "https://docs.cretoai.io/runbooks/high-finality-latency"
+
+        - alert: ConsensusStalled
+          expr: rate(cretoai_vertices_finalized_total[5m]) == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: consensus
+          annotations:
+            summary: "Consensus has stalled"
+            description: "No vertices finalized in the last 5 minutes on pod {{ $labels.pod }}"
+            runbook_url: "https://docs.cretoai.io/runbooks/consensus-stalled"
+
+        - alert: ByzantineNodeDetected
+          expr: increase(cretoai_byzantine_violations_total[5m]) > 0
+          labels:
+            severity: critical
+            component: security
+          annotations:
+            summary: "Byzantine node behavior detected"
+            description: "Node {{ $labels.node_id }} has {{ $value }} violations in the last 5 minutes"
+            runbook_url: "https://docs.cretoai.io/runbooks/byzantine-node"
+
+        - alert: QuorumLoss
+          expr: count(up{app="cretoai-node"} == 1) < 2
+          for: 1m
+          labels:
+            severity: critical
+            component: consensus
+          annotations:
+            summary: "Consensus quorum lost"
+            description: "Only {{ $value }} out of 3 nodes are available. Consensus requires at least 2 nodes."
+            runbook_url: "https://docs.cretoai.io/runbooks/quorum-loss"
+
+        - alert: LowVertexThroughput
+          expr: rate(cretoai_vertices_finalized_total[5m]) < 10
+          for: 10m
+          labels:
+            severity: warning
+            component: performance
+          annotations:
+            summary: "Low vertex finalization throughput"
+            description: "Only {{ $value }} vertices/sec being finalized (expected: 100+)"
+            runbook_url: "https://docs.cretoai.io/runbooks/low-throughput"
+
+    - name: cretoai.network
+      interval: 30s
+      rules:
+        - alert: HighQUICLatency
+          expr: histogram_quantile(0.99, rate(cretoai_quic_latency_seconds_bucket[5m])) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+            component: network
+          annotations:
+            summary: "High QUIC network latency"
+            description: "P99 QUIC latency is {{ $value }}s (threshold: 100ms) on pod {{ $labels.pod }}"
+            runbook_url: "https://docs.cretoai.io/runbooks/high-network-latency"
+
+        - alert: PeerConnectionLoss
+          expr: cretoai_connected_peers < 2
+          for: 2m
+          labels:
+            severity: critical
+            component: network
+          annotations:
+            summary: "Insufficient peer connections"
+            description: "Node {{ $labels.pod }} has only {{ $value }} connected peers (minimum: 2)"
+            runbook_url: "https://docs.cretoai.io/runbooks/peer-connection-loss"
+
+        - alert: HighNetworkErrors
+          expr: rate(cretoai_network_errors_total[5m]) > 10
+          for: 5m
+          labels:
+            severity: warning
+            component: network
+          annotations:
+            summary: "High network error rate"
+            description: "{{ $value }} network errors/sec on pod {{ $labels.pod }}"
+            runbook_url: "https://docs.cretoai.io/runbooks/network-errors"
+
+    - name: cretoai.storage
+      interval: 30s
+      rules:
+        - alert: HighStorageLatency
+          expr: histogram_quantile(0.99, rate(cretoai_storage_write_seconds_bucket[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            component: storage
+          annotations:
+            summary: "High RocksDB write latency"
+            description: "P99 storage write latency is {{ $value }}s (threshold: 50ms) on pod {{ $labels.pod }}"
+            runbook_url: "https://docs.cretoai.io/runbooks/high-storage-latency"
+
+        - alert: StorageDiskSpaceLow
+          expr: (1 - (node_filesystem_avail_bytes{mountpoint="/data"} / node_filesystem_size_bytes{mountpoint="/data"})) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            component: storage
+          annotations:
+            summary: "Low disk space on persistent volume"
+            description: "Disk usage is {{ $value | humanizePercentage }} on pod {{ $labels.pod }}"
+            runbook_url: "https://docs.cretoai.io/runbooks/low-disk-space"
+
+        - alert: StorageDiskSpaceCritical
+          expr: (1 - (node_filesystem_avail_bytes{mountpoint="/data"} / node_filesystem_size_bytes{mountpoint="/data"})) > 0.95
+          for: 1m
+          labels:
+            severity: critical
+            component: storage
+          annotations:
+            summary: "Critical disk space on persistent volume"
+            description: "Disk usage is {{ $value | humanizePercentage }} on pod {{ $labels.pod }}. Node may crash."
+            runbook_url: "https://docs.cretoai.io/runbooks/critical-disk-space"
+
+    - name: cretoai.api
+      interval: 30s
+      rules:
+        - alert: APIHighErrorRate
+          expr: rate(cretoai_api_requests_total{status=~"5.."}[5m]) / rate(cretoai_api_requests_total[5m]) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            component: api
+          annotations:
+            summary: "High API error rate"
+            description: "{{ $value | humanizePercentage }} of API requests are failing (5xx errors) on pod {{ $labels.pod }}"
+            runbook_url: "https://docs.cretoai.io/runbooks/api-errors"
+
+        - alert: APIHighLatency
+          expr: histogram_quantile(0.99, rate(cretoai_api_request_duration_seconds_bucket[5m])) > 2.0
+          for: 5m
+          labels:
+            severity: warning
+            component: api
+          annotations:
+            summary: "High API latency"
+            description: "P99 API latency is {{ $value }}s (threshold: 2s) on pod {{ $labels.pod }}"
+            runbook_url: "https://docs.cretoai.io/runbooks/api-latency"
+
+        - alert: APIDown
+          expr: up{app="cretoai-api"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: api
+          annotations:
+            summary: "API service is down"
+            description: "API pod {{ $labels.pod }} is not responding to health checks"
+            runbook_url: "https://docs.cretoai.io/runbooks/api-down"
+
+    - name: cretoai.resources
+      interval: 30s
+      rules:
+        - alert: HighMemoryUsage
+          expr: (container_memory_working_set_bytes{pod=~"cretoai-.*"} / container_spec_memory_limit_bytes{pod=~"cretoai-.*"}) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            component: resources
+          annotations:
+            summary: "High memory usage"
+            description: "Memory usage is {{ $value | humanizePercentage }} on pod {{ $labels.pod }}"
+            runbook_url: "https://docs.cretoai.io/runbooks/high-memory"
+
+        - alert: HighCPUUsage
+          expr: (rate(container_cpu_usage_seconds_total{pod=~"cretoai-.*"}[5m]) / container_spec_cpu_quota{pod=~"cretoai-.*"}) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            component: resources
+          annotations:
+            summary: "High CPU usage"
+            description: "CPU usage is {{ $value | humanizePercentage }} on pod {{ $labels.pod }}"
+            runbook_url: "https://docs.cretoai.io/runbooks/high-cpu"
+
+        - alert: PodCrashLooping
+          expr: rate(kube_pod_container_status_restarts_total{pod=~"cretoai-.*"}[15m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+            component: stability
+          annotations:
+            summary: "Pod is crash looping"
+            description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last 15 minutes"
+            runbook_url: "https://docs.cretoai.io/runbooks/crash-loop"

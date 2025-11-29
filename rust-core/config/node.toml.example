@@ -1,0 +1,391 @@
+# CretoAI Consensus Node Configuration Template
+# Copy this file to node.toml and customize for your deployment
+
+# ============================================================================
+# Node Identity & Data Directory
+# ============================================================================
+[node]
+# Unique node identifier (auto-generated from public key if not set)
+id = "cretoai-node-1"
+
+# Data directory for storage, keys, logs
+data_dir = "/data/cretoai"
+
+# Logging level: trace, debug, info, warn, error
+log_level = "info"
+
+# Enable colored logging output (disable in production)
+colored_logs = true
+
+# ============================================================================
+# Consensus Configuration (Byzantine Fault Tolerance)
+# ============================================================================
+[consensus]
+# Consensus algorithm (only "bft" supported in Phase 6)
+algorithm = "bft"
+
+# Quorum threshold for 2f+1 Byzantine fault tolerance
+# 0.67 = 67% = 2 out of 3 nodes must agree
+# For n nodes, quorum size = ceil(n * threshold)
+quorum_threshold = 0.67
+
+# Maximum time to wait for finality before triggering view change (milliseconds)
+# Lower values improve responsiveness but increase network overhead
+finality_timeout_ms = 500
+
+# Maximum number of pending vertices before back-pressure
+max_pending_vertices = 10000
+
+# View change timeout (milliseconds)
+# Triggers leader election if no progress after this time
+view_change_timeout_ms = 5000
+
+# Enable optimistic fast path (skip Prepare phase for sequential proposals)
+optimistic_mode = false
+
+# Byzantine detection reputation threshold (0.0 - 1.0)
+# Nodes below this score are banned
+reputation_threshold = 0.3
+
+# ============================================================================
+# Network Configuration (QUIC Transport)
+# ============================================================================
+[network]
+# P2P listening address (TCP for API, UDP for QUIC)
+listen_addr = "0.0.0.0:9000"
+
+# QUIC UDP port (must be different from listen_addr port)
+quic_port = 9001
+
+# External address advertised to peers (auto-detected via STUN if not set)
+# external_addr = "203.0.113.42:9001"
+
+# Bootstrap peers (multiaddr format)
+# Leave empty for the first node (bootstrap node)
+# For other nodes, list at least one existing node
+bootstrap_peers = [
+    # "/ip4/172.21.0.11/udp/9001/quic",
+    # "/ip4/172.21.0.12/udp/9001/quic",
+    # "/dns4/node1.cretoai.network/udp/9001/quic"
+]
+
+# Maximum number of peer connections
+max_peers = 50
+
+# Enable mDNS discovery for local network peers
+mdns_enabled = true
+
+# mDNS discovery interval (seconds)
+mdns_interval_secs = 60
+
+# Enable Kademlia DHT for wide-area peer discovery
+kad_enabled = true
+
+# DHT bootstrap nodes (for wide-area discovery)
+kad_bootstrap_nodes = [
+    # "/dnsaddr/bootstrap.libp2p.io"
+]
+
+# Enable NAT traversal (STUN/TURN)
+enable_nat_traversal = true
+
+# STUN servers for NAT discovery
+stun_servers = [
+    "stun.l.google.com:19302",
+    "stun1.l.google.com:19302"
+]
+
+# TURN servers for NAT relay (optional, for symmetric NAT)
+# turn_servers = [
+#     { url = "turn:turn.example.com:3478", username = "user", credential = "pass" }
+# ]
+
+# Connection timeout (seconds)
+connection_timeout_secs = 30
+
+# Keep-alive interval (seconds)
+keep_alive_interval_secs = 20
+
+# Message rate limit (messages per second per peer)
+rate_limit_per_peer = 100
+
+# ============================================================================
+# Storage Configuration (RocksDB)
+# ============================================================================
+[storage]
+# Storage backend: "rocksdb" or "sled" (rocksdb recommended)
+backend = "rocksdb"
+
+# Database file path (relative to data_dir)
+path = "db"
+
+# Block cache size (MB) - speeds up reads
+cache_size_mb = 512
+
+# Write buffer size (MB) - batches writes
+write_buffer_mb = 128
+
+# Maximum open file descriptors
+max_open_files = 1000
+
+# Enable compression (Snappy algorithm)
+compression = true
+
+# Enable bloom filters for faster lookups
+enable_bloom_filters = true
+
+# Compaction style: "level" or "universal"
+compaction_style = "level"
+
+# Background compaction threads
+compaction_threads = 4
+
+# Enable WAL (Write-Ahead Log) for durability
+enable_wal = true
+
+# WAL sync mode: "sync" (durable), "none" (fast but risky)
+wal_sync_mode = "sync"
+
+# ============================================================================
+# Cryptography Configuration
+# ============================================================================
+[crypto]
+# Signature algorithm: "ml-dsa-87" (Dilithium, quantum-resistant)
+signature_algorithm = "ml-dsa-87"
+
+# Key encapsulation mechanism: "ml-kem-768" (Kyber, quantum-resistant)
+kem_algorithm = "ml-kem-768"
+
+# Hash algorithm: "blake3" (fast, parallelizable)
+hash_algorithm = "blake3"
+
+# Enable hybrid classical+quantum cryptography
+# Uses Ed25519 + ML-DSA-87 for signatures
+# Uses X25519 + ML-KEM-768 for key exchange
+hybrid_mode = true
+
+# Keypair storage path (relative to data_dir)
+key_path = "keys"
+
+# Auto-generate keypair if not found
+auto_generate_keys = true
+
+# Key rotation interval (days, 0 = disabled)
+key_rotation_days = 0
+
+# ============================================================================
+# Metrics & Monitoring (Prometheus)
+# ============================================================================
+[metrics]
+# Enable Prometheus metrics export
+enabled = true
+
+# Metrics HTTP server port
+port = 9090
+
+# Metrics endpoint path
+endpoint = "/metrics"
+
+# Metrics collection interval (seconds)
+collection_interval_secs = 15
+
+# Enable detailed per-peer metrics (increases cardinality)
+detailed_peer_metrics = false
+
+# ============================================================================
+# HTTP/WebSocket API (Optional)
+# ============================================================================
+[api]
+# Enable HTTP API server
+http_enabled = true
+
+# HTTP server listening address
+http_host = "0.0.0.0"
+
+# HTTP server port
+http_port = 8080
+
+# Enable WebSocket streaming
+ws_enabled = true
+
+# WebSocket listening address
+ws_host = "0.0.0.0"
+
+# WebSocket port
+ws_port = 8081
+
+# Enable CORS (Cross-Origin Resource Sharing)
+cors_enabled = true
+
+# Allowed CORS origins (* = all)
+cors_origins = ["*"]
+
+# API request timeout (seconds)
+request_timeout_secs = 30
+
+# Max request body size (bytes)
+max_body_size_bytes = 10485760  # 10 MB
+
+# Enable API authentication (JWT)
+auth_enabled = false
+
+# JWT secret (required if auth_enabled = true)
+# jwt_secret = "your-secret-key-here"
+
+# ============================================================================
+# Backup & Recovery
+# ============================================================================
+[backup]
+# Enable automated backups
+enabled = true
+
+# Backup interval (hours)
+interval_hours = 24
+
+# Backup retention period (days)
+retention_days = 30
+
+# Backup storage type: "local", "s3", "gcs"
+storage_type = "local"
+
+# Local backup directory (relative to data_dir)
+path = "backups"
+
+# S3 configuration (if storage_type = "s3")
+# [backup.s3]
+# bucket = "cretoai-backups"
+# region = "us-east-1"
+# access_key_id = "your-access-key"
+# secret_access_key = "your-secret-key"
+
+# GCS configuration (if storage_type = "gcs")
+# [backup.gcs]
+# bucket = "cretoai-backups"
+# project_id = "your-project-id"
+# credentials_path = "/path/to/service-account.json"
+
+# Compress backups (tar.gz)
+compress = true
+
+# Verify backup integrity after creation
+verify_after_backup = true
+
+# ============================================================================
+# Dark Domain (Privacy Network - Optional)
+# ============================================================================
+[dark_domain]
+# Enable dark domain support for private transactions
+enabled = false
+
+# Routing strategy: "onion" (Tor-like) or "mixnet"
+routing_strategy = "onion"
+
+# Number of routing hops (3-7 recommended)
+routing_hops = 3
+
+# Enable zero-knowledge proofs for transaction privacy
+enable_zkp = false
+
+# ============================================================================
+# Resource Exchange (Marketplace - Optional)
+# ============================================================================
+[exchange]
+# Enable resource exchange marketplace
+enabled = false
+
+# Enable marketplace discovery
+discovery_enabled = true
+
+# Minimum reputation score for trading (0.0 - 1.0)
+min_reputation = 0.5
+
+# SLA enforcement: "strict" or "relaxed"
+sla_enforcement = "strict"
+
+# Payment settlement timeout (seconds)
+payment_timeout_secs = 300
+
+# ============================================================================
+# Telemetry (Optional, for Monitoring)
+# ============================================================================
+[telemetry]
+# Enable telemetry export
+enabled = true
+
+# Telemetry export interval (seconds)
+export_interval_secs = 60
+
+# Telemetry backend: "prometheus", "jaeger", "datadog"
+backend = "prometheus"
+
+# Enable tracing (distributed tracing with Jaeger)
+tracing_enabled = false
+
+# Jaeger agent endpoint (if tracing_enabled = true)
+# jaeger_agent = "localhost:6831"
+
+# ============================================================================
+# Advanced Tuning (Experts Only)
+# ============================================================================
+[advanced]
+# Tokio runtime worker threads (0 = auto-detect CPU cores)
+runtime_threads = 0
+
+# Enable thread priority optimization
+thread_priority = false
+
+# Memory allocator: "system", "jemalloc", "mimalloc"
+allocator = "jemalloc"
+
+# Enable CPU affinity pinning
+cpu_affinity = false
+
+# NUMA-aware memory allocation
+numa_aware = false
+
+# ============================================================================
+# Example Configurations for Different Scenarios
+# ============================================================================
+
+# --- EXAMPLE 1: Bootstrap Node (First Node) ---
+# [node]
+# id = "bootstrap-node"
+# [network]
+# bootstrap_peers = []  # Empty for first node
+
+# --- EXAMPLE 2: Follower Node (Joining Existing Network) ---
+# [node]
+# id = "follower-node-1"
+# [network]
+# bootstrap_peers = [
+#     "/ip4/10.0.0.10/udp/9001/quic"  # Bootstrap node address
+# ]
+
+# --- EXAMPLE 3: High-Performance Configuration ---
+# [storage]
+# cache_size_mb = 2048
+# write_buffer_mb = 512
+# compaction_threads = 8
+# [advanced]
+# allocator = "jemalloc"
+# numa_aware = true
+
+# --- EXAMPLE 4: Low-Resource Configuration (Embedded Devices) ---
+# [storage]
+# cache_size_mb = 128
+# write_buffer_mb = 32
+# max_open_files = 256
+# [network]
+# max_peers = 10
+
+# --- EXAMPLE 5: Production Deployment (Kubernetes) ---
+# [node]
+# data_dir = "/data"
+# [metrics]
+# enabled = true
+# [backup]
+# enabled = true
+# storage_type = "s3"
+# [telemetry]
+# enabled = true
+# backend = "prometheus"

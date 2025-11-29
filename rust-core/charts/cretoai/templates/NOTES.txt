@@ -1,0 +1,71 @@
+🚀 CretoAI Distributed Consensus Cluster has been deployed!
+
+📊 Cluster Status:
+  Namespace: {{ .Release.Namespace }}
+  Release: {{ .Release.Name }}
+  Consensus Nodes: {{ .Values.node.replicaCount }}
+  API Replicas: {{ .Values.api.replicaCount }}
+
+🔍 Check deployment status:
+  kubectl get pods -n {{ .Release.Namespace }}
+  kubectl get statefulsets -n {{ .Release.Namespace }}
+  kubectl get services -n {{ .Release.Namespace }}
+
+📈 Access Prometheus metrics:
+{{- if .Values.monitoring.enabled }}
+  kubectl port-forward -n {{ .Release.Namespace }} svc/cretoai-metrics 9090:9090
+  Open: http://localhost:9090
+{{- end }}
+
+🌐 Access REST API:
+{{- if .Values.api.enabled }}
+  {{- if eq .Values.api.service.type "LoadBalancer" }}
+  export API_URL=$(kubectl get svc -n {{ .Release.Namespace }} cretoai-api-lb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo "API available at: http://$API_URL"
+  {{- else if eq .Values.api.service.type "NodePort" }}
+  export NODE_PORT=$(kubectl get svc -n {{ .Release.Namespace }} cretoai-api -o jsonpath='{.spec.ports[0].nodePort}')
+  export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
+  echo "API available at: http://$NODE_IP:$NODE_PORT"
+  {{- else }}
+  kubectl port-forward -n {{ .Release.Namespace }} svc/cretoai-api 8080:8080
+  echo "API available at: http://localhost:8080"
+  {{- end }}
+
+  Swagger UI: /swagger-ui/
+  Health Check: /health
+  Metrics: /metrics
+{{- end }}
+
+{{- if .Values.ingress.enabled }}
+🔐 HTTPS Ingress:
+{{- range .Values.ingress.hosts }}
+  https://{{ .host }}
+{{- end }}
+{{- end }}
+
+📝 View logs:
+  # Consensus nodes
+  kubectl logs -n {{ .Release.Namespace }} -l app=cretoai-node -f
+
+  # API
+  kubectl logs -n {{ .Release.Namespace }} -l app=cretoai-api -f
+
+🔧 Scale cluster:
+  # Scale consensus nodes (maintain odd number for quorum)
+  helm upgrade {{ .Release.Name }} cretoai/cretoai \
+    --set node.replicaCount=5 \
+    --reuse-values
+
+  # Scale API
+  helm upgrade {{ .Release.Name }} cretoai/cretoai \
+    --set api.replicaCount=5 \
+    --reuse-values
+
+⚠️  Important Notes:
+  - Consensus requires at least 2 nodes to maintain quorum (67%)
+  - Use odd number of nodes for optimal Byzantine fault tolerance
+  - Persistent volumes are created for each consensus node
+  - Backup your persistent volumes regularly
+
+📚 Documentation: https://docs.cretoai.io
+🐛 Issues: https://github.com/cretoai/cretoai/issues

@@ -1,0 +1,617 @@
+# ============================================================================
+# Kubernetes Deployment Manifests - Rust Authorization Engine
+# ============================================================================
+# Production-ready Kubernetes configuration with:
+# - Deployment with 3 replicas for high availability
+# - Horizontal Pod Autoscaler (HPA) for dynamic scaling
+# - ConfigMap for configuration management
+# - Service for internal load balancing
+# - Ingress with TLS for external access
+# - Resource limits and requests
+# - Liveness and readiness probes
+# - Security best practices
+#
+# Apply with:
+#   kubectl apply -f k8s/deployment.yaml
+#
+# View status:
+#   kubectl get deployments,pods,svc,ingress -n authz-system
+# ============================================================================
+
+---
+# ============================================================================
+# Namespace
+# Isolates authorization engine resources
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: authz-system
+  labels:
+    name: authz-system
+    app.kubernetes.io/part-of: authorization-engine
+
+---
+# ============================================================================
+# ConfigMap
+# Non-sensitive configuration data
+# For sensitive data, use Secrets instead
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authz-config
+  namespace: authz-system
+  labels:
+    app: authz-server
+    app.kubernetes.io/name: authz-server
+    app.kubernetes.io/component: configuration
+data:
+  # Server Configuration
+  AUTHZ_GRPC_PORT: "50051"
+  AUTHZ_HTTP_PORT: "8080"
+  AUTHZ_REST_PORT: "8081"
+  AUTHZ_LOG_LEVEL: "info"
+  AUTHZ_LOG_FORMAT: "json"
+  AUTHZ_WORKERS: "16"
+  AUTHZ_REFLECTION: "true"
+
+  # Cache Configuration
+  AUTHZ_CACHE_ENABLED: "true"
+  AUTHZ_CACHE_TYPE: "hybrid"
+  AUTHZ_CACHE_SIZE: "100000"
+  AUTHZ_CACHE_TTL: "300"
+  AUTHZ_CACHE_L1_CAPACITY: "10000"
+  AUTHZ_CACHE_L1_TTL: "60"
+
+  # Redis Configuration (using Redis service in cluster)
+  AUTHZ_REDIS_ENABLED: "true"
+  AUTHZ_REDIS_HOST: "redis.authz-system.svc.cluster.local"
+  AUTHZ_REDIS_PORT: "6379"
+  AUTHZ_REDIS_DB: "0"
+  AUTHZ_REDIS_POOL_SIZE: "10"
+  AUTHZ_REDIS_TTL: "300"
+  AUTHZ_REDIS_KEY_PREFIX: "authz:"
+
+  # Database Configuration (using PostgreSQL service)
+  DB_HOST: "postgres.authz-system.svc.cluster.local"
+  DB_PORT: "5432"
+  DB_NAME: "authz_engine"
+  DB_SSL_MODE: "require"
+  DB_MAX_CONNECTIONS: "25"
+  DB_MAX_IDLE_CONNECTIONS: "5"
+  DB_CONNECTION_MAX_LIFETIME: "300"
+
+  # JWT Configuration
+  JWT_ISSUER: "https://authz.example.com"
+  JWT_AUDIENCE: "https://api.example.com"
+  JWT_ACCESS_TTL: "900"
+  JWT_REFRESH_TTL: "2592000"
+
+  # Rate Limiting
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_DEFAULT_RPS: "100"
+  RATE_LIMIT_BURST: "200"
+
+  # Audit Configuration
+  AUDIT_ENABLED: "true"
+  AUDIT_BUFFER_SIZE: "10000"
+  AUDIT_ASYNC: "true"
+
+  # Metrics
+  METRICS_ENABLED: "true"
+  METRICS_PORT: "8080"
+  METRICS_PATH: "/metrics"
+
+---
+# ============================================================================
+# Secret
+# Sensitive configuration data (base64 encoded)
+# In production, use external secret management (Vault, AWS Secrets Manager)
+# ============================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: authz-secrets
+  namespace: authz-system
+  labels:
+    app: authz-server
+    app.kubernetes.io/name: authz-server
+    app.kubernetes.io/component: secrets
+type: Opaque
+data:
+  # Database credentials (base64 encoded)
+  # Example: echo -n 'authz_user' | base64
+  DB_USER: YXV0aHpfdXNlcg==              # authz_user
+  DB_PASSWORD: YXV0aHpfcGFzc3dvcmQ=      # authz_password
+
+  # Redis password
+  AUTHZ_REDIS_PASSWORD: cmVkaXNfcGFzc3dvcmQ=  # redis_password
+
+  # JWT signing keys (production: use actual keys)
+  JWT_PRIVATE_KEY: LS0tLS1CRUdJTi...       # Base64 encoded private key
+  JWT_PUBLIC_KEY: LS0tLS1CRUdJTi...        # Base64 encoded public key
+
+---
+# ============================================================================
+# Deployment
+# Main application deployment with 3 replicas for high availability
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authz-server
+  namespace: authz-system
+  labels:
+    app: authz-server
+    app.kubernetes.io/name: authz-server
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: authorization-engine
+spec:
+  # Number of pod replicas
+  replicas: 3
+
+  # Deployment strategy
+  # RollingUpdate ensures zero-downtime deployments
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Allow 1 extra pod during rollout
+      maxUnavailable: 0  # Ensure at least 3 pods always available
+
+  # Pod selector
+  selector:
+    matchLabels:
+      app: authz-server
+
+  # Pod template
+  template:
+    metadata:
+      labels:
+        app: authz-server
+        app.kubernetes.io/name: authz-server
+        version: "1.0.0"
+      annotations:
+        # Prometheus scraping annotations
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+
+    spec:
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532     # nonroot user from distroless
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Service account for RBAC
+      serviceAccountName: authz-server
+
+      # Container specification
+      containers:
+      - name: authz-server
+        image: ghcr.io/creto-systems/authz-server:latest
+        imagePullPolicy: IfNotPresent
+
+        # Security context for the container
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+          capabilities:
+            drop:
+              - ALL
+
+        # Port configuration
+        ports:
+        - name: grpc
+          containerPort: 50051
+          protocol: TCP
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: rest
+          containerPort: 8081
+          protocol: TCP
+
+        # Environment variables from ConfigMap and Secret
+        envFrom:
+        - configMapRef:
+            name: authz-config
+        - secretRef:
+            name: authz-secrets
+
+        # Additional environment variables
+        env:
+        - name: RUST_BACKTRACE
+          value: "1"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+        # Resource limits and requests
+        # Requests: Guaranteed resources
+        # Limits: Maximum resources allowed
+        resources:
+          requests:
+            cpu: 500m       # 0.5 CPU core
+            memory: 256Mi   # 256 MB RAM
+          limits:
+            cpu: 2000m      # 2 CPU cores
+            memory: 1Gi     # 1 GB RAM
+
+        # Liveness probe
+        # Kubernetes restarts the pod if this fails
+        livenessProbe:
+          exec:
+            command:
+            - /app/authz-server
+            - --health-check
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Readiness probe
+        # Pod receives traffic only when this succeeds
+        readinessProbe:
+          exec:
+            command:
+            - /app/authz-server
+            - --health-check
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Startup probe (for slow-starting containers)
+        startupProbe:
+          exec:
+            command:
+            - /app/authz-server
+            - --health-check
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 30  # Allow 150 seconds for startup
+
+        # Volume mounts
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+        - name: cache
+          mountPath: /app/cache
+
+      # Volumes
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+
+      # Pod affinity rules
+      # Spread pods across different nodes for high availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - authz-server
+              topologyKey: kubernetes.io/hostname
+
+---
+# ============================================================================
+# Service Account
+# For RBAC and pod identity
+# ============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: authz-server
+  namespace: authz-system
+  labels:
+    app: authz-server
+
+---
+# ============================================================================
+# Service
+# Internal load balancer for pod access
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: authz-server
+  namespace: authz-system
+  labels:
+    app: authz-server
+    app.kubernetes.io/name: authz-server
+  annotations:
+    # Prometheus service discovery
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+
+  # Session affinity for consistent routing
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours
+
+  # Port configuration
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: grpc
+    protocol: TCP
+  - name: http
+    port: 8080
+    targetPort: http
+    protocol: TCP
+  - name: rest
+    port: 8081
+    targetPort: rest
+    protocol: TCP
+
+  # Route traffic to pods with this label
+  selector:
+    app: authz-server
+
+---
+# ============================================================================
+# Horizontal Pod Autoscaler (HPA)
+# Automatically scales pods based on CPU/memory utilization
+# ============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: authz-server-hpa
+  namespace: authz-system
+  labels:
+    app: authz-server
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: authz-server
+
+  # Min and max replicas
+  minReplicas: 3
+  maxReplicas: 10
+
+  # Scaling metrics
+  metrics:
+  # CPU-based scaling
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70  # Scale when CPU > 70%
+
+  # Memory-based scaling
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80  # Scale when memory > 80%
+
+  # Scaling behavior
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
+      policies:
+      - type: Percent
+        value: 50  # Scale down by max 50% of current pods
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0    # Scale up immediately
+      policies:
+      - type: Percent
+        value: 100  # Double the number of pods
+        periodSeconds: 15
+      - type: Pods
+        value: 2    # Or add 2 pods
+        periodSeconds: 15
+      selectPolicy: Max  # Use the policy that scales fastest
+
+---
+# ============================================================================
+# Ingress
+# External HTTPS access with TLS termination
+# ============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: authz-server-ingress
+  namespace: authz-system
+  labels:
+    app: authz-server
+  annotations:
+    # Ingress class (nginx, traefik, etc.)
+    kubernetes.io/ingress.class: nginx
+
+    # SSL redirect
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # CORS configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+
+    # Client body size
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+
+    # Certificate manager (cert-manager)
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  # TLS configuration
+  tls:
+  - hosts:
+    - authz.example.com
+    - api.authz.example.com
+    secretName: authz-tls-cert
+
+  # Routing rules
+  rules:
+  # gRPC endpoint
+  - host: authz.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: authz-server
+            port:
+              name: grpc
+
+  # REST API endpoint
+  - host: api.authz.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: authz-server
+            port:
+              name: rest
+
+---
+# ============================================================================
+# Pod Disruption Budget (PDB)
+# Ensures minimum availability during voluntary disruptions
+# ============================================================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: authz-server-pdb
+  namespace: authz-system
+  labels:
+    app: authz-server
+spec:
+  # Minimum available pods during disruptions
+  minAvailable: 2
+
+  selector:
+    matchLabels:
+      app: authz-server
+
+---
+# ============================================================================
+# Network Policy
+# Restricts network traffic to authorized sources only
+# ============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authz-server-netpol
+  namespace: authz-system
+  labels:
+    app: authz-server
+spec:
+  podSelector:
+    matchLabels:
+      app: authz-server
+
+  policyTypes:
+  - Ingress
+  - Egress
+
+  # Ingress rules
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 50051
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8081
+
+  # Allow traffic from same namespace (for monitoring)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: authz-system
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  # Egress rules
+  egress:
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow PostgreSQL access
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  # Allow Redis access
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+
+  # Allow HTTPS for external services
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443

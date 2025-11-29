@@ -1,0 +1,326 @@
+# Alertmanager Configuration for AuthZ Engine
+# Phase 4.5: Observability Suite
+# Last Updated: 2025-11-26
+#
+# This configuration provides:
+# - Severity-based routing (critical -> PagerDuty, warning -> Slack)
+# - Alert grouping by alertname, cluster, and service
+# - Inhibition rules to suppress lower severity alerts
+# - Configurable repeat intervals
+
+global:
+  # Global settings
+  resolve_timeout: 5m
+
+  # SMTP configuration (for email notifications)
+  smtp_smarthost: '<SMTP_HOST>:587'
+  smtp_from: 'alertmanager@authz-engine.io'
+  smtp_auth_username: '<SMTP_USERNAME>'
+  smtp_auth_password: '<SMTP_PASSWORD>'
+  smtp_require_tls: true
+
+  # Slack API URL (can be overridden per receiver)
+  slack_api_url: '<SLACK_WEBHOOK_URL>'
+
+  # PagerDuty API URL
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+# Templates for alert messages
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Route tree - defines how alerts are routed to receivers
+route:
+  # Default receiver for alerts that don't match any route
+  receiver: 'default-email'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'cluster', 'service', 'component']
+
+  # How long to wait before sending the first notification for a group
+  group_wait: 10s
+
+  # How long to wait before sending notifications about new alerts added to a group
+  group_interval: 5m
+
+  # How long to wait before re-sending a notification
+  repeat_interval: 4h
+
+  # Child routes - evaluated in order
+  routes:
+    # ========================================================================
+    # CRITICAL ALERTS -> PagerDuty (immediate page)
+    # ========================================================================
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      group_wait: 5s        # Send critical alerts quickly
+      repeat_interval: 2h   # Repeat more frequently for critical
+      continue: true        # Also send to other matching routes
+
+      # Sub-routes for critical alerts by component
+      routes:
+        - match:
+            component: authorization
+          receiver: 'pagerduty-critical'
+          continue: true
+          routes:
+            - match:
+                alertname: AuthorizationServiceDown
+              receiver: 'pagerduty-critical-urgent'
+              group_wait: 0s  # Send immediately
+
+        - match:
+            component: embedding
+          receiver: 'pagerduty-critical'
+
+        - match:
+            component: vector_store
+          receiver: 'pagerduty-critical'
+
+    # ========================================================================
+    # WARNING ALERTS -> Slack
+    # ========================================================================
+    - match:
+        severity: warning
+      receiver: 'slack-warnings'
+      group_wait: 30s
+      repeat_interval: 6h
+
+      # Sub-routes for warnings by component
+      routes:
+        - match:
+            component: authorization
+          receiver: 'slack-authz-warnings'
+
+        - match:
+            component: embedding
+          receiver: 'slack-embedding-warnings'
+
+        - match:
+            component: vector_store
+          receiver: 'slack-vector-warnings'
+
+    # ========================================================================
+    # INFO ALERTS -> Slack (low priority channel)
+    # ========================================================================
+    - match:
+        severity: info
+      receiver: 'slack-info'
+      group_wait: 5m
+      repeat_interval: 12h
+
+    # ========================================================================
+    # TEAM-BASED ROUTING
+    # ========================================================================
+    - match:
+        team: authz-platform
+      receiver: 'slack-authz-team'
+      continue: true  # Also match other routes
+
+    # ========================================================================
+    # ERROR TYPE SPECIFIC ROUTING
+    # ========================================================================
+    - match_re:
+        alertname: '(CELEvaluationErrorsSpike|PolicyNotFoundErrors)'
+      receiver: 'slack-policy-errors'
+
+    - match:
+        alertname: VectorSearchTimeoutErrors
+      receiver: 'slack-vector-warnings'
+
+# Inhibition rules - suppress alerts when higher severity alerts are firing
+inhibit_rules:
+  # Inhibit WARNING alerts when CRITICAL alert for same component is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'component', 'cluster']
+
+  # Inhibit INFO alerts when WARNING alert for same component is firing
+  - source_match:
+      severity: 'warning'
+    target_match:
+      severity: 'info'
+    equal: ['alertname', 'component', 'cluster']
+
+  # Inhibit cache-related warnings when service is down
+  - source_match:
+      alertname: 'AuthorizationServiceDown'
+    target_match_re:
+      alertname: '(LowCacheHitRate|EmbeddingCacheHitRateLow)'
+    equal: ['cluster', 'component']
+
+  # Inhibit latency alerts when error rate is high
+  - source_match:
+      alertname: 'HighErrorRate'
+    target_match_re:
+      alertname: '(HighAuthorizationLatency|EmbeddingJobLatencyHigh|SlowVectorSearch)'
+    equal: ['cluster', 'component']
+
+  # Inhibit worker idle alert when queue is saturated
+  - source_match:
+      alertname: 'EmbeddingQueueSaturated'
+    target_match:
+      alertname: 'EmbeddingWorkersIdle'
+    equal: ['cluster']
+
+# Receiver definitions
+receivers:
+  # ========================================================================
+  # DEFAULT - Email notifications
+  # ========================================================================
+  - name: 'default-email'
+    email_configs:
+      - to: 'authz-oncall@example.com'
+        headers:
+          Subject: '[AuthZ Engine] Alert: {{ .GroupLabels.alertname }}'
+        html: |
+          <h2>{{ .GroupLabels.alertname }}</h2>
+          <p><strong>Severity:</strong> {{ .CommonLabels.severity }}</p>
+          <p><strong>Summary:</strong> {{ .CommonAnnotations.summary }}</p>
+          <p><strong>Description:</strong> {{ .CommonAnnotations.description }}</p>
+          <p><strong>Runbook:</strong> <a href="{{ .CommonAnnotations.runbook_url }}">{{ .CommonAnnotations.runbook_url }}</a></p>
+          {{ range .Alerts }}
+          <hr>
+          <p><strong>Alert Details:</strong></p>
+          <ul>
+            <li>Status: {{ .Status }}</li>
+            <li>Started: {{ .StartsAt }}</li>
+            {{ range .Labels.SortedPairs }}
+            <li>{{ .Name }}: {{ .Value }}</li>
+            {{ end }}
+          </ul>
+          {{ end }}
+
+  # ========================================================================
+  # PAGERDUTY - Critical alerts
+  # ========================================================================
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: '<PAGERDUTY_SERVICE_KEY>'
+        severity: 'error'
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          resolved: '{{ .Alerts.Resolved | len }}'
+          alertname: '{{ .GroupLabels.alertname }}'
+          component: '{{ .CommonLabels.component }}'
+          cluster: '{{ .CommonLabels.cluster }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook_url: '{{ .CommonAnnotations.runbook_url }}'
+        links:
+          - href: '{{ .CommonAnnotations.runbook_url }}'
+            text: 'Runbook'
+
+  - name: 'pagerduty-critical-urgent'
+    pagerduty_configs:
+      - service_key: '<PAGERDUTY_SERVICE_KEY_URGENT>'
+        severity: 'critical'
+        description: 'URGENT: {{ .CommonAnnotations.summary }}'
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          resolved: '{{ .Alerts.Resolved | len }}'
+          alertname: '{{ .GroupLabels.alertname }}'
+          component: '{{ .CommonLabels.component }}'
+          cluster: '{{ .CommonLabels.cluster }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook_url: '{{ .CommonAnnotations.runbook_url }}'
+        links:
+          - href: '{{ .CommonAnnotations.runbook_url }}'
+            text: 'Runbook'
+
+  # ========================================================================
+  # SLACK - Warning alerts
+  # ========================================================================
+  - name: 'slack-warnings'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-alerts-warnings'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':warning:'
+        title: '{{ .GroupLabels.alertname }} ({{ .Status }})'
+        text: |
+          *Severity:* {{ .CommonLabels.severity }}
+          *Component:* {{ .CommonLabels.component }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Description:* {{ .CommonAnnotations.description }}
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+        color: '{{ if eq .Status "firing" }}warning{{ else }}good{{ end }}'
+        send_resolved: true
+
+  - name: 'slack-authz-warnings'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-alerts-authorization'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':shield:'
+        title: '[Authorization] {{ .GroupLabels.alertname }}'
+        text: '{{ .CommonAnnotations.description }}'
+        color: 'warning'
+        send_resolved: true
+
+  - name: 'slack-embedding-warnings'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-alerts-embedding'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':brain:'
+        title: '[Embedding] {{ .GroupLabels.alertname }}'
+        text: '{{ .CommonAnnotations.description }}'
+        color: 'warning'
+        send_resolved: true
+
+  - name: 'slack-vector-warnings'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-alerts-vector'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':mag:'
+        title: '[Vector Store] {{ .GroupLabels.alertname }}'
+        text: '{{ .CommonAnnotations.description }}'
+        color: 'warning'
+        send_resolved: true
+
+  # ========================================================================
+  # SLACK - Info alerts
+  # ========================================================================
+  - name: 'slack-info'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-alerts-info'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':information_source:'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ .CommonAnnotations.description }}'
+        color: '#439FE0'
+        send_resolved: true
+
+  - name: 'slack-authz-team'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-platform-team'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':robot_face:'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ .CommonAnnotations.description }}'
+        send_resolved: true
+
+  # ========================================================================
+  # SLACK - Error type specific
+  # ========================================================================
+  - name: 'slack-policy-errors'
+    slack_configs:
+      - api_url: '<SLACK_WEBHOOK_URL>'
+        channel: '#authz-policy-errors'
+        username: 'AuthZ Alertmanager'
+        icon_emoji: ':x:'
+        title: '[Policy Error] {{ .GroupLabels.alertname }}'
+        text: |
+          *Type:* Policy Evaluation Error
+          *Description:* {{ .CommonAnnotations.description }}
+          *Action Required:* Review recent policy changes
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}
+        color: 'danger'
+        send_resolved: true

@@ -1,0 +1,383 @@
+/**
+ * Agentic Authorization Engine - Agent Type Definitions
+ *
+ * These types define the contract for all authorization agents.
+ * Agents are intelligent components that can learn, detect anomalies,
+ * provide explanations, and take autonomous actions.
+ */
+
+import type { Principal, Resource, ActionResult as CoreActionResult } from '@authz-engine/core';
+
+/**
+ * The four specialized agent types in the system
+ */
+export type AgentType = 'guardian' | 'analyst' | 'advisor' | 'enforcer';
+
+/**
+ * Agent lifecycle states
+ */
+export type AgentState = 'initializing' | 'ready' | 'processing' | 'error' | 'shutdown';
+
+/**
+ * Priority levels for agent actions
+ */
+export type Priority = 'low' | 'medium' | 'high' | 'critical';
+
+/**
+ * Base interface for all agents
+ */
+export interface Agent {
+  readonly id: string;
+  readonly type: AgentType;
+  readonly name: string;
+  state: AgentState;
+
+  initialize(): Promise<void>;
+  shutdown(): Promise<void>;
+  healthCheck(): Promise<AgentHealth>;
+}
+
+/**
+ * Health status of an agent
+ */
+export interface AgentHealth {
+  agentId: string;
+  agentType: AgentType;
+  state: AgentState;
+  lastActivity: Date;
+  metrics: AgentMetrics;
+  errors?: string[];
+}
+
+/**
+ * Performance metrics for an agent
+ */
+export interface AgentMetrics {
+  processedCount: number;
+  errorCount: number;
+  avgProcessingTimeMs: number;
+  lastProcessedAt?: Date;
+  customMetrics?: Record<string, number>;
+}
+
+/**
+ * Decision record stored for learning and analysis
+ */
+export interface DecisionRecord {
+  id: string;
+  requestId: string;
+  timestamp: Date;
+
+  // The authorization context
+  principal: Principal;
+  resource: Resource;
+  actions: string[];
+
+  // The decision outcome - uses CoreActionResult from @authz-engine/core
+  results: Record<string, CoreActionResult>;
+
+  // Derived context
+  derivedRoles: string[];
+  matchedPolicies: string[];
+
+  // Enrichment data
+  enrichmentData?: Record<string, unknown>;
+
+  // Agent analysis
+  anomalyScore?: number;
+  riskFactors?: RiskFactor[];
+
+  // Outcome tracking (for learning)
+  outcome?: DecisionOutcome;
+  feedback?: DecisionFeedback;
+
+  // Vector embedding for semantic search
+  embedding?: number[];
+}
+
+/**
+ * Risk factors identified during authorization
+ */
+export interface RiskFactor {
+  type: string;
+  severity: Priority;
+  description: string;
+  evidence: Record<string, unknown>;
+}
+
+/**
+ * Actual outcome after a decision was made
+ */
+export interface DecisionOutcome {
+  recordedAt: Date;
+  wasCorrect: boolean;
+  actualResult?: 'success' | 'failure' | 'incident';
+  notes?: string;
+}
+
+/**
+ * Human or system feedback on a decision
+ */
+export interface DecisionFeedback {
+  providedAt: Date;
+  providedBy: string;
+  rating: 'correct' | 'incorrect' | 'unclear';
+  comments?: string;
+  suggestedAction?: string;
+}
+
+/**
+ * Anomaly detected by GUARDIAN agent
+ */
+export interface Anomaly {
+  id: string;
+  detectedAt: Date;
+  type: AnomalyType;
+  severity: Priority;
+
+  // Context
+  principalId: string;
+  resourceKind?: string;
+  action?: string;
+
+  // Details
+  description: string;
+  score: number; // 0-1, higher = more anomalous
+
+  // Evidence
+  evidence: AnomalyEvidence;
+
+  // Baseline comparison
+  baseline: BaselineStats;
+  observed: ObservedStats;
+
+  // Resolution
+  status: 'open' | 'investigating' | 'resolved' | 'false_positive';
+  resolvedAt?: Date;
+  resolution?: string;
+}
+
+export type AnomalyType =
+  | 'unusual_access_time'
+  | 'unusual_resource_access'
+  | 'permission_escalation'
+  | 'velocity_spike'
+  | 'geographic_anomaly'
+  | 'pattern_deviation'
+  | 'new_resource_type'
+  | 'bulk_operation';
+
+export interface AnomalyEvidence {
+  recentRequests: number;
+  baselineRequests: number;
+  deviation: number; // Standard deviations from norm
+  relatedDecisions: string[]; // Decision IDs
+  additionalContext?: Record<string, unknown>;
+}
+
+export interface BaselineStats {
+  period: string; // e.g., "7d", "30d"
+  avgRequestsPerHour: number;
+  uniqueResources: number;
+  commonActions: string[];
+  commonTimeRanges: string[];
+}
+
+export interface ObservedStats {
+  requestsInWindow: number;
+  uniqueResourcesAccessed: number;
+  actionsPerformed: string[];
+  timeOfAccess: string;
+}
+
+/**
+ * Pattern learned by ANALYST agent
+ */
+export interface LearnedPattern {
+  id: string;
+  discoveredAt: Date;
+  lastUpdated: Date;
+
+  type: PatternType;
+  confidence: number; // 0-1
+  sampleSize: number;
+
+  // Pattern definition
+  description: string;
+  conditions: PatternCondition[];
+
+  // Suggested actions
+  suggestedPolicyRule?: string;
+  suggestedOptimization?: string;
+
+  // Validation
+  validatedAt?: Date;
+  validatedBy?: string;
+  isApproved: boolean;
+}
+
+export type PatternType =
+  | 'access_correlation'
+  | 'temporal_pattern'
+  | 'role_cluster'
+  | 'resource_group'
+  | 'denial_pattern'
+  | 'approval_pattern';
+
+export interface PatternCondition {
+  field: string;
+  operator: 'eq' | 'in' | 'gt' | 'lt' | 'contains' | 'matches';
+  value: unknown;
+}
+
+/**
+ * Explanation generated by ADVISOR agent
+ */
+export interface DecisionExplanation {
+  requestId: string;
+  generatedAt: Date;
+
+  // Summary
+  summary: string;
+
+  // Detailed breakdown
+  factors: ExplanationFactor[];
+
+  // Natural language explanation (LLM-generated)
+  naturalLanguage?: string;
+
+  // Recommendations
+  recommendations?: string[];
+
+  // If denied, what would allow it?
+  pathToAllow?: PathToAllow;
+}
+
+export interface ExplanationFactor {
+  type: 'role' | 'condition' | 'derived_role' | 'explicit_deny' | 'no_match';
+  description: string;
+  impact: 'allowed' | 'denied' | 'neutral';
+  details: Record<string, unknown>;
+}
+
+export interface PathToAllow {
+  missingRoles?: string[];
+  missingAttributes?: { key: string; expectedValue: unknown }[];
+  requiredConditions?: string[];
+  suggestedActions?: string[];
+}
+
+/**
+ * Action executed by ENFORCER agent
+ */
+export interface EnforcerAction {
+  id: string;
+  triggeredAt: Date;
+
+  type: EnforcerActionType;
+  priority: Priority;
+
+  // Trigger
+  triggeredBy: {
+    agentType: AgentType;
+    reason: string;
+    relatedIds: string[]; // Anomaly IDs, Decision IDs, etc.
+  };
+
+  // Execution
+  status: 'pending' | 'executing' | 'completed' | 'failed' | 'cancelled';
+  executedAt?: Date;
+  result?: EnforcerActionResult;
+
+  // Rollback
+  canRollback: boolean;
+  rolledBackAt?: Date;
+}
+
+export type EnforcerActionType =
+  | 'rate_limit'
+  | 'temporary_block'
+  | 'require_mfa'
+  | 'alert_admin'
+  | 'revoke_session'
+  | 'quarantine_resource'
+  | 'escalate_review';
+
+export interface EnforcerActionResult {
+  success: boolean;
+  message: string;
+  affectedEntities: string[];
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Configuration for agent behavior
+ */
+export interface AgentConfig {
+  // Common
+  enabled: boolean;
+  logLevel: 'debug' | 'info' | 'warn' | 'error';
+
+  // GUARDIAN
+  guardian?: {
+    anomalyThreshold: number; // 0-1, above this triggers alert
+    baselinePeriodDays: number;
+    velocityWindowMinutes: number;
+    enableRealTimeDetection: boolean;
+  };
+
+  // ANALYST
+  analyst?: {
+    minSampleSize: number;
+    confidenceThreshold: number;
+    learningEnabled: boolean;
+    patternDiscoveryInterval: string; // cron expression
+  };
+
+  // ADVISOR
+  advisor?: {
+    llmProvider: 'openai' | 'anthropic' | 'local';
+    llmModel: string;
+    enableNaturalLanguage: boolean;
+    maxExplanationLength: number;
+  };
+
+  // ENFORCER
+  enforcer?: {
+    autoEnforceEnabled: boolean;
+    requireApprovalForSeverity: Priority;
+    maxActionsPerHour: number;
+    rollbackWindowMinutes: number;
+  };
+}
+
+/**
+ * Events emitted by agents for coordination
+ */
+export interface AgentEvent {
+  id: string;
+  timestamp: Date;
+  agentType: AgentType;
+  agentId: string;
+  eventType: AgentEventType;
+  payload: unknown;
+  correlationId?: string;
+}
+
+export type AgentEventType =
+  // GUARDIAN events
+  | 'anomaly_detected'
+  | 'anomaly_resolved'
+  | 'baseline_updated'
+  // ANALYST events
+  | 'pattern_discovered'
+  | 'pattern_validated'
+  | 'optimization_suggested'
+  // ADVISOR events
+  | 'explanation_generated'
+  | 'recommendation_created'
+  // ENFORCER events
+  | 'action_triggered'
+  | 'action_completed'
+  | 'action_failed'
+  | 'action_rolled_back';

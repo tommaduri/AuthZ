@@ -1,0 +1,48 @@
+---
+# Headless service for StatefulSet node discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: cretoai-nodes
+  namespace: cretoai
+  labels:
+    app: cretoai-node
+    component: consensus
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: cretoai-node
+  ports:
+    - port: 9000
+      targetPort: 9000
+      name: p2p
+      protocol: TCP
+    - port: 9001
+      targetPort: 9001
+      name: quic
+      protocol: UDP
+    - port: 9090
+      targetPort: 9090
+      name: metrics
+      protocol: TCP
+
+---
+# Service for metrics scraping
+apiVersion: v1
+kind: Service
+metadata:
+  name: cretoai-metrics
+  namespace: cretoai
+  labels:
+    app: cretoai-node
+    component: monitoring
+spec:
+  type: ClusterIP
+  selector:
+    app: cretoai-node
+  ports:
+    - port: 9090
+      targetPort: 9090
+      name: metrics
+      protocol: TCP

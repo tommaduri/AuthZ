@@ -1,0 +1,66 @@
+[package]
+name = "cretoai-consensus"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+uuid = { workspace = true }
+chrono = { workspace = true }
+rand = { workspace = true }
+
+# Consensus-specific dependencies
+dashmap = "5.5"
+parking_lot = "0.12"
+
+# Parallel processing
+rayon = "1.10"
+crossbeam = "0.8"
+
+# Metrics
+prometheus = { version = "0.13", features = ["process"] }
+
+# Utilities
+hex = "0.4"
+
+# Internal dependencies
+cretoai-core = { path = "../core" }
+cretoai-crypto = { path = "../crypto" }
+cretoai-dag = { path = "../dag" }
+# cretoai-reputation = { path = "../reputation" }  # Temporarily disabled due to circular dependency
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+proptest = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "consensus_bench"
+harness = false
+
+[[bench]]
+name = "parallel_validation_bench"
+harness = false
+
+[[bench]]
+name = "circuit_breaker_bench"
+harness = false

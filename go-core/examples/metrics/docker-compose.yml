@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # AuthZ Engine HTTP Server
+  authz-server:
+    build:
+      context: ../..
+      dockerfile: examples/metrics/Dockerfile
+    container_name: authz-server
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - CACHE_SIZE=100000
+      - WORKERS=16
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # Prometheus - Metrics scraping and storage
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../../deploy/prometheus/alerts:/etc/prometheus/alerts:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring
+    depends_on:
+      - authz-server
+    restart: unless-stopped
+
+  # Grafana - Metrics visualization and dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      # Anonymous access for demo purposes (disable in production)
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      # Datasource provisioning
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      # Dashboard provisioning
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      # Dashboard JSON files
+      - ../../deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      # Grafana data
+      - grafana-data:/var/lib/grafana
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local

@@ -1,0 +1,555 @@
+{
+  "info": {
+    "name": "CretoAI API",
+    "_postman_id": "cretoai-api-collection-v1",
+    "description": "Complete API collection for CretoAI quantum-resistant security platform.\n\n**Features:**\n- Quantum-resistant cryptography (ML-KEM-768, ML-DSA-87)\n- Byzantine consensus (56,271 TPS, 177ms finality)\n- Immutable audit trails (DAG)\n\n**Base URL:** http://localhost:8080\n\n**Documentation:** https://docs.cretoai.ai (coming soon)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "api_version",
+      "value": "v1",
+      "type": "string"
+    },
+    {
+      "key": "key_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "transaction_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Get Health Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check if the API server is healthy and operational."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Health status is healthy\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"healthy\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cryptography",
+      "item": [
+        {
+          "name": "Generate Keypair (ML-DSA)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"algorithm\": \"dilithium\",\n  \"security_level\": 3\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/crypto/keygen",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "crypto", "keygen"]
+            },
+            "description": "Generate a quantum-resistant keypair using ML-DSA (Dilithium).\n\n**Algorithm:** ML-DSA-87 (NIST FIPS 204)\n**Security Level:** NIST Level 3 (AES-192 equivalent)\n**Quantum-Safe:** Until 2050+"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains public_key\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.public_key).to.exist;",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains key_id\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.key_id).to.exist;",
+                  "    pm.collectionVariables.set(\"key_id\", jsonData.key_id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign Message (ML-DSA)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"VHJhbnNhY3Rpb246IFRyYW5zZmVyICQxMDBLIGZyb20gQUktQWdlbnQtMDAxIHRvIEFJLUFnZW50LTAwMg==\",\n  \"algorithm\": \"dilithium87\",\n  \"key_id\": \"{{key_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/crypto/sign",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "crypto", "sign"]
+            },
+            "description": "Sign a message with quantum-resistant ML-DSA signature.\n\n**Message (decoded):** \"Transaction: Transfer $100K from AI-Agent-001 to AI-Agent-002\"\n**Algorithm:** ML-DSA-87\n**Quantum-Safe:** Cannot be forged even with quantum computer"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Signature verified\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.verified).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Encrypt Data (ML-KEM)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": \"U2VjcmV0OiBBSS1BZ2VudC0wMDEgaXMgYXV0aG9yaXplZCB0byB0cmFkZSB1cCB0byAkMU0=\",\n  \"algorithm\": \"kyber768\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/crypto/encrypt",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "crypto", "encrypt"]
+            },
+            "description": "Encrypt data with quantum-resistant ML-KEM-768.\n\n**Data (decoded):** \"Secret: AI-Agent-001 is authorized to trade up to $1M\"\n**Algorithm:** ML-KEM-768 (NIST FIPS 203)\n**Quantum-Safe:** Until 2050+"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains ciphertext\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.ciphertext).to.exist;",
+                  "});",
+                  "",
+                  "pm.test(\"Quantum resistant flag is true\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.quantum_resistant).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Hash Data (BLAKE3)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": \"SGVsbG8sIFF1YW50dW0gV29ybGQh\",\n  \"algorithm\": \"blake3\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/crypto/hash",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "crypto", "hash"]
+            },
+            "description": "Hash data with quantum-resistant BLAKE3.\n\n**Data (decoded):** \"Hello, Quantum World!\"\n**Algorithm:** BLAKE3\n**Performance:** 3-4 GB/s throughput"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response contains hash\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.hash).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Consensus",
+      "item": [
+        {
+          "name": "Submit Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": \"VHJhbnNhY3Rpb246IFRyYW5zZmVyICQxMDBL\",\n  \"priority\": \"high\",\n  \"signature\": \"0x4f8a2d1c...\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consensus/transaction",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consensus", "transaction"]
+            },
+            "description": "Submit a transaction to Byzantine consensus network.\n\n**Performance:** 56,271 TPS\n**Finality:** 177ms average\n**Byzantine Tolerance:** < 33.3% malicious nodes"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Transaction ID returned\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.transaction_id).to.exist;",
+                  "    pm.collectionVariables.set(\"transaction_id\", jsonData.transaction_id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Transaction Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consensus/transaction/{{transaction_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consensus", "transaction", "{{transaction_id}}"]
+            },
+            "description": "Check the status of a submitted transaction.\n\n**Statuses:** pending, finalized, rejected"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Transaction has status\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.be.oneOf([\"pending\", \"finalized\", \"rejected\"]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Consensus Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consensus/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consensus", "status"]
+            },
+            "description": "Get overall consensus network status.\n\n**Metrics:** TPS, finality, node count, Byzantine tolerance"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Consensus is running\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"running\");",
+                  "});",
+                  "",
+                  "pm.test(\"Throughput exceeds 10K TPS\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.throughput_tps).to.be.above(10000);",
+                  "});",
+                  "",
+                  "pm.test(\"Finality under 1 second\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.finality_ms).to.be.below(1000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Audit Trail",
+      "item": [
+        {
+          "name": "Query Agent History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/audit/query?agent_id=agent-001&start_date=2025-11-01&end_date=2025-11-30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "audit", "query"],
+              "query": [
+                {
+                  "key": "agent_id",
+                  "value": "agent-001"
+                },
+                {
+                  "key": "start_date",
+                  "value": "2025-11-01"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2025-11-30"
+                }
+              ]
+            },
+            "description": "Query immutable audit trail for an AI agent.\n\n**Compliance:** HIPAA, SOX, FedRAMP, CNSA 2.0"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is array\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify DAG Integrity",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vertex_id\": \"vtx-20251127-abc123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/audit/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "audit", "verify"]
+            },
+            "description": "Verify cryptographic integrity of a DAG vertex.\n\n**Validation:** BLAKE3 hash, ML-DSA signature"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Verification successful\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.verified).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Examples",
+      "item": [
+        {
+          "name": "Complete Workflow (Keygen → Sign → Consensus)",
+          "item": [
+            {
+              "name": "1. Generate Keypair",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"algorithm\": \"dilithium\",\n  \"security_level\": 3\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/crypto/keygen",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "crypto", "keygen"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "2. Sign Transaction",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"message\": \"VHJhbnNhY3Rpb246IFRyYW5zZmVyICQxMDBL\",\n  \"algorithm\": \"dilithium87\",\n  \"key_id\": \"{{key_id}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/crypto/sign",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "crypto", "sign"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "3. Submit to Consensus",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"data\": \"VHJhbnNhY3Rpb246IFRyYW5zZmVyICQxMDBL\",\n  \"priority\": \"high\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/consensus/transaction",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "consensus", "transaction"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "4. Check Transaction Status",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/consensus/transaction/{{transaction_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "consensus", "transaction", "{{transaction_id}}"]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

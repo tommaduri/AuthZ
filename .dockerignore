@@ -1,0 +1,195 @@
+# =============================================================================
+# AuthZ Engine - Docker Ignore File
+# Excludes unnecessary files from Docker build context
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Git
+# -----------------------------------------------------------------------------
+.git
+.gitignore
+.gitattributes
+
+# -----------------------------------------------------------------------------
+# Node.js / JavaScript
+# -----------------------------------------------------------------------------
+node_modules
+**/node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store
+
+# Build outputs (we build inside container)
+**/dist
+**/build
+**/.turbo
+.turbo
+
+# -----------------------------------------------------------------------------
+# TypeScript
+# -----------------------------------------------------------------------------
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# -----------------------------------------------------------------------------
+# Go
+# -----------------------------------------------------------------------------
+go-core/vendor
+go-core/bin
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# -----------------------------------------------------------------------------
+# IDE and Editor
+# -----------------------------------------------------------------------------
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# -----------------------------------------------------------------------------
+# OS Files
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# -----------------------------------------------------------------------------
+# Docker
+# -----------------------------------------------------------------------------
+docker-compose*.yml
+docker-compose*.yaml
+!docker/docker-compose.yml
+Dockerfile*
+!docker/Dockerfile
+!docker/Dockerfile.go-core
+.dockerignore
+
+# -----------------------------------------------------------------------------
+# Test and Coverage
+# -----------------------------------------------------------------------------
+coverage
+.nyc_output
+*.lcov
+.coverage
+htmlcov
+test-results
+test-output
+**/coverage
+**/*.test.ts
+**/*.test.js
+**/*.spec.ts
+**/*.spec.js
+**/tests
+**/test
+**/__tests__
+**/__mocks__
+vitest.config.ts
+vitest.workspace.ts
+jest.config.*
+
+# -----------------------------------------------------------------------------
+# Documentation
+# -----------------------------------------------------------------------------
+docs
+*.md
+!README.md
+LICENSE*
+CHANGELOG*
+CONTRIBUTING*
+
+# -----------------------------------------------------------------------------
+# CI/CD
+# -----------------------------------------------------------------------------
+.github
+.gitlab-ci.yml
+.travis.yml
+.circleci
+Jenkinsfile
+azure-pipelines.yml
+
+# -----------------------------------------------------------------------------
+# Environment and Secrets
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+secrets
+.secrets
+credentials.json
+
+# -----------------------------------------------------------------------------
+# Logs
+# -----------------------------------------------------------------------------
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# -----------------------------------------------------------------------------
+# Temporary Files
+# -----------------------------------------------------------------------------
+tmp
+temp
+.tmp
+.temp
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# -----------------------------------------------------------------------------
+# Project-specific
+# -----------------------------------------------------------------------------
+.claude
+.claude-flow
+.hive-mind
+.swarm
+memory
+coordination
+scripts
+examples
+benchmarks
+.changeset
+.husky
+
+# Keep policies (needed for default config)
+# policies
+
+# -----------------------------------------------------------------------------
+# Development tools
+# -----------------------------------------------------------------------------
+.eslintrc*
+.prettierrc*
+.prettierignore
+.editorconfig
+turbo.json
+*.config.js
+*.config.ts
+*.config.mjs
+*.config.cjs

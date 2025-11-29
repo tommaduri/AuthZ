@@ -1,0 +1,667 @@
+package integration_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/authz-engine/go-core/internal/derived_roles"
+	"github.com/authz-engine/go-core/internal/engine"
+	"github.com/authz-engine/go-core/pkg/types"
+)
+
+// TestDerivedRolesWithDecisionEngine tests end-to-end integration
+func TestDerivedRolesWithDecisionEngine(t *testing.T) {
+	t.Run("should integrate derived roles with decision engine", func(t *testing.T) {
+		// Create decision engine with derived roles support
+		eng := engine.NewEngine()
+
+		// Add resource policy
+		resourcePolicy := &types.Policy{
+			Name: "document-policy",
+			Resource: &types.ResourceSelector{
+				Kind: "document",
+			},
+			Rules: []types.Rule{
+				{
+					Actions: []string{"read"},
+					Effect:  types.Allow,
+					Roles:   []string{"owner"}, // Requires derived role "owner"
+				},
+			},
+		}
+		err := eng.AddPolicy(resourcePolicy)
+		require.NoError(t, err)
+
+		// Add derived roles policy
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name: "ownership-policy",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "owner",
+					ParentRoles: []string{"user"},
+					Condition: types.Condition{
+						Expression: "R.attr.ownerId == P.id",
+					},
+				},
+			},
+		}
+		err = eng.AddDerivedRolesPolicy(derivedPolicy)
+		require.NoError(t, err)
+
+		// Test: Principal is owner (should allow)
+		result := eng.IsAllowed(types.Request{
+			Principal: types.Principal{
+				ID:    "user123",
+				Roles: []string{"user"},
+			},
+			Action: "read",
+			Resource: types.Resource{
+				Kind: "document",
+				ID:   "doc1",
+				Attributes: map[string]interface{}{
+					"ownerId": "user123",
+				},
+			},
+		})
+
+		assert.Equal(t, types.Allow, result.Decision, "Owner should be allowed to read")
+
+		// Test: Principal is not owner (should deny)
+		result = eng.IsAllowed(types.Request{
+			Principal: types.Principal{
+				ID:    "user456",
+				Roles: []string{"user"},
+			},
+			Action: "read",
+			Resource: types.Resource{
+				Kind: "document",
+				ID:   "doc1",
+				Attributes: map[string]interface{}{
+					"ownerId": "user123",
+				},
+			},
+		})
+
+		assert.Equal(t, types.Deny, result.Decision, "Non-owner should be denied")
+	})
+
+	t.Run("should handle derived roles with principal policies", func(t *testing.T) {
+		eng := engine.NewEngine()
+
+		// Add principal policy that uses derived role
+		principalPolicy := &types.Policy{
+			Name:            "admin-policy",
+			PrincipalPolicy: true,
+			Principal: &types.PrincipalSelector{
+				Roles: []string{"super_admin"}, // Derived role
+			},
+			Resources: []*types.ResourceSelector{
+				{Kind: "*", Scope: "**"},
+			},
+			Rules: []types.Rule{
+				{
+					Actions: []string{"*"},
+					Effect:  types.Allow,
+				},
+			},
+		}
+		err := eng.AddPolicy(principalPolicy)
+		require.NoError(t, err)
+
+		// Add derived role
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name: "admin-escalation",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "super_admin",
+					ParentRoles: []string{"admin:*"},
+					Condition: types.Condition{
+						Expression: "P.attr.seniorityYears > 5",
+					},
+				},
+			},
+		}
+		err = eng.AddDerivedRolesPolicy(derivedPolicy)
+		require.NoError(t, err)
+
+		// Test: Admin with high seniority (should get super_admin)
+		result := eng.IsAllowed(types.Request{
+			Principal: types.Principal{
+				ID:    "admin1",
+				Roles: []string{"admin:level3"},
+				Attributes: map[string]interface{}{
+					"seniorityYears": 7,
+				},
+			},
+			Action: "delete",
+			Resource: types.Resource{
+				Kind: "document",
+				ID:   "sensitive-doc",
+			},
+		})
+
+		assert.Equal(t, types.Allow, result.Decision, "Senior admin should have super_admin role")
+	})
+
+	t.Run("should prioritize resource policies over derived roles", func(t *testing.T) {
+		eng := engine.NewEngine()
+
+		// Resource policy explicitly denies
+		resourcePolicy := &types.Policy{
+			Name: "explicit-deny",
+			Resource: &types.ResourceSelector{
+				Kind: "document",
+			},
+			Rules: []types.Rule{
+				{
+					Actions: []string{"delete"},
+					Effect:  types.Deny,
+					Roles:   []string{"user"},
+				},
+			},
+		}
+		err := eng.AddPolicy(resourcePolicy)
+		require.NoError(t, err)
+
+		// Derived role grants owner status
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name: "ownership",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "owner",
+					ParentRoles: []string{"user"},
+					Condition:   types.Condition{Expression: "true"},
+				},
+			},
+		}
+		err = eng.AddDerivedRolesPolicy(derivedPolicy)
+		require.NoError(t, err)
+
+		// Test: Even if user is owner, explicit deny wins
+		result := eng.IsAllowed(types.Request{
+			Principal: types.Principal{
+				ID:    "user123",
+				Roles: []string{"user"},
+			},
+			Action: "delete",
+			Resource: types.Resource{
+				Kind: "document",
+				ID:   "doc1",
+			},
+		})
+
+		assert.Equal(t, types.Deny, result.Decision, "Explicit deny should override derived role")
+	})
+}
+
+// TestDerivedRolesWithResourcePolicies tests interaction with resource policies
+func TestDerivedRolesWithResourcePolicies(t *testing.T) {
+	t.Run("should use derived roles in resource policy evaluation", func(t *testing.T) {
+		eng := engine.NewEngine()
+
+		// Resource policy with scoped access
+		resourcePolicy := &types.Policy{
+			Name: "scoped-document-policy",
+			Resource: &types.ResourceSelector{
+				Kind:  "document",
+				Scope: "acme.corp.*",
+			},
+			Rules: []types.Rule{
+				{
+					Actions: []string{"write"},
+					Effect:  types.Allow,
+					Roles:   []string{"department_editor"},
+				},
+			},
+		}
+		err := eng.AddPolicy(resourcePolicy)
+		require.NoError(t, err)
+
+		// Derived role based on department matching
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name: "department-roles",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "department_editor",
+					ParentRoles: []string{"employee"},
+					Condition: types.Condition{
+						Expression: "P.attr.department == R.attr.department",
+					},
+				},
+			},
+		}
+		err = eng.AddDerivedRolesPolicy(derivedPolicy)
+		require.NoError(t, err)
+
+		// Test: Same department (should allow)
+		result := eng.IsAllowed(types.Request{
+			Principal: types.Principal{
+				ID:    "emp123",
+				Roles: []string{"employee"},
+				Attributes: map[string]interface{}{
+					"department": "engineering",
+				},
+			},
+			Action: "write",
+			Resource: types.Resource{
+				Kind:  "document",
+				Scope: "acme.corp.docs",
+				Attributes: map[string]interface{}{
+					"department": "engineering",
+				},
+			},
+		})
+
+		assert.Equal(t, types.Allow, result.Decision)
+
+		// Test: Different department (should deny)
+		result = eng.IsAllowed(types.Request{
+			Principal: types.Principal{
+				ID:    "emp456",
+				Roles: []string{"employee"},
+				Attributes: map[string]interface{}{
+					"department": "sales",
+				},
+			},
+			Action: "write",
+			Resource: types.Resource{
+				Kind:  "document",
+				Scope: "acme.corp.docs",
+				Attributes: map[string]interface{}{
+					"department": "engineering",
+				},
+			},
+		})
+
+		assert.Equal(t, types.Deny, result.Decision)
+	})
+
+	t.Run("should handle multiple derived roles in single policy", func(t *testing.T) {
+		eng := engine.NewEngine()
+
+		// Resource policy accepts multiple roles
+		resourcePolicy := &types.Policy{
+			Name: "collaborative-document",
+			Resource: &types.ResourceSelector{
+				Kind: "document",
+			},
+			Rules: []types.Rule{
+				{
+					Actions: []string{"read"},
+					Effect:  types.Allow,
+					Roles:   []string{"owner", "collaborator", "viewer"},
+				},
+			},
+		}
+		err := eng.AddPolicy(resourcePolicy)
+		require.NoError(t, err)
+
+		// Multiple derived roles
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name: "collaboration-roles",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "owner",
+					ParentRoles: []string{"user"},
+					Condition:   types.Condition{Expression: "R.attr.ownerId == P.id"},
+				},
+				{
+					Name:        "collaborator",
+					ParentRoles: []string{"user"},
+					Condition:   types.Condition{Expression: "P.id in R.attr.collaborators"},
+				},
+				{
+					Name:        "viewer",
+					ParentRoles: []string{"user"},
+					Condition:   types.Condition{Expression: "R.attr.public == true"},
+				},
+			},
+		}
+		err = eng.AddDerivedRolesPolicy(derivedPolicy)
+		require.NoError(t, err)
+
+		// Test: Owner can read
+		result := eng.IsAllowed(types.Request{
+			Principal: types.Principal{ID: "user1", Roles: []string{"user"}},
+			Action:    "read",
+			Resource: types.Resource{
+				Kind: "document",
+				Attributes: map[string]interface{}{
+					"ownerId":       "user1",
+					"collaborators": []string{"user2", "user3"},
+					"public":        false,
+				},
+			},
+		})
+		assert.Equal(t, types.Allow, result.Decision, "Owner should be allowed")
+
+		// Test: Collaborator can read
+		result = eng.IsAllowed(types.Request{
+			Principal: types.Principal{ID: "user2", Roles: []string{"user"}},
+			Action:    "read",
+			Resource: types.Resource{
+				Kind: "document",
+				Attributes: map[string]interface{}{
+					"ownerId":       "user1",
+					"collaborators": []string{"user2", "user3"},
+					"public":        false,
+				},
+			},
+		})
+		assert.Equal(t, types.Allow, result.Decision, "Collaborator should be allowed")
+
+		// Test: Public viewer can read
+		result = eng.IsAllowed(types.Request{
+			Principal: types.Principal{ID: "user999", Roles: []string{"user"}},
+			Action:    "read",
+			Resource: types.Resource{
+				Kind: "document",
+				Attributes: map[string]interface{}{
+					"ownerId":       "user1",
+					"collaborators": []string{"user2", "user3"},
+					"public":        true,
+				},
+			},
+		})
+		assert.Equal(t, types.Allow, result.Decision, "Public viewer should be allowed")
+	})
+}
+
+// TestCacheEffectiveness tests caching in real scenarios
+func TestCacheEffectiveness(t *testing.T) {
+	t.Run("should cache derived roles across multiple requests", func(t *testing.T) {
+		eng := engine.NewEngine()
+
+		// Add policies
+		resourcePolicy := &types.Policy{
+			Name: "cached-document-policy",
+			Resource: &types.ResourceSelector{
+				Kind: "document",
+			},
+			Rules: []types.Rule{
+				{
+					Actions: []string{"read"},
+					Effect:  types.Allow,
+					Roles:   []string{"owner"},
+				},
+			},
+		}
+		err := eng.AddPolicy(resourcePolicy)
+		require.NoError(t, err)
+
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name: "cached-ownership",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "owner",
+					ParentRoles: []string{"user"},
+					Condition:   types.Condition{Expression: "R.attr.ownerId == P.id"},
+				},
+			},
+		}
+		err = eng.AddDerivedRolesPolicy(derivedPolicy)
+		require.NoError(t, err)
+
+		// Create cache for request
+		cache := derived_roles.NewCache()
+
+		// Make same request multiple times with cache
+		principal := types.Principal{ID: "user123", Roles: []string{"user"}}
+		resource := types.Resource{
+			Kind:       "document",
+			ID:         "doc1",
+			Attributes: map[string]interface{}{"ownerId": "user123"},
+		}
+
+		startTime := time.Now()
+		for i := 0; i < 100; i++ {
+			result := eng.IsAllowedWithCache(types.Request{
+				Principal: principal,
+				Action:    "read",
+				Resource:  resource,
+			}, cache)
+			assert.Equal(t, types.Allow, result.Decision)
+		}
+		cachedDuration := time.Since(startTime)
+
+		// Check cache statistics
+		stats := cache.GetStats()
+		t.Logf("Cache stats: hits=%d, misses=%d, hit rate=%.2f%%",
+			stats.Hits, stats.Misses, stats.HitRate*100)
+		assert.Greater(t, stats.Hits, 50, "Should have significant cache hits")
+		assert.Greater(t, stats.HitRate, 0.5, "Hit rate should be > 50%")
+
+		t.Logf("100 cached requests took: %v (avg: %v)", cachedDuration, cachedDuration/100)
+	})
+
+	t.Run("should show performance improvement with caching", func(t *testing.T) {
+		eng := engine.NewEngine()
+
+		// Add complex derived role with expensive condition
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name: "complex-role",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "senior_manager",
+					ParentRoles: []string{"manager"},
+					Condition: types.Condition{
+						Expression: "P.attr.experience > 5 && P.attr.reports > 10",
+					},
+				},
+			},
+		}
+		err := eng.AddDerivedRolesPolicy(derivedPolicy)
+		require.NoError(t, err)
+
+		principal := types.Principal{
+			ID:    "mgr1",
+			Roles: []string{"manager"},
+			Attributes: map[string]interface{}{
+				"experience": 7,
+				"reports":    15,
+			},
+		}
+		resource := types.Resource{Kind: "report", ID: "r1"}
+
+		// Measure without cache
+		startUncached := time.Now()
+		for i := 0; i < 50; i++ {
+			eng.IsAllowed(types.Request{
+				Principal: principal,
+				Action:    "read",
+				Resource:  resource,
+			})
+		}
+		uncachedDuration := time.Since(startUncached)
+
+		// Measure with cache
+		cache := derived_roles.NewCache()
+		startCached := time.Now()
+		for i := 0; i < 50; i++ {
+			eng.IsAllowedWithCache(types.Request{
+				Principal: principal,
+				Action:    "read",
+				Resource:  resource,
+			}, cache)
+		}
+		cachedDuration := time.Since(startCached)
+
+		t.Logf("Uncached: %v, Cached: %v, Speedup: %.2fx",
+			uncachedDuration, cachedDuration,
+			float64(uncachedDuration)/float64(cachedDuration))
+
+		// Cache should provide noticeable speedup
+		assert.Less(t, cachedDuration, uncachedDuration,
+			"Cached requests should be faster")
+	})
+}
+
+// TestPerformanceUnderLoad tests system under load
+func TestPerformanceUnderLoad(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping performance test in short mode")
+	}
+
+	t.Run("should handle high request volume efficiently", func(t *testing.T) {
+		eng := engine.NewEngine()
+
+		// Add multiple policies
+		for i := 0; i < 10; i++ {
+			resourcePolicy := &types.Policy{
+				Name: fmt.Sprintf("policy-%d", i),
+				Resource: &types.ResourceSelector{
+					Kind: "document",
+				},
+				Rules: []types.Rule{
+					{
+						Actions: []string{"read"},
+						Effect:  types.Allow,
+						Roles:   []string{fmt.Sprintf("role_%d", i)},
+					},
+				},
+			}
+			err := eng.AddPolicy(resourcePolicy)
+			require.NoError(t, err)
+		}
+
+		// Add derived roles
+		definitions := make([]types.DerivedRoleDefinition, 10)
+		for i := 0; i < 10; i++ {
+			definitions[i] = types.DerivedRoleDefinition{
+				Name:        fmt.Sprintf("role_%d", i),
+				ParentRoles: []string{"user"},
+				Condition:   types.Condition{Expression: fmt.Sprintf("P.attr.level >= %d", i)},
+			}
+		}
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name:        "load-test-roles",
+			Definitions: definitions,
+		}
+		err := eng.AddDerivedRolesPolicy(derivedPolicy)
+		require.NoError(t, err)
+
+		// Simulate high load
+		cache := derived_roles.NewCache()
+		totalRequests := 10000
+
+		start := time.Now()
+		for i := 0; i < totalRequests; i++ {
+			principal := types.Principal{
+				ID:    fmt.Sprintf("user%d", i%100),
+				Roles: []string{"user"},
+				Attributes: map[string]interface{}{
+					"level": i % 10,
+				},
+			}
+			resource := types.Resource{
+				Kind: "document",
+				ID:   fmt.Sprintf("doc%d", i%50),
+			}
+
+			result := eng.IsAllowedWithCache(types.Request{
+				Principal: principal,
+				Action:    "read",
+				Resource:  resource,
+			}, cache)
+
+			_ = result // Use result
+		}
+		duration := time.Since(start)
+
+		avgLatency := duration / time.Duration(totalRequests)
+		throughput := float64(totalRequests) / duration.Seconds()
+
+		t.Logf("Performance under load:")
+		t.Logf("  Total requests: %d", totalRequests)
+		t.Logf("  Total duration: %v", duration)
+		t.Logf("  Average latency: %v", avgLatency)
+		t.Logf("  Throughput: %.2f req/s", throughput)
+
+		// Performance assertions (adjust based on target)
+		assert.Less(t, avgLatency, 200*time.Microsecond,
+			"Average latency should be < 200μs (target: 0.2ms)")
+		assert.Greater(t, throughput, 5000.0,
+			"Throughput should be > 5000 req/s")
+
+		// Cache effectiveness
+		stats := cache.GetStats()
+		t.Logf("Cache statistics:")
+		t.Logf("  Hits: %d", stats.Hits)
+		t.Logf("  Misses: %d", stats.Misses)
+		t.Logf("  Hit rate: %.2f%%", stats.HitRate*100)
+		t.Logf("  Size: %d", stats.Size)
+	})
+}
+
+// TestComplexScenarios tests complex real-world scenarios
+func TestComplexScenarios(t *testing.T) {
+	t.Run("should handle multi-tenant isolation with derived roles", func(t *testing.T) {
+		eng := engine.NewEngine()
+
+		// Derived role for tenant membership
+		derivedPolicy := &types.DerivedRolesPolicy{
+			Name: "tenant-membership",
+			Definitions: []types.DerivedRoleDefinition{
+				{
+					Name:        "tenant_member",
+					ParentRoles: []string{"user"},
+					Condition: types.Condition{
+						Expression: "P.attr.tenantId == R.attr.tenantId",
+					},
+				},
+			},
+		}
+		err := eng.AddDerivedRolesPolicy(derivedPolicy)
+		require.NoError(t, err)
+
+		// Resource policy requires tenant membership
+		resourcePolicy := &types.Policy{
+			Name: "tenant-document-policy",
+			Resource: &types.ResourceSelector{
+				Kind: "document",
+			},
+			Rules: []types.Rule{
+				{
+					Actions: []string{"read", "write"},
+					Effect:  types.Allow,
+					Roles:   []string{"tenant_member"},
+				},
+			},
+		}
+		err = eng.AddPolicy(resourcePolicy)
+		require.NoError(t, err)
+
+		// Test: Same tenant (should allow)
+		result := eng.IsAllowed(types.Request{
+			Principal: types.Principal{
+				ID:         "user1",
+				Roles:      []string{"user"},
+				Attributes: map[string]interface{}{"tenantId": "tenant-a"},
+			},
+			Action: "read",
+			Resource: types.Resource{
+				Kind:       "document",
+				Attributes: map[string]interface{}{"tenantId": "tenant-a"},
+			},
+		})
+		assert.Equal(t, types.Allow, result.Decision, "Same tenant should be allowed")
+
+		// Test: Different tenant (should deny)
+		result = eng.IsAllowed(types.Request{
+			Principal: types.Principal{
+				ID:         "user1",
+				Roles:      []string{"user"},
+				Attributes: map[string]interface{}{"tenantId": "tenant-a"},
+			},
+			Action: "read",
+			Resource: types.Resource{
+				Kind:       "document",
+				Attributes: map[string]interface{}{"tenantId": "tenant-b"},
+			},
+		})
+		assert.Equal(t, types.Deny, result.Decision, "Different tenant should be denied")
+	})
+}

@@ -1,0 +1,46 @@
+[package]
+name = "cretoai-exchange"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Internal dependencies
+cretoai-crypto = { path = "../crypto" }
+cretoai-network = { path = "../network" }
+cretoai-dag = { path = "../dag" }
+
+# Workspace dependencies
+tokio = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# WASM support
+wasm-bindgen = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+proptest = { workspace = true }
+criterion = { workspace = true }
+
+[features]
+default = []
+wasm = ["wasm-bindgen"]
+
+[[bench]]
+name = "exchange_bench"
+harness = false

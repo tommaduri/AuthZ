@@ -1,0 +1,305 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authz-engine
+  namespace: authz-system
+  labels:
+    app: authz-engine
+    version: v1
+    tier: backend
+  annotations:
+    description: "Authorization engine gRPC and HTTP servers"
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: authz-engine
+  template:
+    metadata:
+      labels:
+        app: authz-engine
+        version: v1
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: authz-engine
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      affinity:
+        # Pod Anti-affinity to spread across nodes
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - authz-engine
+                topologyKey: kubernetes.io/hostname
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - authz-engine
+                topologyKey: topology.kubernetes.io/zone
+        # Node affinity for worker nodes
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - linux
+                  - key: node-role.kubernetes.io/worker
+                    operator: Exists
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: workload-type
+                    operator: In
+                    values:
+                      - general
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: authz-engine
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: authz-engine
+          image: authz-engine:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: log-level
+            - name: LOG_FORMAT
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: log-format
+            - name: CACHE_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: cache-enabled
+            - name: CACHE_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: cache-size
+            - name: CACHE_TTL
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: cache-ttl
+            - name: WORKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: workers
+            - name: POLICY_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: policy-dir
+            - name: GRPC_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: grpc-port
+            - name: HTTP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: http-port
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: postgres-host
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: postgres-port
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: postgres-db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: authz-secrets
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: authz-secrets
+                  key: postgres-password
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: redis-host
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: authz-config
+                  key: redis-port
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 2
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 30
+          volumeMounts:
+            - name: policies
+              mountPath: /policies
+              readOnly: true
+            - name: config
+              mountPath: /etc/authz
+              readOnly: true
+            - name: cache
+              mountPath: /tmp/cache
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+      volumes:
+        - name: policies
+          configMap:
+            name: authz-policies
+            defaultMode: 0444
+        - name: config
+          configMap:
+            name: authz-config
+            defaultMode: 0444
+        - name: cache
+          emptyDir:
+            sizeLimit: 500Mi
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: authz-engine
+  namespace: authz-system
+  labels:
+    app: authz-engine
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: authz-engine
+  namespace: authz-system
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: authz-engine
+  namespace: authz-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: authz-engine
+subjects:
+  - kind: ServiceAccount
+    name: authz-engine
+    namespace: authz-system

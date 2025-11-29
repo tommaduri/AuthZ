@@ -1,0 +1,19 @@
+apiVersion: v2
+name: authz-engine
+description: A production-ready authorization engine with policy-based access control
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - authorization
+  - authz
+  - access-control
+  - security
+  - policy
+home: https://github.com/authz-engine/go-core
+sources:
+  - https://github.com/authz-engine/go-core
+maintainers:
+  - name: AuthZ Engine Team
+    email: team@authz-engine.io
+icon: https://authz-engine.io/icon.svg

@@ -1,0 +1,44 @@
+# Benchmark Configuration for CretoAI Phase 7
+# Add these sections to the workspace root Cargo.toml
+
+[[bench]]
+name = "comprehensive_suite"
+harness = false
+path = "benches/comprehensive_suite.rs"
+
+[[bench]]
+name = "throughput_bench"
+harness = false
+path = "benches/throughput_bench.rs"
+
+[[bench]]
+name = "latency_bench"
+harness = false
+path = "benches/latency_bench.rs"
+
+[[bench]]
+name = "byzantine_bench"
+harness = false
+path = "benches/byzantine_bench.rs"
+
+[[bench]]
+name = "network_stress_bench"
+harness = false
+path = "benches/network_stress_bench.rs"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+tokio = { version = "1.35", features = ["full", "test-util"] }
+tokio-test = "0.4"
+
+# Benchmark-specific dependencies
+rayon = "1.8"
+blake3 = "1.5"
+rand = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+
+# CretoAI modules
+cretoai-consensus = { path = "src/consensus" }
+cretoai-crypto = { path = "src/crypto" }
+cretoai-dag = { path = "src/dag" }
+cretoai-reputation = { path = "src/reputation" }

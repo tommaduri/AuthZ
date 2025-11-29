@@ -1,0 +1,208 @@
+# CretoAI Distributed Consensus Cluster - All-in-One Manifest
+# Deploy with: kubectl apply -f cretoai-cluster.yaml
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cretoai
+  labels:
+    name: cretoai
+    app.kubernetes.io/name: cretoai
+    app.kubernetes.io/part-of: cretoai-cluster
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cretoai-config
+  namespace: cretoai
+  labels:
+    app: cretoai
+data:
+  node.toml: |
+    [node]
+    log_level = "info"
+    data_dir = "/data"
+
+    [consensus]
+    algorithm = "bft"
+    quorum_threshold = 0.67
+    finality_timeout_ms = 500
+    max_pending_vertices = 10000
+
+    [network]
+    listen_addr = "0.0.0.0:9000"
+    quic_port = 9001
+
+    [storage]
+    backend = "rocksdb"
+    path = "/data/db"
+    cache_size_mb = 512
+    write_buffer_mb = 128
+
+    [crypto]
+    signature_algorithm = "ml-dsa-87"
+    hash_algorithm = "blake3"
+    key_path = "/data/keys"
+
+    [metrics]
+    enabled = true
+    port = 9090
+    endpoint = "/metrics"
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cretoai-node
+  namespace: cretoai
+  labels:
+    app: cretoai-node
+    component: consensus
+spec:
+  serviceName: cretoai-nodes
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: cretoai-node
+  template:
+    metadata:
+      labels:
+        app: cretoai-node
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values: [cretoai-node]
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: node
+          image: cretoai/node:latest
+          ports:
+            - containerPort: 9000
+              name: p2p
+            - containerPort: 9001
+              name: quic
+              protocol: UDP
+            - containerPort: 9090
+              name: metrics
+          env:
+            - name: RUST_LOG
+              value: "info,cretoai=debug"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: BOOTSTRAP_PEERS
+              value: "/dns4/cretoai-node-0.cretoai-nodes/udp/9001/quic,/dns4/cretoai-node-1.cretoai-nodes/udp/9001/quic,/dns4/cretoai-node-2.cretoai-nodes/udp/9001/quic"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/cretoai
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 9091
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 9092
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: cretoai-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 100Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cretoai-nodes
+  namespace: cretoai
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: cretoai-node
+  ports:
+    - port: 9000
+      name: p2p
+    - port: 9001
+      name: quic
+      protocol: UDP
+    - port: 9090
+      name: metrics
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cretoai-api
+  namespace: cretoai
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cretoai-api
+  template:
+    metadata:
+      labels:
+        app: cretoai-api
+    spec:
+      containers:
+        - name: api
+          image: cretoai/api:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: CRETOAI_CONSENSUS_NODES
+              value: "cretoai-node-0.cretoai-nodes:9000,cretoai-node-1.cretoai-nodes:9000,cretoai-node-2.cretoai-nodes:9000"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cretoai-api
+  namespace: cretoai
+spec:
+  type: LoadBalancer
+  selector:
+    app: cretoai-api
+  ports:
+    - port: 80
+      targetPort: 8080

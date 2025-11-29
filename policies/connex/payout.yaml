@@ -1,0 +1,130 @@
+# Payout Resource Policy for Avatar Connex
+# Manages authorization for influencer payout operations
+apiVersion: authz.engine/v1
+kind: ResourcePolicy
+metadata:
+  name: payout-policy
+  description: Authorization rules for payout resources in Avatar Connex
+spec:
+  resource: payout
+  version: "1.0"
+  importDerivedRoles:
+    - connex-derived-roles
+  rules:
+    # View own payouts - influencers can view their own payout history
+    - name: view-own-payouts
+      description: Allow influencers to view their own payout records
+      actions: [view, list]
+      effect: allow
+      derivedRoles: [owner]
+      condition:
+        expression: "'influencer' in principal.roles"
+
+    # Request payout - influencers can request payouts
+    - name: request-payout
+      description: Allow influencers to request a payout
+      actions: [create, request]
+      effect: allow
+      roles: [influencer]
+      condition:
+        expression: "principal.attr.payoutEnabled == true && principal.attr.accountStatus == 'active'"
+
+    # Cancel pending payout - owner can cancel if pending
+    - name: cancel-own-pending-payout
+      description: Allow influencers to cancel their pending payout requests
+      actions: [cancel]
+      effect: allow
+      derivedRoles: [owner]
+      condition:
+        expression: "resource.status == 'pending' && 'influencer' in principal.roles"
+
+    # Process standard payouts - finance can process
+    - name: finance-process-standard-payout
+      description: Allow finance team to process standard payouts (up to $1000)
+      actions: [process, approve]
+      effect: allow
+      roles: [finance]
+      condition:
+        expression: "resource.status == 'pending' && resource.amount <= 1000"
+
+    # Process high-value payouts - requires finance approver role
+    - name: finance-process-high-value-payout
+      description: Allow finance approvers to process high-value payouts (over $1000)
+      actions: [process, approve]
+      effect: allow
+      derivedRoles: [finance_approver]
+      condition:
+        expression: "resource.status == 'pending' && resource.amount > 1000"
+
+    # Admin view all payouts
+    - name: admin-view-all-payouts
+      description: Allow admins to view all payout records
+      actions: [view, list]
+      effect: allow
+      roles: [admin]
+
+    # Finance view all payouts
+    - name: finance-view-all-payouts
+      description: Allow finance team to view all payout records
+      actions: [view, list]
+      effect: allow
+      roles: [finance]
+
+    # Reject payout - finance can reject
+    - name: finance-reject-payout
+      description: Allow finance team to reject payout requests
+      actions: [reject]
+      effect: allow
+      roles: [finance, admin]
+      condition:
+        expression: "resource.status == 'pending'"
+
+    # Hold payout - finance/admin can place hold
+    - name: hold-payout
+      description: Allow finance/admin to place a hold on payouts
+      actions: [hold]
+      effect: allow
+      roles: [finance, admin]
+      condition:
+        expression: "resource.status == 'pending' || resource.status == 'approved'"
+
+    # Release hold - admin only
+    - name: release-payout-hold
+      description: Allow admins to release payout holds
+      actions: [release_hold]
+      effect: allow
+      roles: [admin]
+      condition:
+        expression: "resource.status == 'on_hold'"
+
+    # Export payout data - finance/admin
+    - name: export-payout-data
+      description: Allow finance/admin to export payout data
+      actions: [export]
+      effect: allow
+      roles: [finance, admin]
+
+    # Audit payout - admin only
+    - name: audit-payout
+      description: Allow admins to audit payout records
+      actions: [audit, view_audit_log]
+      effect: allow
+      roles: [admin]
+
+    # Expedite payout - admin only for urgent cases
+    - name: expedite-payout
+      description: Allow admins to expedite urgent payouts
+      actions: [expedite]
+      effect: allow
+      roles: [admin]
+      condition:
+        expression: "resource.status == 'pending' && principal.attr.canExpeditePayouts == true"
+
+    # Retry failed payout - finance can retry
+    - name: retry-failed-payout
+      description: Allow finance to retry failed payout transactions
+      actions: [retry]
+      effect: allow
+      roles: [finance, admin]
+      condition:
+        expression: "resource.status == 'failed' && resource.retryCount < 3"

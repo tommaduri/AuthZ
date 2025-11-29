@@ -1,0 +1,44 @@
+[package]
+name = "cretoai-vault"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Internal dependencies
+cretoai-crypto = { path = "../crypto" }
+
+# Workspace dependencies
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+
+# Database
+sled = { workspace = true }
+
+# Encryption
+blake3 = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# WASM support
+wasm-bindgen = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+proptest = { workspace = true }
+
+[features]
+default = []
+wasm = ["wasm-bindgen"]
+hsm = []  # HSM (Hardware Security Module) support - placeholder for future implementation

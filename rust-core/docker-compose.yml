@@ -1,0 +1,185 @@
+# ============================================================================
+# Docker Compose - Rust Authorization Engine (Phase 6)
+# ============================================================================
+# Complete development stack with:
+# - Rust authz-server (gRPC + REST)
+# - PostgreSQL (authentication database)
+# - Redis (distributed cache)
+# - Prometheus (metrics collection)
+# - Grafana (visualization)
+#
+# Usage:
+#   docker-compose up              # Core services
+#   docker-compose --profile monitoring up  # With monitoring
+#   docker-compose down -v         # Stop and remove volumes
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # PostgreSQL Database (Phase 6 Authentication)
+  # ==========================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: authz-postgres
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: authz_user
+      POSTGRES_PASSWORD: authz_password
+      POSTGRES_DB: authz_engine
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authz_user -d authz_engine"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - authz-network
+
+  # ==========================================================================
+  # Redis Cache (Distributed Caching)
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: authz-redis
+    ports:
+      - "6380:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - authz-network
+
+  # ==========================================================================
+  # Rust Authorization Server
+  # ==========================================================================
+  authz-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: authz-server
+    ports:
+      - "50051:50051"  # gRPC
+      - "8082:8080"    # HTTP health + metrics
+      - "8083:8081"    # REST API
+    environment:
+      # Server
+      AUTHZ_GRPC_PORT: "50051"
+      AUTHZ_HTTP_PORT: "8080"
+      AUTHZ_REST_PORT: "8081"
+      AUTHZ_LOG_LEVEL: info
+      AUTHZ_LOG_FORMAT: json
+      AUTHZ_WORKERS: "16"
+      RUST_BACKTRACE: "1"
+
+      # Cache
+      AUTHZ_CACHE_ENABLED: "true"
+      AUTHZ_CACHE_TYPE: hybrid
+      AUTHZ_CACHE_SIZE: "100000"
+      AUTHZ_CACHE_TTL: "300"
+
+      # Redis
+      AUTHZ_REDIS_ENABLED: "true"
+      AUTHZ_REDIS_HOST: redis
+      AUTHZ_REDIS_PORT: "6379"
+
+      # Database
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: authz_user
+      DB_PASSWORD: authz_password
+      DB_NAME: authz_engine
+      DB_SSL_MODE: disable
+
+      # JWT
+      JWT_ISSUER: "https://authz.example.com"
+      JWT_ACCESS_TTL: "900"
+
+      # Rate Limiting
+      RATE_LIMIT_DEFAULT_RPS: "100"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/authz-server", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    restart: unless-stopped
+    networks:
+      - authz-network
+
+  # ==========================================================================
+  # Prometheus (Optional - use --profile monitoring)
+  # ==========================================================================
+  prometheus:
+    image: prom/prometheus:v2.49.1
+    container_name: authz-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - authz-network
+    profiles:
+      - monitoring
+
+  # ==========================================================================
+  # Grafana (Optional - use --profile monitoring)
+  # ==========================================================================
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: authz-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - authz-network
+    profiles:
+      - monitoring
+
+networks:
+  authz-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:

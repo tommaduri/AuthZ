@@ -1,0 +1,185 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cretoai-node
+  namespace: cretoai
+  labels:
+    app: cretoai-node
+    component: consensus
+spec:
+  serviceName: cretoai-nodes
+  replicas: 3
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  selector:
+    matchLabels:
+      app: cretoai-node
+  template:
+    metadata:
+      labels:
+        app: cretoai-node
+        component: consensus
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - cretoai-node
+              topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      initContainers:
+        - name: init-config
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              set -ex
+              # Create necessary directories
+              mkdir -p /data/db /data/keys
+              # Generate node ID from pod name
+              NODE_ID=$(echo $POD_NAME | sed 's/cretoai-node-//')
+              echo "NODE_ID=$NODE_ID" > /data/node-id
+              # Set permissions
+              chmod -R 755 /data
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: node
+          image: cretoai/node:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9000
+              name: p2p
+              protocol: TCP
+            - containerPort: 9001
+              name: quic
+              protocol: UDP
+            - containerPort: 9090
+              name: metrics
+              protocol: TCP
+            - containerPort: 9091
+              name: liveness
+              protocol: TCP
+            - containerPort: 9092
+              name: readiness
+              protocol: TCP
+          env:
+            - name: RUST_LOG
+              value: "info,cretoai=debug,cretoai_consensus=trace"
+            - name: RUST_BACKTRACE
+              value: "1"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # Bootstrap peers for service discovery
+            - name: BOOTSTRAP_PEERS
+              value: |
+                /dns4/cretoai-node-0.cretoai-nodes.cretoai.svc.cluster.local/udp/9001/quic,
+                /dns4/cretoai-node-1.cretoai-nodes.cretoai.svc.cluster.local/udp/9001/quic,
+                /dns4/cretoai-node-2.cretoai-nodes.cretoai.svc.cluster.local/udp/9001/quic
+            - name: CRETOAI_CONFIG
+              value: "/etc/cretoai/node.toml"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/cretoai
+              readOnly: true
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+              ephemeral-storage: "10Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+              ephemeral-storage: "20Gi"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: liveness
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: readiness
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: readiness
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 12
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    # Graceful shutdown: allow time for consensus to stabilize
+                    echo "Initiating graceful shutdown..."
+                    kill -TERM 1
+                    sleep 30
+      volumes:
+        - name: config
+          configMap:
+            name: cretoai-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: cretoai-node
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 100Gi

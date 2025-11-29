@@ -1,0 +1,58 @@
+# Example authorization test cases
+# Run with: authz test examples/authorization.yaml
+
+- name: Admin can read documents
+  principal: user:alice
+  resource: document:123
+  action: read
+  expected: true
+  description: Administrators should have read access to all documents
+
+- name: Admin can write documents
+  principal: user:alice
+  resource: document:123
+  action: write
+  expected: true
+  description: Administrators should have write access to all documents
+
+- name: Admin can delete documents
+  principal: user:alice
+  resource: document:123
+  action: delete
+  expected: true
+  description: Administrators should have delete access to all documents
+
+- name: Regular user can read documents
+  principal: user:bob
+  resource: document:123
+  action: read
+  expected: true
+  description: Regular users should have read access to documents
+
+- name: Regular user cannot write documents
+  principal: user:bob
+  resource: document:123
+  action: write
+  expected: false
+  description: Regular users should not have write access
+
+- name: Regular user cannot delete documents
+  principal: user:bob
+  resource: document:123
+  action: delete
+  expected: false
+  description: Regular users should not have delete access
+
+- name: Guest cannot read sensitive documents
+  principal: user:guest
+  resource: document:sensitive
+  action: read
+  expected: false
+  description: Guests should not have access to sensitive documents
+
+- name: Service account can perform system actions
+  principal: service:api
+  resource: system:config
+  action: reload
+  expected: true
+  description: Service accounts should be able to perform system operations

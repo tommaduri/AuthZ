@@ -1,0 +1,309 @@
+//! DAG Consensus Integration Tests for MCP
+//!
+//! This test suite verifies the integration of the DAG consensus engine
+//! with the MCP server, ensuring Byzantine fault-tolerant consensus
+//! for critical operations.
+
+use cretoai_core::traits::consensus::{ConsensusProtocol, Vertex};
+use cretoai_core::types::ConsensusState;
+use cretoai_mcp::adapters::DagConsensusAdapter;
+use cretoai_mcp::{McpServer, McpServerConfig};
+use std::sync::Arc;
+
+/// Helper function to create a test adapter
+fn create_test_adapter() -> DagConsensusAdapter {
+    DagConsensusAdapter::new("test-mcp-server".to_string(), 150)
+        .expect("Failed to create adapter")
+}
+
+#[tokio::test]
+async fn test_dag_adapter_creation() {
+    let adapter = create_test_adapter();
+    assert!(true); // Adapter created successfully
+}
+
+#[tokio::test]
+async fn test_mcp_server_with_consensus() {
+    let adapter = Arc::new(create_test_adapter());
+    let config = McpServerConfig::default();
+    let server = McpServer::with_consensus(config, adapter);
+
+    let info = server.get_server_info();
+    assert_eq!(info["protocol_version"], "1.0.0");
+}
+
+#[tokio::test]
+async fn test_submit_message_to_dag() {
+    let adapter = create_test_adapter();
+
+    // Create a test message
+    let message_data = b"test MCP message";
+    let vertex = Vertex::new(vec![], message_data.to_vec());
+
+    // Submit to DAG
+    let result = adapter.propose(vertex).await;
+    assert!(result.is_ok());
+
+    let vertex_id = result.unwrap();
+
+    // Query state
+    let state = adapter.get_state(&vertex_id).await.unwrap();
+    assert_eq!(state, ConsensusState::Pending);
+}
+
+#[tokio::test]
+async fn test_finality_detection() {
+    let adapter = create_test_adapter();
+
+    // Create and submit a message
+    let message_data = b"finality test message";
+    let vertex = Vertex::new(vec![], message_data.to_vec());
+    let vertex_id = adapter.propose(vertex).await.unwrap();
+
+    // Wait for finality
+    let result = adapter.wait_finality(&vertex_id).await;
+    assert!(result.is_ok());
+
+    // Verify finalized state
+    let finalized = adapter.is_finalized(&vertex_id).await.unwrap();
+    assert!(finalized);
+
+    let state = adapter.get_state(&vertex_id).await.unwrap();
+    assert_eq!(state, ConsensusState::Finalized);
+}
+
+#[tokio::test]
+async fn test_multiple_messages_consensus() {
+    let adapter = create_test_adapter();
+
+    let mut vertex_ids = Vec::new();
+
+    // Submit multiple messages
+    for i in 0..5 {
+        let message_data = format!("message-{}", i);
+        let vertex = Vertex::new(vec![], message_data.into_bytes());
+        let vertex_id = adapter.propose(vertex).await.unwrap();
+        vertex_ids.push(vertex_id);
+    }
+
+    // Wait for all to finalize
+    for vertex_id in &vertex_ids {
+        adapter.wait_finality(vertex_id).await.unwrap();
+        let finalized = adapter.is_finalized(vertex_id).await.unwrap();
+        assert!(finalized);
+    }
+}
+
+#[tokio::test]
+async fn test_messages_with_dependencies() {
+    let adapter = create_test_adapter();
+
+    // Create parent message
+    let parent_data = b"parent message";
+    let parent_vertex = Vertex::new(vec![], parent_data.to_vec());
+    let parent_id = adapter.propose(parent_vertex).await.unwrap();
+
+    // Wait for parent to finalize
+    adapter.wait_finality(&parent_id).await.unwrap();
+
+    // Create child message that depends on parent
+    let child_data = b"child message";
+    let child_vertex = Vertex::new(vec![parent_id], child_data.to_vec());
+    let child_id = adapter.propose(child_vertex).await.unwrap();
+
+    // Wait for child to finalize
+    adapter.wait_finality(&child_id).await.unwrap();
+
+    // Verify both are finalized
+    assert!(adapter.is_finalized(&parent_id).await.unwrap());
+    assert!(adapter.is_finalized(&child_id).await.unwrap());
+
+    // Verify ancestry
+    let ancestors = adapter.get_ancestors(&child_id).await.unwrap();
+    assert_eq!(ancestors.len(), 1);
+    assert_eq!(ancestors[0], parent_id);
+
+    // Verify descendants
+    let descendants = adapter.get_descendants(&parent_id).await.unwrap();
+    assert_eq!(descendants.len(), 1);
+    assert_eq!(descendants[0], child_id);
+}
+
+#[tokio::test]
+async fn test_audit_trail_query() {
+    let adapter = create_test_adapter();
+
+    // Submit a chain of messages
+    let mut prev_id = None;
+
+    for i in 0..3 {
+        let message_data = format!("audit-message-{}", i);
+        let parents = if let Some(id) = prev_id {
+            vec![id]
+        } else {
+            vec![]
+        };
+
+        let vertex = Vertex::new(parents, message_data.into_bytes());
+        let vertex_id = adapter.propose(vertex).await.unwrap();
+        adapter.wait_finality(&vertex_id).await.unwrap();
+
+        prev_id = Some(vertex_id);
+    }
+
+    // Query the final message's ancestry
+    let final_id = prev_id.unwrap();
+    let ancestors = adapter.get_ancestors(&final_id).await.unwrap();
+
+    // Should have 1 parent
+    assert_eq!(ancestors.len(), 1);
+}
+
+#[tokio::test]
+async fn test_byzantine_fault_tolerance() {
+    let adapter = create_test_adapter();
+
+    // Submit multiple messages to test consensus with simulated Byzantine nodes
+    let mut vertex_ids = Vec::new();
+
+    for i in 0..10 {
+        let message_data = format!("byzantine-test-{}", i);
+        let vertex = Vertex::new(vec![], message_data.into_bytes());
+        let vertex_id = adapter.propose(vertex).await.unwrap();
+        vertex_ids.push(vertex_id);
+    }
+
+    // All messages should reach finality despite Byzantine nodes (20% malicious in simulation)
+    let mut finalized_count = 0;
+    for vertex_id in &vertex_ids {
+        if adapter.wait_finality(vertex_id).await.is_ok() {
+            if adapter.is_finalized(vertex_id).await.unwrap() {
+                finalized_count += 1;
+            }
+        }
+    }
+
+    // All messages should finalize successfully
+    assert_eq!(finalized_count, 10);
+}
+
+#[tokio::test]
+async fn test_concurrent_submissions() {
+    let adapter = Arc::new(create_test_adapter());
+
+    // Submit multiple messages concurrently
+    let mut handles = Vec::new();
+
+    for i in 0..5 {
+        let adapter_clone = Arc::clone(&adapter);
+        let handle = tokio::spawn(async move {
+            let message_data = format!("concurrent-{}", i);
+            let vertex = Vertex::new(vec![], message_data.into_bytes());
+            let vertex_id = adapter_clone.propose(vertex).await.unwrap();
+            adapter_clone.wait_finality(&vertex_id).await.unwrap();
+            vertex_id
+        });
+        handles.push(handle);
+    }
+
+    // Wait for all to complete
+    let mut vertex_ids = Vec::new();
+    for handle in handles {
+        let vertex_id = handle.await.unwrap();
+        vertex_ids.push(vertex_id);
+    }
+
+    // Verify all finalized
+    assert_eq!(vertex_ids.len(), 5);
+    for vertex_id in vertex_ids {
+        assert!(adapter.is_finalized(&vertex_id).await.unwrap());
+    }
+}
+
+#[tokio::test]
+async fn test_query_before_finality() {
+    let adapter = create_test_adapter();
+
+    // Submit a message
+    let message_data = b"query test message";
+    let vertex = Vertex::new(vec![], message_data.to_vec());
+    let vertex_id = adapter.propose(vertex).await.unwrap();
+
+    // Query state immediately (before consensus runs)
+    let state = adapter.query(&vertex_id).await.unwrap();
+
+    // Should be pending initially
+    assert_eq!(state, ConsensusState::Pending);
+
+    // Now wait for finality
+    adapter.wait_finality(&vertex_id).await.unwrap();
+
+    // Query again
+    let state = adapter.query(&vertex_id).await.unwrap();
+    assert_eq!(state, ConsensusState::Finalized);
+}
+
+#[tokio::test]
+async fn test_complex_dag_structure() {
+    let adapter = create_test_adapter();
+
+    // Create a diamond DAG structure:
+    //      A
+    //     / \
+    //    B   C
+    //     \ /
+    //      D
+
+    // Vertex A (root)
+    let vertex_a = Vertex::new(vec![], b"vertex-a".to_vec());
+    let id_a = adapter.propose(vertex_a).await.unwrap();
+    adapter.wait_finality(&id_a).await.unwrap();
+
+    // Vertex B (child of A)
+    let vertex_b = Vertex::new(vec![id_a], b"vertex-b".to_vec());
+    let id_b = adapter.propose(vertex_b).await.unwrap();
+    adapter.wait_finality(&id_b).await.unwrap();
+
+    // Vertex C (child of A)
+    let vertex_c = Vertex::new(vec![id_a], b"vertex-c".to_vec());
+    let id_c = adapter.propose(vertex_c).await.unwrap();
+    adapter.wait_finality(&id_c).await.unwrap();
+
+    // Vertex D (child of B and C)
+    let vertex_d = Vertex::new(vec![id_b, id_c], b"vertex-d".to_vec());
+    let id_d = adapter.propose(vertex_d).await.unwrap();
+    adapter.wait_finality(&id_d).await.unwrap();
+
+    // Verify structure
+    let d_ancestors = adapter.get_ancestors(&id_d).await.unwrap();
+    assert_eq!(d_ancestors.len(), 2);
+    assert!(d_ancestors.contains(&id_b));
+    assert!(d_ancestors.contains(&id_c));
+
+    let a_descendants = adapter.get_descendants(&id_a).await.unwrap();
+    assert_eq!(a_descendants.len(), 2);
+    assert!(a_descendants.contains(&id_b));
+    assert!(a_descendants.contains(&id_c));
+}
+
+#[tokio::test]
+async fn test_state_transitions() {
+    let adapter = create_test_adapter();
+
+    // Submit a message
+    let message_data = b"state transition test";
+    let vertex = Vertex::new(vec![], message_data.to_vec());
+    let vertex_id = adapter.propose(vertex).await.unwrap();
+
+    // Initial state: Pending
+    let state = adapter.get_state(&vertex_id).await.unwrap();
+    assert_eq!(state, ConsensusState::Pending);
+
+    // After finality: Finalized
+    adapter.wait_finality(&vertex_id).await.unwrap();
+    let state = adapter.get_state(&vertex_id).await.unwrap();
+    assert_eq!(state, ConsensusState::Finalized);
+
+    // Verify not rejected
+    assert!(!adapter.is_rejected(&vertex_id).await.unwrap());
+}

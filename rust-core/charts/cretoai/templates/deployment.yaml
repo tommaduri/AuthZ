@@ -1,0 +1,118 @@
+{{- if .Values.api.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cretoai.fullname" . }}-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cretoai.labels" . | nindent 4 }}
+    app: cretoai-api
+    component: api
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "cretoai.api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cretoai.api.selectorLabels" . | nindent 8 }}
+        component: api
+      annotations:
+        prometheus.io/scrape: "{{ .Values.monitoring.enabled }}"
+        prometheus.io/port: "{{ .Values.api.config.port }}"
+        prometheus.io/path: "/metrics"
+        {{- with .Values.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "cretoai.imagePullSecrets" . | nindent 6 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values: [cretoai-api]
+                topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        {{- toYaml .Values.security.podSecurityContext | nindent 8 }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      containers:
+        - name: api
+          image: "{{ .Values.global.imageRegistry }}{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.api.config.port }}
+              name: http
+              protocol: TCP
+          env:
+            - name: RUST_LOG
+              value: "{{ .Values.api.config.logLevel }},cretoai_api=debug"
+            - name: RUST_BACKTRACE
+              value: "1"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CRETOAI_CONSENSUS_NODES
+              value: {{ range $i := until (int $.Values.node.replicaCount) }}{{ include "cretoai.fullname" $ }}-node-{{ $i }}.{{ include "cretoai.fullname" $ }}-nodes.{{ $.Release.Namespace }}.svc.cluster.local:{{ $.Values.node.service.p2pPort }}{{ if lt $i (sub (int $.Values.node.replicaCount) 1) }},{{ end }}{{ end }}
+            - name: CRETOAI_API_HOST
+              value: "0.0.0.0"
+            - name: CRETOAI_API_PORT
+              value: "{{ .Values.api.config.port }}"
+            - name: CRETOAI_ENABLE_SWAGGER
+              value: "{{ .Values.api.config.enableSwagger }}"
+            - name: CRETOAI_CORS_ORIGINS
+              value: "{{ .Values.api.config.corsOrigins }}"
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - sleep 15
+{{- end }}

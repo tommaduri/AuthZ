@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # Vigilia AI Node 1 (Bootstrap node)
+  vigilia-node-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vigilia-node-1
+    hostname: vigilia-node-1
+    ports:
+      - "8080:8080"   # HTTP API
+      - "8081:8081"   # WebSocket
+      - "9000:9000"   # P2P
+      - "9001:9001/udp" # QUIC
+    volumes:
+      - ./docker-data/node-1:/data
+      - ./config/node1.toml:/etc/vigilia/node.toml:ro
+    environment:
+      - RUST_LOG=info,vigilia_protocol=debug
+      - VIGILIA_NODE_ID=node-1
+      - VIGILIA_BOOTSTRAP=true
+    networks:
+      vigilia-network:
+        ipv4_address: 172.20.0.10
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/vigilia-node", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Vigilia AI Node 2
+  vigilia-node-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vigilia-node-2
+    hostname: vigilia-node-2
+    ports:
+      - "8082:8080"
+      - "8083:8081"
+      - "9002:9000"
+      - "9003:9001/udp"
+    volumes:
+      - ./docker-data/node-2:/data
+      - ./config/node2.toml:/etc/vigilia/node.toml:ro
+    environment:
+      - RUST_LOG=info,vigilia_protocol=debug
+      - VIGILIA_NODE_ID=node-2
+      - VIGILIA_BOOTSTRAP_PEER=/ip4/172.20.0.10/tcp/9000
+    networks:
+      vigilia-network:
+        ipv4_address: 172.20.0.11
+    depends_on:
+      - vigilia-node-1
+    restart: unless-stopped
+
+  # Vigilia AI Node 3
+  vigilia-node-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vigilia-node-3
+    hostname: vigilia-node-3
+    ports:
+      - "8084:8080"
+      - "8085:8081"
+      - "9004:9000"
+      - "9005:9001/udp"
+    volumes:
+      - ./docker-data/node-3:/data
+      - ./config/node3.toml:/etc/vigilia/node.toml:ro
+    environment:
+      - RUST_LOG=info,vigilia_protocol=debug
+      - VIGILIA_NODE_ID=node-3
+      - VIGILIA_BOOTSTRAP_PEER=/ip4/172.20.0.10/tcp/9000
+    networks:
+      vigilia-network:
+        ipv4_address: 172.20.0.12
+    depends_on:
+      - vigilia-node-1
+    restart: unless-stopped
+
+  # MCP Server (Model Context Protocol)
+  vigilia-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    container_name: vigilia-mcp
+    hostname: vigilia-mcp
+    ports:
+      - "8090:8090"   # MCP HTTP
+      - "8091:8091"   # MCP WebSocket
+    volumes:
+      - ./docker-data/mcp:/data
+      - ./config/mcp.toml:/etc/vigilia/mcp.toml:ro
+    environment:
+      - RUST_LOG=info,vigilia_mcp=debug
+      - VIGILIA_NODE_PEER=/ip4/172.20.0.10/tcp/9000
+    networks:
+      vigilia-network:
+        ipv4_address: 172.20.0.20
+    depends_on:
+      - vigilia-node-1
+    restart: unless-stopped
+
+networks:
+  vigilia-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  node-1-data:
+  node-2-data:
+  node-3-data:
+  mcp-data:

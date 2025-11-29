@@ -1,0 +1,95 @@
+# AuthZ Engine Policy Configuration
+# This file contains policy-related settings
+
+policies:
+  # Default policy directory
+  directory: /policies
+
+  # Policy loading configuration
+  loading:
+    watchChanges: true
+    reloadInterval: 30s
+    maxPolicies: 10000
+
+  # Policy validation
+  validation:
+    enabled: true
+    strict: false
+    checkDependencies: true
+    checkCircularReferences: true
+
+  # Policy caching
+  caching:
+    enabled: true
+    ttl: 5m
+    maxSize: 10000
+
+  # Policy compilation
+  compilation:
+    enabled: true
+    cacheCompiled: true
+    optimizeRules: true
+
+  # Supported policy types
+  supportedTypes:
+    - rbac
+    - abac
+    - delegated
+    - derived-roles
+
+  # Default rules
+  defaults:
+    deny: true  # Default deny policy
+    audit: true  # Audit all decisions
+    cache: true  # Cache decisions
+
+  # Policy versioning
+  versioning:
+    enabled: true
+    trackChanges: true
+    retentionDays: 90
+
+  # Policy expression language
+  expressionLanguage:
+    type: cel  # Common Expression Language
+    timeout: 5s
+    maxComplexity: 1000
+
+  # Policy audit configuration
+  audit:
+    enabled: true
+    logDecisions: true
+    logDenials: true
+    logErrors: true
+    retentionDays: 30
+    storageBackend: postgres
+
+# Example policy structure (reference)
+examples:
+  basicRole:
+    name: "basic-role-policy"
+    description: "Basic role-based policy"
+    version: "1.0"
+    rules:
+      - effect: allow
+        actions: ["read"]
+        resources: ["documents/*"]
+        principals: ["role:viewer"]
+
+  attributeBased:
+    name: "attribute-based-policy"
+    description: "Attribute-based access control"
+    version: "1.0"
+    rules:
+      - effect: allow
+        actions: ["write"]
+        resources: ["documents/*"]
+        condition: "user.department == 'engineering'"
+
+  delegatedPolicy:
+    name: "delegated-policy"
+    description: "Delegation-based policy"
+    version: "1.0"
+    delegates:
+      - role: "admin"
+        canDelegate: true

@@ -1,0 +1,4 @@
+# Add this to workspace Cargo.toml [workspace.dependencies]
+hmac = "0.12"
+sha2 = "0.10"
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }

@@ -1,0 +1,494 @@
+# ============================================================================
+# GitHub Actions CI/CD Pipeline - Rust Authorization Engine
+# ============================================================================
+# Complete CI/CD workflow with:
+# - Build and test on pull requests
+# - Security scanning (cargo audit, trivy)
+# - Docker image build and push
+# - Kubernetes deployment
+# - Benchmark performance comparison
+# - Code coverage reporting
+#
+# Triggers:
+# - On pull request to main/develop
+# - On push to main/develop
+# - On tag push (v*)
+# - Manual workflow dispatch
+# ============================================================================
+
+name: Rust CI/CD
+
+on:
+  # Pull request events
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Dockerfile'
+      - 'k8s/**'
+      - '.github/workflows/rust-ci.yml'
+
+  # Push events
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*.*.*'
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Dockerfile'
+      - 'k8s/**'
+
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Deploy to Kubernetes'
+        required: false
+        default: 'false'
+
+# Environment variables
+env:
+  RUST_VERSION: '1.75'
+  CARGO_TERM_COLOR: always
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+# Concurrency control - cancel in-progress runs for PRs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================================================
+  # Job 1: Build and Test
+  # Validates code quality, runs tests, and checks formatting
+  # ==========================================================================
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - beta
+        # Run on multiple OSes for cross-platform compatibility
+        os:
+          - ubuntu-latest
+          # - macos-latest  # Uncomment for macOS builds
+          # - windows-latest  # Uncomment for Windows builds
+
+    steps:
+    # Checkout code
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for version info
+
+    # Install Rust toolchain
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+
+    # Cache Rust dependencies
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        cache-on-failure: true
+
+    # Install system dependencies
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    # Check formatting
+    - name: Check code formatting
+      run: cargo fmt --all -- --check
+
+    # Run Clippy (linter)
+    - name: Run Clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+    # Build in debug mode
+    - name: Build (debug)
+      run: cargo build --verbose --all-features
+
+    # Run tests with coverage
+    - name: Run tests
+      run: cargo test --verbose --all-features
+      env:
+        RUST_BACKTRACE: 1
+
+    # Build in release mode
+    - name: Build (release)
+      run: cargo build --release --verbose --all-features
+
+    # Run integration tests
+    - name: Run integration tests
+      run: cargo test --release --test '*' --all-features
+      env:
+        RUST_BACKTRACE: 1
+
+    # Upload build artifacts
+    - name: Upload artifacts
+      if: matrix.rust == 'stable' && matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: authz-server-${{ github.sha }}
+        path: target/release/authz-server
+        retention-days: 7
+
+  # ==========================================================================
+  # Job 2: Security Scanning
+  # Runs cargo audit and dependency vulnerability checks
+  # ==========================================================================
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    # Cargo audit - check for security vulnerabilities
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+
+    - name: Run cargo audit
+      run: cargo audit --deny warnings
+      continue-on-error: true
+
+    # Cargo deny - check dependencies, licenses, advisories
+    - name: Install cargo-deny
+      run: cargo install cargo-deny
+
+    - name: Run cargo deny
+      run: cargo deny check
+      continue-on-error: true
+
+    # SBOM generation (Software Bill of Materials)
+    - name: Generate SBOM
+      run: |
+        cargo install cargo-cyclonedx
+        cargo cyclonedx --format json --output-pattern target/sbom.json
+
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom-${{ github.sha }}
+        path: target/sbom.json
+        retention-days: 30
+
+  # ==========================================================================
+  # Job 3: Benchmark
+  # Runs performance benchmarks and compares with baseline
+  # ==========================================================================
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'pull_request'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install criterion
+      run: cargo install cargo-criterion
+
+    # Run benchmarks on current branch
+    - name: Run benchmarks
+      run: cargo bench --all-features -- --output-format bencher | tee output.txt
+
+    # Compare with main branch
+    - name: Checkout main branch
+      run: |
+        git fetch origin main
+        git checkout main
+
+    - name: Run baseline benchmarks
+      run: cargo bench --all-features -- --output-format bencher | tee baseline.txt
+
+    # Compare results
+    - name: Compare benchmarks
+      run: |
+        echo "### Benchmark Comparison" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Current vs Main branch:" >> $GITHUB_STEP_SUMMARY
+        diff baseline.txt output.txt || true
+
+    # Upload benchmark results
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results-${{ github.sha }}
+        path: |
+          output.txt
+          baseline.txt
+        retention-days: 30
+
+  # ==========================================================================
+  # Job 4: Docker Build and Push
+  # Builds Docker image and pushes to GitHub Container Registry
+  # ==========================================================================
+  docker-build:
+    name: Docker Build and Push
+    runs-on: ubuntu-latest
+    needs: [build-and-test, security-scan]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Set up Docker Buildx
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # Login to GitHub Container Registry
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    # Extract metadata for Docker
+    - name: Extract Docker metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    # Build and push Docker image
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          RUST_VERSION=${{ env.RUST_VERSION }}
+          BUILD_ENV=production
+
+    # Scan Docker image for vulnerabilities
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    # Upload Trivy results to GitHub Security
+    - name: Upload Trivy results
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # ==========================================================================
+  # Job 5: Kubernetes Deployment
+  # Deploys to Kubernetes cluster (production/staging)
+  # ==========================================================================
+  k8s-deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: |
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') ||
+      github.event.inputs.deploy == 'true'
+
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+      url: https://authz.example.com
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Configure kubectl
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    # Configure kubeconfig (using GitHub secrets)
+    - name: Configure kubeconfig
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+        chmod 600 ~/.kube/config
+
+    # Set environment-specific variables
+    - name: Set environment variables
+      run: |
+        if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          echo "NAMESPACE=authz-production" >> $GITHUB_ENV
+          echo "REPLICAS=5" >> $GITHUB_ENV
+        else
+          echo "NAMESPACE=authz-staging" >> $GITHUB_ENV
+          echo "REPLICAS=2" >> $GITHUB_ENV
+        fi
+
+    # Update Kubernetes manifests
+    - name: Update manifests
+      run: |
+        # Update image tag in deployment
+        sed -i "s|image:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}|g" k8s/deployment.yaml
+
+        # Update namespace
+        sed -i "s|namespace: authz-system|namespace: ${{ env.NAMESPACE }}|g" k8s/deployment.yaml
+
+        # Update replicas
+        sed -i "s|replicas: 3|replicas: ${{ env.REPLICAS }}|g" k8s/deployment.yaml
+
+    # Apply Kubernetes manifests
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl apply -f k8s/deployment.yaml
+        kubectl rollout status deployment/authz-server -n ${{ env.NAMESPACE }} --timeout=5m
+
+    # Verify deployment
+    - name: Verify deployment
+      run: |
+        kubectl get pods -n ${{ env.NAMESPACE }} -l app=authz-server
+        kubectl get svc -n ${{ env.NAMESPACE }} authz-server
+
+    # Run smoke tests
+    - name: Run smoke tests
+      run: |
+        # Wait for service to be ready
+        kubectl wait --for=condition=ready pod -l app=authz-server -n ${{ env.NAMESPACE }} --timeout=300s
+
+        # Get service endpoint
+        SERVICE_IP=$(kubectl get svc authz-server -n ${{ env.NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+        # Health check
+        curl -f http://${SERVICE_IP}:8080/health || exit 1
+
+    # Notification on failure
+    - name: Notify deployment failure
+      if: failure()
+      run: |
+        echo "Deployment failed for ${{ env.NAMESPACE }}"
+        kubectl logs -l app=authz-server -n ${{ env.NAMESPACE }} --tail=100
+
+  # ==========================================================================
+  # Job 6: Code Coverage
+  # Generates and uploads code coverage reports
+  # ==========================================================================
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+
+    # Install tarpaulin for coverage
+    - name: Install cargo-tarpaulin
+      run: cargo install cargo-tarpaulin
+
+    # Generate coverage report
+    - name: Generate coverage
+      run: |
+        cargo tarpaulin --verbose \
+          --all-features \
+          --workspace \
+          --timeout 300 \
+          --out xml \
+          --output-dir coverage
+
+    # Upload to Codecov
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: coverage/cobertura.xml
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ==========================================================================
+  # Job 7: Release
+  # Creates GitHub release and changelog on tag push
+  # ==========================================================================
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-and-test, security-scan, docker-build]
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # Generate changelog
+    - name: Generate changelog
+      id: changelog
+      run: |
+        git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s (%h)" > CHANGELOG.md
+        cat CHANGELOG.md
+
+    # Create GitHub release
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
+        body_path: CHANGELOG.md
+        draft: false
+        prerelease: false

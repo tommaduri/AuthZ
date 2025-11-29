@@ -1,0 +1,53 @@
+---
+# Internal ClusterIP service
+apiVersion: v1
+kind: Service
+metadata:
+  name: cretoai-api
+  namespace: cretoai
+  labels:
+    app: cretoai-api
+    component: api
+spec:
+  type: ClusterIP
+  selector:
+    app: cretoai-api
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+      protocol: TCP
+  sessionAffinity: None
+
+---
+# External LoadBalancer service
+apiVersion: v1
+kind: Service
+metadata:
+  name: cretoai-api-lb
+  namespace: cretoai
+  labels:
+    app: cretoai-api
+    component: api
+  annotations:
+    # AWS Load Balancer annotations
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+    # GCP Load Balancer annotations
+    cloud.google.com/load-balancer-type: "External"
+    # Azure Load Balancer annotations
+    service.beta.kubernetes.io/azure-load-balancer-internal: "false"
+spec:
+  type: LoadBalancer
+  selector:
+    app: cretoai-api
+  ports:
+    - port: 80
+      targetPort: 8080
+      name: http
+      protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800

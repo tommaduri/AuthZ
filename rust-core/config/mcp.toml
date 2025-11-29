@@ -1,0 +1,35 @@
+# Vigilia AI MCP Server Configuration
+
+[server]
+name = "vigilia-mcp-server"
+version = "0.1.0"
+
+[network]
+http_host = "0.0.0.0"
+http_port = 8090
+ws_host = "0.0.0.0"
+ws_port = 8091
+
+[auth]
+enabled = true
+api_key_required = true
+
+[tools]
+# Available MCP tools
+enabled_tools = [
+    "dag_query",
+    "network_status",
+    "exchange_search",
+    "vault_access",
+    "crypto_sign"
+]
+
+[resources]
+# Exposed resources
+expose_dag = true
+expose_network = true
+expose_exchange = true
+
+[logging]
+level = "info"
+format = "json"

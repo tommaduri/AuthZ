@@ -1,0 +1,395 @@
+syntax = "proto3";
+
+package authz.v1;
+
+option go_package = "github.com/authz-engine/api/v1;authzv1";
+
+// AuthZ Service - Authorization decision service
+service AuthzService {
+  // Check authorization for a single resource
+  rpc Check(CheckRequest) returns (CheckResponse);
+
+  // Check authorization for multiple resources in batch
+  rpc BatchCheck(BatchCheckRequest) returns (BatchCheckResponse);
+
+  // Plan resources - get filter for resource queries
+  rpc PlanResources(PlanResourcesRequest) returns (PlanResourcesResponse);
+
+  // Health check
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+
+  // === Agentic Authorization RPCs ===
+
+  // Check with full agent pipeline (anomaly detection, explanation, enforcement)
+  rpc AgenticCheck(AgenticCheckRequest) returns (AgenticCheckResponse);
+
+  // Stream explanation chunks for a decision (useful for LLM-generated explanations)
+  rpc StreamExplanation(StreamExplanationRequest) returns (stream ExplanationChunk);
+
+  // Get agent health status
+  rpc AgentHealthCheck(AgentHealthCheckRequest) returns (AgentHealthCheckResponse);
+
+  // Get learned patterns from ANALYST agent
+  rpc GetPatterns(GetPatternsRequest) returns (GetPatternsResponse);
+
+  // Trigger pattern discovery
+  rpc DiscoverPatterns(DiscoverPatternsRequest) returns (DiscoverPatternsResponse);
+
+  // Get anomalies for a principal
+  rpc GetAnomalies(GetAnomaliesRequest) returns (GetAnomaliesResponse);
+
+  // Get pending enforcement actions
+  rpc GetPendingActions(GetPendingActionsRequest) returns (GetPendingActionsResponse);
+
+  // Approve an enforcement action
+  rpc ApproveAction(ApproveActionRequest) returns (ApproveActionResponse);
+
+  // Ask natural language policy question
+  rpc AskQuestion(AskQuestionRequest) returns (AskQuestionResponse);
+}
+
+// Principal making the request
+message Principal {
+  string id = 1;
+  repeated string roles = 2;
+  map<string, Value> attributes = 3;
+}
+
+// Resource being accessed
+message Resource {
+  string kind = 1;
+  string id = 2;
+  map<string, Value> attributes = 3;
+}
+
+// Generic value type for attributes
+message Value {
+  oneof kind {
+    string string_value = 1;
+    int64 int_value = 2;
+    double double_value = 3;
+    bool bool_value = 4;
+    ListValue list_value = 5;
+  }
+}
+
+message ListValue {
+  repeated Value values = 1;
+}
+
+// Check request
+message CheckRequest {
+  string request_id = 1;
+  Principal principal = 2;
+  Resource resource = 3;
+  repeated string actions = 4;
+  map<string, Value> aux_data = 5;
+}
+
+// Check response
+message CheckResponse {
+  string request_id = 1;
+  map<string, ActionResult> results = 2;
+  ResponseMeta meta = 3;
+}
+
+// Result for a single action
+message ActionResult {
+  Effect effect = 1;
+  string policy = 2;
+  ActionMeta meta = 3;
+}
+
+// Effect enum
+enum Effect {
+  EFFECT_UNSPECIFIED = 0;
+  EFFECT_ALLOW = 1;
+  EFFECT_DENY = 2;
+}
+
+// Metadata for action result
+message ActionMeta {
+  string matched_rule = 1;
+  repeated string effective_derived_roles = 2;
+  double evaluation_duration_ms = 3;
+}
+
+// Response metadata
+message ResponseMeta {
+  double evaluation_duration_ms = 1;
+  repeated string policies_evaluated = 2;
+}
+
+// Batch check request
+message BatchCheckRequest {
+  string request_id = 1;
+  Principal principal = 2;
+  repeated ResourceCheck resources = 3;
+}
+
+message ResourceCheck {
+  Resource resource = 1;
+  repeated string actions = 2;
+}
+
+// Batch check response
+message BatchCheckResponse {
+  string request_id = 1;
+  repeated ResourceCheckResult results = 2;
+}
+
+message ResourceCheckResult {
+  string resource_key = 1; // kind:id
+  map<string, ActionResult> results = 2;
+}
+
+// Plan resources request
+message PlanResourcesRequest {
+  string request_id = 1;
+  Principal principal = 2;
+  string resource_kind = 3;
+  string action = 4;
+}
+
+// Plan resources response
+message PlanResourcesResponse {
+  string request_id = 1;
+  FilterKind filter_kind = 2;
+  string condition = 3; // CEL expression if conditional
+}
+
+enum FilterKind {
+  FILTER_KIND_UNSPECIFIED = 0;
+  FILTER_KIND_ALWAYS_ALLOW = 1;
+  FILTER_KIND_ALWAYS_DENY = 2;
+  FILTER_KIND_CONDITIONAL = 3;
+}
+
+// Health check
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1; // "serving", "not_serving"
+  string version = 2;
+  int64 policies_loaded = 3;
+  int64 uptime_seconds = 4;
+}
+
+// === Agentic Authorization Messages ===
+
+// Agentic check request - includes options for agent pipeline
+message AgenticCheckRequest {
+  string request_id = 1;
+  Principal principal = 2;
+  Resource resource = 3;
+  repeated string actions = 4;
+  map<string, Value> aux_data = 5;
+  bool include_explanation = 6;
+}
+
+// Agentic check response - includes agent pipeline results
+message AgenticCheckResponse {
+  string request_id = 1;
+  map<string, ActionResult> results = 2;
+  ResponseMeta meta = 3;
+  AgenticMeta agentic = 4;
+}
+
+// Metadata from agent pipeline
+message AgenticMeta {
+  double anomaly_score = 1;
+  Anomaly anomaly = 2;
+  DecisionExplanation explanation = 3;
+  EnforcementResult enforcement = 4;
+  double processing_time_ms = 5;
+  repeated string agents_involved = 6;
+}
+
+// Anomaly detected by GUARDIAN agent
+message Anomaly {
+  string id = 1;
+  string type = 2; // unusual_access_time, permission_escalation, etc.
+  string severity = 3; // low, medium, high, critical
+  string description = 4;
+  double score = 5;
+  string detected_at = 6;
+  string status = 7; // open, investigating, resolved, false_positive
+  string resource_kind = 8;
+  string action = 9;
+}
+
+// Decision explanation from ADVISOR agent
+message DecisionExplanation {
+  string request_id = 1;
+  string summary = 2;
+  repeated ExplanationFactor factors = 3;
+  string natural_language = 4;
+  repeated string recommendations = 5;
+  PathToAllow path_to_allow = 6;
+}
+
+message ExplanationFactor {
+  string type = 1; // role, condition, derived_role, explicit_deny, no_match
+  string description = 2;
+  string impact = 3; // allowed, denied, neutral
+}
+
+message PathToAllow {
+  repeated string missing_roles = 1;
+  repeated MissingAttribute missing_attributes = 2;
+  repeated string required_conditions = 3;
+  repeated string suggested_actions = 4;
+}
+
+message MissingAttribute {
+  string key = 1;
+  string expected_value = 2;
+}
+
+// Enforcement result from ENFORCER agent
+message EnforcementResult {
+  bool allowed = 1;
+  string reason = 2;
+  EnforcerAction action = 3;
+}
+
+// Stream explanation request
+message StreamExplanationRequest {
+  string request_id = 1;
+  Principal principal = 2;
+  Resource resource = 3;
+  repeated string actions = 4;
+}
+
+// Explanation chunk for streaming
+message ExplanationChunk {
+  string request_id = 1;
+  string chunk_type = 2; // summary, factor, natural_language, recommendation
+  string content = 3;
+  bool is_final = 4;
+}
+
+// Agent health check
+message AgentHealthCheckRequest {}
+
+message AgentHealthCheckResponse {
+  string status = 1; // healthy, degraded, unhealthy
+  map<string, AgentHealth> agents = 2;
+  InfrastructureHealth infrastructure = 3;
+  int64 uptime_seconds = 4;
+}
+
+message AgentHealth {
+  string agent_id = 1;
+  string agent_type = 2;
+  string state = 3; // initializing, ready, processing, error, shutdown
+  string last_activity = 4;
+  AgentMetrics metrics = 5;
+  repeated string errors = 6;
+}
+
+message AgentMetrics {
+  int64 processed_count = 1;
+  int64 error_count = 2;
+  double avg_processing_time_ms = 3;
+  string last_processed_at = 4;
+}
+
+message InfrastructureHealth {
+  string store = 1; // connected, disconnected
+  string event_bus = 2; // connected, disconnected
+}
+
+// Get patterns request/response
+message GetPatternsRequest {}
+
+message GetPatternsResponse {
+  int32 count = 1;
+  repeated LearnedPattern patterns = 2;
+}
+
+message LearnedPattern {
+  string id = 1;
+  string type = 2; // access_correlation, temporal_pattern, etc.
+  string description = 3;
+  double confidence = 4;
+  int32 sample_size = 5;
+  string discovered_at = 6;
+  string last_updated = 7;
+  bool is_approved = 8;
+  string suggested_policy_rule = 9;
+}
+
+// Discover patterns request/response
+message DiscoverPatternsRequest {}
+
+message DiscoverPatternsResponse {
+  string message = 1;
+  int32 discovered = 2;
+  repeated LearnedPattern patterns = 3;
+}
+
+// Get anomalies request/response
+message GetAnomaliesRequest {
+  string principal_id = 1;
+}
+
+message GetAnomaliesResponse {
+  string principal_id = 1;
+  int32 count = 2;
+  repeated Anomaly anomalies = 3;
+}
+
+// Get pending actions request/response
+message GetPendingActionsRequest {}
+
+message GetPendingActionsResponse {
+  int32 count = 1;
+  repeated EnforcerAction actions = 2;
+}
+
+message EnforcerAction {
+  string id = 1;
+  string type = 2; // rate_limit, temporary_block, require_mfa, etc.
+  string priority = 3; // low, medium, high, critical
+  string status = 4; // pending, executing, completed, failed, cancelled
+  string triggered_at = 5;
+  ActionTrigger triggered_by = 6;
+  bool can_rollback = 7;
+  string executed_at = 8;
+  ActionResult action_result = 9;
+}
+
+message ActionTrigger {
+  string agent_type = 1;
+  string reason = 2;
+  repeated string related_ids = 3;
+}
+
+message ActionResultDetails {
+  bool success = 1;
+  string message = 2;
+  repeated string affected_entities = 3;
+}
+
+// Approve action request/response
+message ApproveActionRequest {
+  string action_id = 1;
+  string approved_by = 2;
+}
+
+message ApproveActionResponse {
+  string message = 1;
+  EnforcerAction action = 2;
+}
+
+// Ask question request/response
+message AskQuestionRequest {
+  string question = 1;
+}
+
+message AskQuestionResponse {
+  string question = 1;
+  string answer = 2;
+  string generated_at = 3;
+}

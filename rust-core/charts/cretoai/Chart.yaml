@@ -1,0 +1,19 @@
+apiVersion: v2
+name: cretoai
+description: A Helm chart for CretoAI Distributed Consensus Cluster
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - blockchain
+  - consensus
+  - dag
+  - bft
+  - quantum-resistant
+home: https://github.com/cretoai/cretoai
+sources:
+  - https://github.com/cretoai/cretoai
+maintainers:
+  - name: CretoAI Team
+    email: team@cretoai.io
+icon: https://cretoai.io/logo.png

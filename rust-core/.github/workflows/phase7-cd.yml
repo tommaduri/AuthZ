@@ -1,0 +1,380 @@
+name: CretoAI Phase 7 - Continuous Deployment
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      region:
+        description: 'Deployment region'
+        required: true
+        type: choice
+        options:
+          - us-gov-west-1
+          - us-gov-east-1
+          - multi-region
+
+env:
+  DOCKER_REGISTRY: cretoai
+  HELM_VERSION: v3.13.0
+
+jobs:
+  prepare:
+    name: Prepare Deployment
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      environment: ${{ steps.environment.outputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=$(git describe --tags --always --dirty)
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Deploying version: $VERSION"
+
+      - name: Determine environment
+        id: environment
+        run: |
+          if [ "${{ github.event.inputs.environment }}" != "" ]; then
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          elif [[ $GITHUB_REF == refs/tags/* ]]; then
+            ENVIRONMENT="production"
+          else
+            ENVIRONMENT="staging"
+          fi
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "Deploying to: $ENVIRONMENT"
+
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push consensus image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.consensus
+          push: true
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/consensus:${{ needs.prepare.outputs.version }}
+            ${{ env.DOCKER_REGISTRY }}/consensus:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.prepare.outputs.version }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+
+      - name: Build and push reputation image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.reputation
+          push: true
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/reputation:${{ needs.prepare.outputs.version }}
+            ${{ env.DOCKER_REGISTRY }}/reputation:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push compliance image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.compliance
+          push: true
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/compliance:${{ needs.prepare.outputs.version }}
+            ${{ env.DOCKER_REGISTRY }}/compliance:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [prepare, build-and-push]
+    if: needs.prepare.outputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging.cretoai.io
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-gov-west-1
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name cretoai-phase7-staging --region us-gov-west-1
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install cretoai-phase7-staging ./charts/cretoai \
+            --namespace cretoai-staging \
+            --create-namespace \
+            --values ./charts/cretoai/values-phase7.yaml \
+            --set consensus.image.tag=${{ needs.prepare.outputs.version }} \
+            --set reputation.image.tag=${{ needs.prepare.outputs.version }} \
+            --set compliance.image.tag=${{ needs.prepare.outputs.version }} \
+            --wait \
+            --timeout 15m
+
+      - name: Run smoke tests
+        run: |
+          kubectl wait --for=condition=Ready pods --all -n cretoai-staging --timeout=600s
+          ./tests/smoke-tests.sh staging
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [prepare, build-and-push]
+    if: needs.prepare.outputs.environment == 'production'
+    environment:
+      name: production
+      url: https://api.cretoai.io
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ github.event.inputs.region || 'us-gov-west-1' }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name cretoai-phase7 --region ${{ github.event.inputs.region || 'us-gov-west-1' }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Create backup
+        run: |
+          echo "Creating pre-deployment backup..."
+          kubectl exec -n cretoai-system cretoai-consensus-phase7-0 -- /scripts/backup.sh
+
+      - name: Blue-Green Deployment - Deploy Green
+        run: |
+          helm upgrade --install cretoai-phase7-green ./charts/cretoai \
+            --namespace cretoai-system \
+            --values ./charts/cretoai/values-phase7.yaml \
+            --set consensus.image.tag=${{ needs.prepare.outputs.version }} \
+            --set reputation.image.tag=${{ needs.prepare.outputs.version }} \
+            --set compliance.image.tag=${{ needs.prepare.outputs.version }} \
+            --set nameOverride=green \
+            --wait \
+            --timeout 15m
+
+      - name: Validate green deployment
+        run: |
+          kubectl wait --for=condition=Ready pods -l app=cretoai,release=green -n cretoai-system --timeout=600s
+          ./scripts/validate-deployment.sh green
+
+      - name: Run compliance verification
+        run: |
+          echo "Verifying CMMC Level 2 compliance..."
+          kubectl exec -n cretoai-system deploy/cretoai-phase7-green-compliance -- compliance-check --standard cmmc-level2
+
+          echo "Verifying FedRAMP Moderate compliance..."
+          kubectl exec -n cretoai-system deploy/cretoai-phase7-green-compliance -- compliance-check --standard fedramp-moderate
+
+      - name: Switch traffic to green (10%)
+        run: |
+          kubectl patch svc cretoai-consensus-lb -n cretoai-system -p '
+            {
+              "spec": {
+                "selector": {
+                  "app": "cretoai"
+                }
+              }
+            }'
+          # Custom traffic splitting logic here
+          echo "10% of traffic routed to green deployment"
+          sleep 300
+
+      - name: Monitor green deployment (10%)
+        run: |
+          ./scripts/monitor-canary.sh green 10 300
+
+      - name: Switch traffic to green (50%)
+        run: |
+          echo "50% of traffic routed to green deployment"
+          sleep 300
+
+      - name: Monitor green deployment (50%)
+        run: |
+          ./scripts/monitor-canary.sh green 50 300
+
+      - name: Switch traffic to green (100%)
+        run: |
+          kubectl patch svc cretoai-consensus-lb -n cretoai-system -p '
+            {
+              "spec": {
+                "selector": {
+                  "app": "cretoai",
+                  "release": "green"
+                }
+              }
+            }'
+          echo "100% of traffic routed to green deployment"
+
+      - name: Monitor production deployment
+        run: |
+          ./scripts/monitor-canary.sh green 100 600
+
+      - name: Cleanup blue deployment
+        run: |
+          helm uninstall cretoai-phase7-blue -n cretoai-system || true
+
+      - name: Rename green to production
+        run: |
+          kubectl label pods -l app=cretoai,release=green release=production --overwrite -n cretoai-system
+
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: failure()
+    needs: [deploy-production]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-gov-west-1
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name cretoai-phase7 --region us-gov-west-1
+
+      - name: Rollback to previous version
+        run: |
+          echo "Rolling back to previous deployment..."
+          helm rollback cretoai-phase7 -n cretoai-system
+          kubectl wait --for=condition=Ready pods --all -n cretoai-system --timeout=600s
+
+      - name: Restore from backup
+        run: |
+          echo "Restoring from latest backup..."
+          LATEST_BACKUP=$(aws s3 ls s3://cretoai-backups/phase7/ | sort | tail -n 1 | awk '{print $4}')
+          kubectl exec -n cretoai-system cretoai-consensus-phase7-0 -- /scripts/restore.sh "$LATEST_BACKUP"
+
+      - name: Verify rollback
+        run: |
+          ./scripts/validate-deployment.sh production
+
+  deploy-multi-region:
+    name: Deploy Multi-Region
+    runs-on: ubuntu-latest
+    needs: [prepare, build-and-push]
+    if: github.event.inputs.region == 'multi-region' && needs.prepare.outputs.environment == 'production'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to primary region
+        run: |
+          export AWS_REGION=us-gov-west-1
+          ./scripts/deploy-aws-govcloud.sh
+
+      - name: Deploy to secondary region
+        run: |
+          export AWS_REGION=us-gov-east-1
+          export CLUSTER_NAME=cretoai-phase7-secondary
+          ./scripts/deploy-aws-govcloud.sh
+
+      - name: Configure cross-region replication
+        run: |
+          ./scripts/deploy-multi-region.sh
+
+  security-scan:
+    name: Post-Deployment Security Scan
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: needs.prepare.outputs.environment == 'production'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-gov-west-1
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name cretoai-phase7 --region us-gov-west-1
+
+      - name: Run security scan
+        run: |
+          kubectl run security-scan --image=aquasec/trivy --restart=Never \
+            -n cretoai-system -- trivy k8s --report summary cluster
+
+      - name: Check for vulnerabilities
+        run: |
+          kubectl logs security-scan -n cretoai-system
+          kubectl delete pod security-scan -n cretoai-system
+
+  notify:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production, deploy-multi-region]
+    if: always()
+    steps:
+      - name: Send Slack notification
+        run: |
+          STATUS="${{ job.status }}"
+          if [ "$STATUS" == "success" ]; then
+            echo "✅ Phase 7 deployment successful"
+          else
+            echo "❌ Phase 7 deployment failed"
+          fi

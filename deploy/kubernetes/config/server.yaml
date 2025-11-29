@@ -1,0 +1,112 @@
+# AuthZ Engine Server Configuration
+# This file contains the server-level configuration
+
+server:
+  # gRPC configuration
+  grpc:
+    port: 50051
+    maxConcurrentStreams: 100
+    maxReceiveMessageSize: 4194304  # 4MB
+    maxSendMessageSize: 4194304
+    keepaliveParams:
+      maxIdleConns: 100
+      maxOpenConns: 100
+      connMaxLifetime: 5m
+
+  # HTTP configuration for health/metrics
+  http:
+    port: 8080
+    readTimeout: 15s
+    writeTimeout: 15s
+    idleTimeout: 60s
+    maxHeaderSize: 1048576
+
+  # TLS configuration (optional)
+  tls:
+    enabled: false
+    certFile: /etc/authz/certs/server.crt
+    keyFile: /etc/authz/certs/server.key
+
+# Logging configuration
+logging:
+  level: info  # debug, info, warn, error
+  format: json  # json, console
+  encoding: utf-8
+  outputPaths:
+    - stdout
+  errorOutputPaths:
+    - stderr
+
+# Caching configuration
+cache:
+  enabled: true
+  type: memory  # memory, redis
+  size: 100000
+  ttl: 5m
+  evictionPolicy: lru  # lru, lfu, fifo
+
+# Database configuration
+database:
+  postgres:
+    host: authz-postgres
+    port: 5432
+    database: authz_engine
+    user: authz
+    password: ${POSTGRES_PASSWORD}
+    maxOpenConns: 20
+    maxIdleConns: 5
+    connMaxLifetime: 5m
+    sslMode: disable
+
+# Redis configuration
+redis:
+  enabled: true
+  host: authz-redis
+  port: 6379
+  database: 0
+  maxRetries: 3
+  poolSize: 10
+  idleTimeout: 5m
+
+# Policy configuration
+policy:
+  directory: /policies
+  watchChanges: true
+  reloadInterval: 30s
+  validation:
+    enabled: true
+    strict: false
+
+# Feature flags
+features:
+  asyncDecisions: true
+  policyValidation: true
+  auditLogging: true
+  metricsExport: true
+  caching: true
+  compression: true
+
+# Observability
+observability:
+  metrics:
+    enabled: true
+    port: 8080
+    path: /metrics
+    interval: 15s
+  tracing:
+    enabled: false
+    samplingRate: 0.1
+  profiling:
+    enabled: false
+    port: 6060
+
+# Graceful shutdown
+gracefulShutdown:
+  timeout: 30s
+  delayBeforeShutdown: 5s
+
+# Performance tuning
+performance:
+  workers: 16
+  batchSize: 100
+  queueSize: 1000

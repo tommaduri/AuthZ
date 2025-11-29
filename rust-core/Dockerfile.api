@@ -1,0 +1,68 @@
+# Multi-stage build for CretoAI REST API Server
+# Production-ready Docker image with quantum-resistant binary
+
+# Stage 1: Builder
+FROM rust:1.75-slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    cmake \
+    clang \
+    llvm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Copy workspace configuration
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+
+# Build release binary for API server
+RUN cargo build --release --bin cretoai-api-server
+
+# Verify binary exists
+RUN ls -lh /app/target/release/cretoai-api-server
+
+# Stage 2: Runtime
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 cretoai && \
+    mkdir -p /app /data && \
+    chown -R cretoai:cretoai /app /data
+
+# Copy binary from builder
+COPY --from=builder /app/target/release/cretoai-api-server /usr/local/bin/cretoai-api-server
+
+# Verify binary is executable
+RUN chmod +x /usr/local/bin/cretoai-api-server && \
+    /usr/local/bin/cretoai-api-server --version || echo "Binary ready"
+
+# Switch to non-root user
+USER cretoai
+WORKDIR /app
+
+# Expose API port
+EXPOSE 8080
+
+# Set environment variables
+ENV RUST_LOG=info,cretoai_api=debug
+ENV RUST_BACKTRACE=1
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the API server
+CMD ["/usr/local/bin/cretoai-api-server"]

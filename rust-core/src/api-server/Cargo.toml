@@ -1,0 +1,53 @@
+[package]
+name = "cretoai-api-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+cretoai-authz = { path = "../authz" }
+cretoai-core = { path = "../core" }
+
+# Async runtime
+tokio.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+
+# Web framework
+axum = { version = "0.7", features = ["macros", "multipart", "ws"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["fs", "trace", "cors", "compression-full", "request-id"] }
+hyper = { version = "1.1", features = ["full"] }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Validation
+validator = { version = "0.18", features = ["derive"] }
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging & Tracing
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Metrics
+prometheus.workspace = true
+
+# OpenAPI/Swagger
+utoipa = { version = "4.2", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
+utoipa-rapidoc = { version = "3.0", features = ["axum"] }
+utoipa-redoc = { version = "3.0", features = ["axum"] }
+
+# Utilities
+uuid.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+reqwest = { version = "0.11", features = ["json"] }

@@ -1,0 +1,49 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: authz-engine-pdb
+  namespace: authz-system
+  labels:
+    app: authz-engine
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: authz-engine
+  unhealthyPodEvictionPolicy: AlwaysAllow
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authz-pdb-policy
+  namespace: authz-system
+  labels:
+    app: authz-engine
+    config: pdb
+data:
+  disruption-policy.yaml: |
+    # Pod Disruption Budget Policy
+    # Ensures minimum availability during cluster maintenance
+
+    minAvailable: 2  # At least 2 pods must be available at all times
+    maxUnavailable: 1  # At most 1 pod can be unavailable
+
+    gracePeriod: 30  # Graceful shutdown period in seconds
+
+    # Eviction scenarios this PDB covers:
+    # - Node maintenance
+    # - Cluster upgrades
+    # - Scaling down
+    # - Pod preemption
+    # - Voluntary evictions
+
+    # This PDB does NOT protect against:
+    # - Deliberate pod deletion
+    # - Unschedulable pods
+    # - Pods without resource requests
+    # - Pods with hostPort
+
+    serviceLevelObjectives:
+      availability: 0.99  # 99% availability target
+      maxDowntime: 43200  # Maximum acceptable downtime per month (12 hours)

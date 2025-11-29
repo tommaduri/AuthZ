@@ -1,0 +1,289 @@
+syntax = "proto3";
+
+package authz.v1;
+
+option go_package = "github.com/authz-engine/go-core/api/proto/authz/v1;authzv1";
+
+import "google/protobuf/struct.proto";
+
+// AuthzService provides high-performance authorization checking
+service AuthzService {
+  // Check performs a single authorization check
+  rpc Check(CheckRequest) returns (CheckResponse);
+
+  // CheckBatch performs multiple authorization checks in parallel
+  rpc CheckBatch(CheckBatchRequest) returns (CheckBatchResponse);
+
+  // CheckStream provides bidirectional streaming for high-throughput scenarios
+  rpc CheckStream(stream CheckRequest) returns (stream CheckResponse);
+
+  // LoadPolicies loads policies from a source
+  rpc LoadPolicies(LoadPoliciesRequest) returns (LoadPoliciesResponse);
+
+  // ReloadPolicies triggers a policy reload
+  rpc ReloadPolicies(ReloadPoliciesRequest) returns (ReloadPoliciesResponse);
+}
+
+// CheckRequest represents an authorization check request
+message CheckRequest {
+  // Unique request identifier
+  string request_id = 1;
+
+  // The principal (user/service) requesting access
+  Principal principal = 2;
+
+  // The resource being accessed
+  Resource resource = 3;
+
+  // Actions being requested (e.g., "read", "write", "delete")
+  repeated string actions = 4;
+
+  // Additional context for policy evaluation
+  google.protobuf.Struct context = 5;
+
+  // Include detailed metadata in response
+  bool include_metadata = 6;
+}
+
+// Principal represents the entity requesting access
+message Principal {
+  // Unique identifier (e.g., user ID, service account)
+  string id = 1;
+
+  // Roles assigned to the principal
+  repeated string roles = 2;
+
+  // Additional attributes for ABAC
+  google.protobuf.Struct attributes = 3;
+
+  // Hierarchical scope for this principal (e.g., "acme.corp.engineering")
+  string scope = 4;
+}
+
+// Resource represents the resource being accessed
+message Resource {
+  // Resource type/kind (e.g., "document", "avatar", "payout")
+  string kind = 1;
+
+  // Unique resource identifier
+  string id = 2;
+
+  // Resource attributes for ABAC
+  google.protobuf.Struct attributes = 3;
+
+  // Hierarchical scope for this resource (e.g., "acme.corp.engineering")
+  string scope = 4;
+}
+
+// CheckResponse contains the authorization decision
+message CheckResponse {
+  // Echoed request ID
+  string request_id = 1;
+
+  // Results per action
+  map<string, ActionResult> results = 2;
+
+  // Evaluation metadata (if requested)
+  ResponseMetadata metadata = 3;
+}
+
+// ActionResult contains the decision for a single action
+message ActionResult {
+  // The authorization effect
+  Effect effect = 1;
+
+  // Name of the policy that matched
+  string policy = 2;
+
+  // Name of the rule within the policy
+  string rule = 3;
+
+  // Whether a matching rule was found
+  bool matched = 4;
+
+  // Additional metadata about the decision
+  map<string, string> meta = 5;
+}
+
+// Effect represents the authorization decision
+enum Effect {
+  EFFECT_UNSPECIFIED = 0;
+  EFFECT_ALLOW = 1;
+  EFFECT_DENY = 2;
+}
+
+// ResponseMetadata contains evaluation details
+message ResponseMetadata {
+  // Time taken to evaluate (microseconds)
+  double evaluation_duration_us = 1;
+
+  // Number of policies evaluated
+  int32 policies_evaluated = 2;
+
+  // Names of policies that matched
+  repeated string matched_policies = 3;
+
+  // Cache hit or miss
+  bool cache_hit = 4;
+
+  // Scope resolution information
+  ScopeResolution scope_resolution = 5;
+
+  // Phase 3: Policy resolution info
+  PolicyResolution policy_resolution = 6;
+}
+
+// ScopeResolution contains scope resolution result
+message ScopeResolution {
+  // The scope that matched (or "(global)" for unscoped)
+  string matched_scope = 1;
+
+  // Scopes checked during resolution (most to least specific)
+  repeated string inheritance_chain = 2;
+
+  // Whether a scoped policy was found
+  bool scoped_policy_matched = 3;
+}
+
+// PrincipalSelector for principal policies (Phase 3)
+message PrincipalSelector {
+  // Specific principal ID (e.g., "user:alice")
+  string id = 1;
+
+  // Match ANY of these roles
+  repeated string roles = 2;
+
+  // Principal's scope context
+  string scope = 3;
+}
+
+// ResourceSelector for principal policies (Phase 3)
+message ResourceSelector {
+  // Resource kind (supports wildcard *)
+  string kind = 1;
+
+  // Scope pattern (supports ** wildcard)
+  string scope = 2;
+}
+
+// PolicyResolution metadata (Phase 3)
+message PolicyResolution {
+  // Whether principal policies matched
+  bool principal_policies_matched = 1;
+
+  // Whether resource policies matched
+  bool resource_policies_matched = 2;
+
+  // Evaluation order (e.g., ["principal-specific", "resource-scoped"])
+  repeated string evaluation_order = 3;
+
+  // Nested scope resolution info
+  ScopeResolution scope_resolution = 4;
+}
+
+// CheckBatchRequest contains multiple check requests
+message CheckBatchRequest {
+  repeated CheckRequest requests = 1;
+}
+
+// CheckBatchResponse contains multiple check responses
+message CheckBatchResponse {
+  repeated CheckResponse responses = 1;
+
+  // Total batch processing time (microseconds)
+  double total_duration_us = 2;
+}
+
+// LoadPoliciesRequest for loading policies
+message LoadPoliciesRequest {
+  // Policy source (file path, URL, or inline)
+  string source = 1;
+
+  // Source type
+  SourceType source_type = 2;
+
+  // Inline policy content (if source_type is INLINE)
+  repeated Policy policies = 3;
+}
+
+enum SourceType {
+  SOURCE_TYPE_UNSPECIFIED = 0;
+  SOURCE_TYPE_FILE = 1;
+  SOURCE_TYPE_URL = 2;
+  SOURCE_TYPE_INLINE = 3;
+}
+
+// Policy represents an authorization policy
+message Policy {
+  // API version
+  string api_version = 1;
+
+  // Policy name
+  string name = 2;
+
+  // Resource kind this policy applies to
+  string resource_kind = 3;
+
+  // Policy rules
+  repeated Rule rules = 4;
+
+  // Hierarchical scope where this policy applies (e.g., "acme.corp.engineering")
+  string scope = 5;
+
+  // Phase 3: Marks this as a principal policy
+  bool principal_policy = 10;
+
+  // Phase 3: Principal selector for principal policies
+  PrincipalSelector principal = 11;
+
+  // Phase 3: Resource selectors for principal policies
+  repeated ResourceSelector resources = 12;
+}
+
+// Rule represents a single authorization rule
+message Rule {
+  // Rule name
+  string name = 1;
+
+  // Actions this rule applies to
+  repeated string actions = 2;
+
+  // Effect if rule matches
+  Effect effect = 3;
+
+  // CEL condition (optional)
+  string condition = 4;
+
+  // Roles that can match this rule
+  repeated string roles = 5;
+
+  // Derived roles references
+  repeated string derived_roles = 6;
+}
+
+// LoadPoliciesResponse
+message LoadPoliciesResponse {
+  // Number of policies loaded
+  int32 policies_loaded = 1;
+
+  // Any validation errors
+  repeated string errors = 2;
+}
+
+// ReloadPoliciesRequest triggers policy reload
+message ReloadPoliciesRequest {
+  // Force reload even if no changes detected
+  bool force = 1;
+}
+
+// ReloadPoliciesResponse
+message ReloadPoliciesResponse {
+  // Whether reload was successful
+  bool success = 1;
+
+  // Number of policies after reload
+  int32 policy_count = 2;
+
+  // Reload duration (milliseconds)
+  double reload_duration_ms = 3;
+}

@@ -1,0 +1,91 @@
+---
+# Headless service for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cretoai.fullname" . }}-nodes
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cretoai.labels" . | nindent 4 }}
+    app: cretoai-node
+    component: consensus
+  {{- with .Values.node.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.node.service.type }}
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "cretoai.node.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{ .Values.node.service.p2pPort }}
+      targetPort: p2p
+      name: p2p
+      protocol: TCP
+    - port: {{ .Values.node.service.quicPort }}
+      targetPort: quic
+      name: quic
+      protocol: UDP
+    - port: {{ .Values.node.service.metricsPort }}
+      targetPort: metrics
+      name: metrics
+      protocol: TCP
+
+{{- if .Values.api.enabled }}
+---
+# API ClusterIP service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cretoai.fullname" . }}-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cretoai.labels" . | nindent 4 }}
+    app: cretoai-api
+    component: api
+  {{- with .Values.api.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "cretoai.api.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{ .Values.api.service.targetPort }}
+      targetPort: http
+      name: http
+      protocol: TCP
+  sessionAffinity: None
+
+---
+# API LoadBalancer service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cretoai.fullname" . }}-api-lb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cretoai.labels" . | nindent 4 }}
+    app: cretoai-api
+    component: api
+  annotations:
+    {{- with .Values.api.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.api.service.type }}
+  selector:
+    {{- include "cretoai.api.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{ .Values.api.service.port }}
+      targetPort: {{ .Values.api.service.targetPort }}
+      name: http
+      protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+{{- end }}

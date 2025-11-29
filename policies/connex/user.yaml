@@ -1,0 +1,161 @@
+# User Resource Policy for Avatar Connex
+# Manages authorization for user profile and account operations
+apiVersion: authz.engine/v1
+kind: ResourcePolicy
+metadata:
+  name: user-policy
+  description: Authorization rules for user resources in Avatar Connex
+spec:
+  resource: user
+  version: "1.0"
+  importDerivedRoles:
+    - connex-derived-roles
+  rules:
+    # View own profile - users can view their own profile
+    - name: view-own-profile
+      description: Allow users to view their own profile
+      actions: [view]
+      effect: allow
+      derivedRoles: [owner]
+
+    # View public profiles - users can view other public profiles
+    - name: view-public-profile
+      description: Allow users to view public profiles
+      actions: [view]
+      effect: allow
+      roles: [user, subscriber, influencer, admin]
+      condition:
+        expression: "resource.visibility == 'public'"
+
+    # Edit own profile - users can edit their own profile
+    - name: edit-own-profile
+      description: Allow users to edit their own profile
+      actions: [edit, update]
+      effect: allow
+      derivedRoles: [owner]
+
+    # Update own settings - users can update their settings
+    - name: update-own-settings
+      description: Allow users to update their account settings
+      actions: [update_settings, update_preferences, update_notifications]
+      effect: allow
+      derivedRoles: [owner]
+
+    # Change own password - owner only
+    - name: change-own-password
+      description: Allow users to change their own password
+      actions: [change_password]
+      effect: allow
+      derivedRoles: [owner]
+
+    # Admin view any profile
+    - name: admin-view-any-profile
+      description: Allow admins to view any user profile
+      actions: [view, list]
+      effect: allow
+      roles: [admin]
+
+    # Admin edit any profile
+    - name: admin-edit-any-profile
+      description: Allow admins to edit any user profile
+      actions: [edit, update]
+      effect: allow
+      roles: [admin]
+
+    # Admin suspend user
+    - name: admin-suspend-user
+      description: Allow admins to suspend user accounts
+      actions: [suspend]
+      effect: allow
+      roles: [admin]
+      condition:
+        expression: "resource.id != principal.id"
+
+    # Admin reactivate user
+    - name: admin-reactivate-user
+      description: Allow admins to reactivate suspended user accounts
+      actions: [reactivate]
+      effect: allow
+      roles: [admin]
+      condition:
+        expression: "resource.status == 'suspended'"
+
+    # Super admin delete user
+    - name: super-admin-delete-user
+      description: Allow super admins to delete user accounts
+      actions: [delete]
+      effect: allow
+      roles: [super_admin]
+      condition:
+        expression: "resource.id != principal.id && resource.role != 'super_admin'"
+
+    # Admin assign roles
+    - name: admin-assign-roles
+      description: Allow admins to assign roles to users
+      actions: [assign_role]
+      effect: allow
+      roles: [admin]
+      condition:
+        expression: "!('super_admin' in resource.requestedRoles)"
+
+    # Super admin assign any role
+    - name: super-admin-assign-any-role
+      description: Allow super admins to assign any role including admin
+      actions: [assign_role, remove_role]
+      effect: allow
+      roles: [super_admin]
+      condition:
+        expression: "resource.id != principal.id"
+
+    # View own activity log
+    - name: view-own-activity
+      description: Allow users to view their own activity log
+      actions: [view_activity]
+      effect: allow
+      derivedRoles: [owner]
+
+    # Admin view user activity
+    - name: admin-view-user-activity
+      description: Allow admins to view any user activity log
+      actions: [view_activity, view_audit_log]
+      effect: allow
+      roles: [admin]
+
+    # Verify influencer - admin only
+    - name: admin-verify-influencer
+      description: Allow admins to verify influencer accounts
+      actions: [verify, unverify]
+      effect: allow
+      roles: [admin]
+      condition:
+        expression: "'influencer' in resource.roles"
+
+    # Team member access - for shared resources
+    - name: team-member-view-profile
+      description: Allow team members to view profiles in their team
+      actions: [view]
+      effect: allow
+      derivedRoles: [team_member]
+
+    # Export own data - GDPR compliance
+    - name: export-own-data
+      description: Allow users to export their own data (GDPR)
+      actions: [export_data]
+      effect: allow
+      derivedRoles: [owner]
+
+    # Request account deletion - owner only
+    - name: request-account-deletion
+      description: Allow users to request deletion of their own account
+      actions: [request_deletion]
+      effect: allow
+      derivedRoles: [owner]
+
+    # Admin impersonate - for support purposes
+    - name: admin-impersonate-user
+      description: Allow admins to impersonate users for support
+      actions: [impersonate]
+      effect: allow
+      roles: [admin]
+      condition:
+        expression: "resource.role != 'admin' && resource.role != 'super_admin' && principal.attr.canImpersonate == true"

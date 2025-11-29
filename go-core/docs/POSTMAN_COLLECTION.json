@@ -1,0 +1,577 @@
+{
+  "info": {
+    "name": "Authorization Engine API",
+    "description": "Comprehensive API collection for the Authorization Engine REST API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080/v1",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "your-jwt-token-here",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/../health",
+              "host": ["{{base_url}}"],
+              "path": ["..", "health"]
+            }
+          }
+        },
+        {
+          "name": "Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Authorization",
+      "item": [
+        {
+          "name": "Check Authorization",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"principal\": {\n    \"id\": \"user123\",\n    \"roles\": [\"developer\"]\n  },\n  \"action\": \"read\",\n  \"resource\": {\n    \"kind\": \"document\",\n    \"id\": \"doc456\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/authorization/check",
+              "host": ["{{base_url}}"],
+              "path": ["authorization", "check"]
+            }
+          }
+        },
+        {
+          "name": "Check Authorization with Attributes",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"principal\": {\n    \"id\": \"user123\",\n    \"roles\": [\"developer\"],\n    \"attributes\": {\n      \"department\": \"engineering\",\n      \"level\": \"senior\"\n    }\n  },\n  \"action\": \"write\",\n  \"resource\": {\n    \"kind\": \"repository\",\n    \"id\": \"repo789\",\n    \"attributes\": {\n      \"visibility\": \"private\",\n      \"team\": \"backend\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/authorization/check",
+              "host": ["{{base_url}}"],
+              "path": ["authorization", "check"]
+            }
+          }
+        },
+        {
+          "name": "Batch Check Resources",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"principal\": {\n    \"id\": \"user123\",\n    \"roles\": [\"developer\"]\n  },\n  \"action\": \"read\",\n  \"resources\": [\n    {\n      \"kind\": \"document\",\n      \"id\": \"doc456\"\n    },\n    {\n      \"kind\": \"document\",\n      \"id\": \"doc789\"\n    },\n    {\n      \"kind\": \"repository\",\n      \"id\": \"repo123\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/authorization/check-resources",
+              "host": ["{{base_url}}"],
+              "path": ["authorization", "check-resources"]
+            }
+          }
+        },
+        {
+          "name": "Get Allowed Actions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/authorization/allowed-actions?principal_id=user123&resource_kind=document&resource_id=doc456&roles=developer,team-lead",
+              "host": ["{{base_url}}"],
+              "path": ["authorization", "allowed-actions"],
+              "query": [
+                {
+                  "key": "principal_id",
+                  "value": "user123"
+                },
+                {
+                  "key": "resource_kind",
+                  "value": "document"
+                },
+                {
+                  "key": "resource_id",
+                  "value": "doc456"
+                },
+                {
+                  "key": "roles",
+                  "value": "developer,team-lead"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Policies",
+      "item": [
+        {
+          "name": "List Policies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/policies?page=1&page_size=20",
+              "host": ["{{base_url}}"],
+              "path": ["policies"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                },
+                {
+                  "key": "resource_kind",
+                  "value": "document",
+                  "disabled": true
+                },
+                {
+                  "key": "principal_role",
+                  "value": "developer",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Policy by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/policies/policy-dev-read-docs",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "policy-dev-read-docs"]
+            }
+          }
+        },
+        {
+          "name": "Create Resource Policy",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"policy-dev-write-docs\",\n  \"version\": \"1.0\",\n  \"description\": \"Developers can write documentation\",\n  \"resource_policy\": {\n    \"resource\": \"document\",\n    \"version\": \"1.0\",\n    \"rules\": [\n      {\n        \"actions\": [\"write\", \"update\"],\n        \"effect\": \"EFFECT_ALLOW\",\n        \"roles\": [\"developer\"]\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies",
+              "host": ["{{base_url}}"],
+              "path": ["policies"]
+            }
+          }
+        },
+        {
+          "name": "Create Principal Policy",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"policy-user123-admin\",\n  \"version\": \"1.0\",\n  \"description\": \"User123 admin permissions\",\n  \"principal_policy\": {\n    \"principal\": \"user123\",\n    \"version\": \"1.0\",\n    \"rules\": [\n      {\n        \"resource\": \"document\",\n        \"actions\": [\n          {\n            \"name\": \"*\",\n            \"effect\": \"EFFECT_ALLOW\"\n          }\n        ]\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies",
+              "host": ["{{base_url}}"],
+              "path": ["policies"]
+            }
+          }
+        },
+        {
+          "name": "Create Derived Role",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"derived-role-senior-dev\",\n  \"version\": \"1.0\",\n  \"description\": \"Senior developer derived role\",\n  \"derived_roles\": {\n    \"name\": \"senior_developer\",\n    \"definitions\": [\n      {\n        \"name\": \"senior_developer\",\n        \"parent_roles\": [\"developer\"],\n        \"condition\": {\n          \"match\": {\n            \"expr\": \"P.attr.level == 'senior' && P.attr.tenure_years >= 2\"\n          }\n        }\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies",
+              "host": ["{{base_url}}"],
+              "path": ["policies"]
+            }
+          }
+        },
+        {
+          "name": "Update Policy",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"policy-dev-read-docs\",\n  \"version\": \"1.1\",\n  \"description\": \"Developers can read and comment on documentation\",\n  \"resource_policy\": {\n    \"resource\": \"document\",\n    \"version\": \"1.1\",\n    \"rules\": [\n      {\n        \"actions\": [\"read\", \"comment\"],\n        \"effect\": \"EFFECT_ALLOW\",\n        \"roles\": [\"developer\"]\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies/policy-dev-read-docs",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "policy-dev-read-docs"]
+            }
+          }
+        },
+        {
+          "name": "Delete Policy",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/policies/policy-dev-read-docs",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "policy-dev-read-docs"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Export & Import",
+      "item": [
+        {
+          "name": "Export All Policies",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"json\",\n  \"include_metadata\": true,\n  \"include_principals\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies/export",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "export"]
+            }
+          }
+        },
+        {
+          "name": "Export Specific Policies",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"policy_ids\": [\n    \"policy-dev-read-docs\",\n    \"policy-admin-all\"\n  ],\n  \"format\": \"json\",\n  \"include_metadata\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies/export",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "export"]
+            }
+          }
+        },
+        {
+          "name": "Import Policies (Dry Run)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"json\",\n  \"policies\": [\n    {\n      \"id\": \"policy-new-dev\",\n      \"version\": \"1.0\",\n      \"description\": \"New developer policy\",\n      \"resource_policy\": {\n        \"resource\": \"document\",\n        \"version\": \"1.0\",\n        \"rules\": [\n          {\n            \"actions\": [\"read\"],\n            \"effect\": \"EFFECT_ALLOW\",\n            \"roles\": [\"developer\"]\n          }\n        ]\n      }\n    }\n  ],\n  \"mode\": \"create_only\",\n  \"dry_run\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies/import",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "import"]
+            }
+          }
+        },
+        {
+          "name": "Import Policies",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"json\",\n  \"policies\": [\n    {\n      \"id\": \"policy-new-dev\",\n      \"version\": \"1.0\",\n      \"description\": \"New developer policy\",\n      \"resource_policy\": {\n        \"resource\": \"document\",\n        \"version\": \"1.0\",\n        \"rules\": [\n          {\n            \"actions\": [\"read\"],\n            \"effect\": \"EFFECT_ALLOW\",\n            \"roles\": [\"developer\"]\n          }\n        ]\n      }\n    }\n  ],\n  \"mode\": \"create_only\",\n  \"dry_run\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies/import",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "import"]
+            }
+          }
+        },
+        {
+          "name": "Import with Overwrite",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"json\",\n  \"policies\": [\n    {\n      \"id\": \"policy-dev-read-docs\",\n      \"version\": \"1.1\",\n      \"description\": \"Updated developer policy\",\n      \"resource_policy\": {\n        \"resource\": \"document\",\n        \"version\": \"1.1\",\n        \"rules\": [\n          {\n            \"actions\": [\"read\", \"comment\"],\n            \"effect\": \"EFFECT_ALLOW\",\n            \"roles\": [\"developer\"]\n          }\n        ]\n      }\n    }\n  ],\n  \"mode\": \"overwrite\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies/import",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "import"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Backup & Restore",
+      "item": [
+        {
+          "name": "Create Backup",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"daily-backup-2025-01-27\",\n  \"description\": \"Daily backup before maintenance\",\n  \"include_principals\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies/backup",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "backup"]
+            }
+          }
+        },
+        {
+          "name": "Restore from Backup (Dry Run)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"backup_id\": \"backup-20250127-103000\",\n  \"mode\": \"merge\",\n  \"conflict_resolution\": \"keep_existing\",\n  \"dry_run\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies/restore",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "restore"]
+            }
+          }
+        },
+        {
+          "name": "Restore from Backup (Merge)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"backup_id\": \"backup-20250127-103000\",\n  \"mode\": \"merge\",\n  \"conflict_resolution\": \"keep_existing\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies/restore",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "restore"]
+            }
+          }
+        },
+        {
+          "name": "Restore from Backup (Replace All)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"backup_id\": \"backup-20250127-103000\",\n  \"mode\": \"replace_all\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/policies/restore",
+              "host": ["{{base_url}}"],
+              "path": ["policies", "restore"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Principals",
+      "item": [
+        {
+          "name": "Get Principal",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/principals/user123",
+              "host": ["{{base_url}}"],
+              "path": ["principals", "user123"]
+            }
+          }
+        },
+        {
+          "name": "Create Principal",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roles\": [\"developer\"],\n  \"attributes\": {\n    \"department\": \"engineering\",\n    \"level\": \"junior\",\n    \"location\": \"US\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/principals/user456",
+              "host": ["{{base_url}}"],
+              "path": ["principals", "user456"]
+            }
+          }
+        },
+        {
+          "name": "Update Principal",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roles\": [\"developer\", \"team-lead\"],\n  \"attributes\": {\n    \"department\": \"engineering\",\n    \"level\": \"senior\",\n    \"location\": \"US\",\n    \"tenure_years\": 3\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/principals/user123",
+              "host": ["{{base_url}}"],
+              "path": ["principals", "user123"]
+            }
+          }
+        },
+        {
+          "name": "Delete Principal",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/principals/user123",
+              "host": ["{{base_url}}"],
+              "path": ["principals", "user123"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,129 @@
+# Avatar Connex - Subscription Resource Policy
+#
+# This policy governs access to subscription resources.
+# Subscriptions are between fans and influencers.
+
+apiVersion: authz.engine/v1
+kind: ResourcePolicy
+metadata:
+  name: subscription-policy
+  description: Authorization policy for subscription resources
+  version: "1.0.0"
+  labels:
+    service: finance-service
+    domain: monetization
+
+spec:
+  resource: subscription
+
+  rules:
+    # Fans can view their own subscriptions
+    - name: fan-view-own
+      actions: [view, list]
+      effect: allow
+      roles: [fan, user]
+      condition:
+        expression: resource.fanId == principal.id
+
+    # Influencers can view subscriptions to their content
+    - name: influencer-view-subscribers
+      actions: [view, list]
+      effect: allow
+      roles: [influencer]
+      condition:
+        expression: resource.influencerId == principal.id
+
+    # Fans can create subscriptions
+    - name: fan-create
+      actions: [create]
+      effect: allow
+      roles: [fan, user]
+
+    # Fans can cancel their own subscriptions
+    - name: fan-cancel-own
+      actions: [cancel]
+      effect: allow
+      roles: [fan, user]
+      condition:
+        expression: resource.fanId == principal.id
+
+    # Influencers can create subscription plans
+    - name: influencer-create-plan
+      actions: [create_plan, update_plan, delete_plan]
+      effect: allow
+      roles: [influencer]
+      condition:
+        expression: resource.influencerId == principal.id
+
+    # Admins have full access
+    - name: admin-full-access
+      actions: ["*"]
+      effect: allow
+      roles: [admin, super_admin]
+
+    # Deny operations on cancelled subscriptions
+    - name: deny-cancelled
+      actions: [update, renew]
+      effect: deny
+      condition:
+        expression: resource.status == "cancelled"
+
+    # Admin/finance refund - only admins or finance can process refunds
+    - name: admin-refund
+      actions: [refund]
+      effect: allow
+      roles: [admin, super_admin, finance]
+      condition:
+        expression: resource.refundEligible == true || principal.attr.canOverrideRefund == true
+
+    # Finance view all subscriptions for billing
+    - name: finance-view-all
+      actions: [view, list, view_billing, export_billing]
+      effect: allow
+      roles: [finance]
+
+    # Subscription owner can cancel their own
+    - name: owner-cancel
+      actions: [cancel]
+      effect: allow
+      roles: [user, fan, subscriber]
+      condition:
+        expression: resource.fanId == principal.id && resource.status == "active" && resource.canCancel == true
+
+    # Upgrade subscription - owner can upgrade
+    - name: owner-upgrade
+      actions: [upgrade]
+      effect: allow
+      roles: [user, fan, subscriber]
+      condition:
+        expression: resource.fanId == principal.id && resource.status == "active"
+
+    # Downgrade subscription - owner can downgrade
+    - name: owner-downgrade
+      actions: [downgrade]
+      effect: allow
+      roles: [user, fan, subscriber]
+      condition:
+        expression: resource.fanId == principal.id && resource.status == "active"
+
+    # Pause subscription - owner can pause if pauses remaining
+    - name: owner-pause
+      actions: [pause]
+      effect: allow
+      roles: [user, fan, subscriber]
+      condition:
+        expression: resource.fanId == principal.id && resource.status == "active" && resource.pausesRemaining > 0
+
+    # Resume subscription - owner can resume paused
+    - name: owner-resume
+      actions: [resume]
+      effect: allow
+      roles: [user, fan, subscriber]
+      condition:
+        expression: resource.fanId == principal.id && resource.status == "paused"
+
+    # Admin suspend subscription for violations
+    - name: admin-suspend
+      actions: [suspend]
+      effect: allow
+      roles: [admin, super_admin]

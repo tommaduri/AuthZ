@@ -1,0 +1,63 @@
+[package]
+name = "cretoai-dag"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Internal dependencies
+cretoai-crypto = { path = "../crypto" }
+
+# Workspace dependencies
+tokio = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+
+# DAG and graph structures
+petgraph = { workspace = true }
+rayon = { workspace = true }
+
+# Database
+rocksdb = { workspace = true }
+sled = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+rand = { workspace = true }
+blake3 = { workspace = true }
+
+# Phase 6: Backup and compression
+tar = "0.4"
+flate2 = "1.0"
+
+# WASM support
+wasm-bindgen = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+proptest = { workspace = true }
+criterion = { workspace = true }
+tempfile = "3.8"
+
+[features]
+default = ["rocksdb-backend"]
+rocksdb-backend = []
+sled-backend = []
+wasm = ["wasm-bindgen", "sled-backend"]
+network-integration = []  # Network integration features - placeholder for future implementation
+
+[[bench]]
+name = "dag_bench"
+harness = false

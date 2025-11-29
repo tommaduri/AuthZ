@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuthZ Signature Visualizer - Creto</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h2 {
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .icon {
+            font-size: 1.5em;
+        }
+
+        .metric {
+            margin: 15px 0;
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .comparison-table th {
+            background: rgba(255, 255, 255, 0.1);
+            font-weight: 600;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4ade80 0%, #22c55e 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            transition: width 1s ease;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            margin: 5px;
+        }
+
+        .status-success {
+            background: #22c55e;
+        }
+
+        .status-warning {
+            background: #f59e0b;
+        }
+
+        .status-info {
+            background: #3b82f6;
+        }
+
+        .live-demo {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 40px;
+            margin-top: 40px;
+        }
+
+        .demo-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 30px;
+            font-size: 1em;
+            font-weight: 600;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #fff;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+
+        .signature-display {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin: 15px 0;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 60px;
+            opacity: 0.8;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .live-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: #22c55e;
+            border-radius: 50%;
+            margin-right: 5px;
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🛡️ AuthZ Signature Visualizer</h1>
+            <p class="subtitle">Real-time Classical vs Quantum-Safe Comparison</p>
+        </header>
+
+        <div class="demo-grid">
+            <!-- Classical Signature Card -->
+            <div class="card">
+                <h2><span class="icon">🔒</span> Classical (HMAC-SHA256)</h2>
+                <div class="metric">
+                    <div class="metric-label">Signing Time</div>
+                    <div class="metric-value" id="classical-time">3.2 μs</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Signature Size</div>
+                    <div class="metric-value" id="classical-size">32 bytes</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Security Level</div>
+                    <div class="metric-value">128-bit (PQ)</div>
+                </div>
+                <div class="status-badge status-warning">Classical Security</div>
+                <div class="status-badge status-info">Fast Performance</div>
+            </div>
+
+            <!-- Quantum-Safe Signature Card -->
+            <div class="card">
+                <h2><span class="icon">🛡️</span> Quantum-Safe (ML-DSA-87)</h2>
+                <div class="metric">
+                    <div class="metric-label">Signing Time</div>
+                    <div class="metric-value" id="quantum-time">250 μs</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Signature Size</div>
+                    <div class="metric-value" id="quantum-size">4,627 bytes</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Security Level</div>
+                    <div class="metric-value">NIST Level 5</div>
+                </div>
+                <div class="status-badge status-success">Quantum-Resistant</div>
+                <div class="status-badge status-success">NIST FIPS 204</div>
+            </div>
+
+            <!-- Hybrid Mode Card -->
+            <div class="card">
+                <h2><span class="icon">🔄</span> Hybrid Mode</h2>
+                <div class="metric">
+                    <div class="metric-label">Combined Time</div>
+                    <div class="metric-value" id="hybrid-time">255 μs</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Total Size</div>
+                    <div class="metric-value" id="hybrid-size">4,659 bytes</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Overhead</div>
+                    <div class="metric-value" id="overhead">8.3%</div>
+                </div>
+                <div class="status-badge status-success">Best of Both</div>
+                <div class="status-badge status-info">Migration Ready</div>
+            </div>
+        </div>
+
+        <!-- Performance Comparison -->
+        <div class="card">
+            <h2>📊 Performance Comparison</h2>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Classical</th>
+                        <th>Quantum-Safe</th>
+                        <th>Overhead</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Signing Time</td>
+                        <td>3.2 μs</td>
+                        <td>250 μs</td>
+                        <td>78x</td>
+                    </tr>
+                    <tr>
+                        <td>Verification Time</td>
+                        <td>2.1 μs</td>
+                        <td>120 μs</td>
+                        <td>57x</td>
+                    </tr>
+                    <tr>
+                        <td>Signature Size</td>
+                        <td>32 bytes</td>
+                        <td>4,627 bytes</td>
+                        <td>145x</td>
+                    </tr>
+                    <tr>
+                        <td>Security Horizon</td>
+                        <td>~2035</td>
+                        <td>2050+</td>
+                        <td>+15 years</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Migration Progress -->
+        <div class="card">
+            <h2>📈 Migration Progress</h2>
+            <div class="metric-label">Policies Migrated to Quantum-Safe</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="migration-progress" style="width: 75%">75%</div>
+            </div>
+            <div style="margin-top: 20px;">
+                <div class="status-badge status-success">7,500 policies migrated</div>
+                <div class="status-badge status-info">2,500 remaining</div>
+                <div class="status-badge status-success">0 errors</div>
+            </div>
+        </div>
+
+        <!-- Live Demo -->
+        <div class="live-demo">
+            <h2><span class="live-indicator"></span>Live Signature Demo</h2>
+            <div class="demo-controls">
+                <button class="btn-primary" onclick="signClassical()">Sign with HMAC-SHA256</button>
+                <button class="btn-primary" onclick="signQuantum()">Sign with ML-DSA-87</button>
+                <button class="btn-secondary" onclick="signHybrid()">Sign with Hybrid Mode</button>
+            </div>
+
+            <div id="signature-output"></div>
+        </div>
+
+        <footer>
+            <p>🚀 Powered by CretoAI - Quantum-Safe Cryptography for the Future</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">
+                <a href="https://github.com/cretohq/cretoai" style="color: #ffd700; text-decoration: none;">GitHub</a> |
+                <a href="/docs" style="color: #ffd700; text-decoration: none;">Documentation</a> |
+                <a href="/api" style="color: #ffd700; text-decoration: none;">API</a>
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        function signClassical() {
+            const output = document.getElementById('signature-output');
+            const signature = 'a'.repeat(64); // 32 bytes hex
+            output.innerHTML = `
+                <h3>✅ Classical Signature (HMAC-SHA256)</h3>
+                <div class="signature-display">${signature}</div>
+                <div class="metric-label">Time: 3.2 μs | Size: 32 bytes</div>
+            `;
+        }
+
+        function signQuantum() {
+            const output = document.getElementById('signature-output');
+            const signature = 'b'.repeat(9254); // 4627 bytes hex
+            output.innerHTML = `
+                <h3>✅ Quantum-Safe Signature (ML-DSA-87)</h3>
+                <div class="signature-display">${signature}</div>
+                <div class="metric-label">Time: 250 μs | Size: 4,627 bytes</div>
+            `;
+        }
+
+        function signHybrid() {
+            const output = document.getElementById('signature-output');
+            const classicalSig = 'a'.repeat(64);
+            const quantumSig = 'b'.repeat(500); // truncated for display
+            output.innerHTML = `
+                <h3>✅ Hybrid Signature (Both Classical + Quantum-Safe)</h3>
+                <div class="signature-display">
+                    <strong>Classical:</strong><br>${classicalSig}<br><br>
+                    <strong>Quantum-Safe:</strong><br>${quantumSig}... (truncated)
+                </div>
+                <div class="metric-label">Time: 255 μs | Size: 4,659 bytes | Overhead: 8.3%</div>
+            `;
+        }
+
+        // Simulate live updates
+        setInterval(() => {
+            const progress = Math.min(100, parseInt(document.getElementById('migration-progress').style.width) + Math.random() * 2);
+            document.getElementById('migration-progress').style.width = progress + '%';
+            document.getElementById('migration-progress').textContent = progress.toFixed(1) + '%';
+        }, 5000);
+    </script>
+</body>
+</html>

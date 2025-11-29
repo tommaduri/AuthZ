@@ -1,0 +1,154 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cretoai.fullname" . }}-reputation
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cretoai.labels" . | nindent 4 }}
+    component: reputation
+spec:
+  replicas: {{ .Values.reputation.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cretoai.selectorLabels" . | nindent 6 }}
+      component: reputation
+  template:
+    metadata:
+      labels:
+        {{- include "cretoai.selectorLabels" . | nindent 8 }}
+        component: reputation
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/metrics"
+    spec:
+      {{- if .Values.security.podSecurityContext }}
+      securityContext:
+        {{- toYaml .Values.security.podSecurityContext | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: reputation
+        image: "{{ .Values.global.imageRegistry }}/{{ .Values.reputation.image.repository }}:{{ .Values.reputation.image.tag }}"
+        imagePullPolicy: {{ .Values.reputation.image.pullPolicy | default .Values.global.imagePullPolicy }}
+        ports:
+        - containerPort: 8081
+          name: api
+          protocol: TCP
+        - containerPort: 9091
+          name: metrics
+          protocol: TCP
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: RUST_LOG
+          value: "info,reputation=debug"
+        - name: REPUTATION_DECAY_RATE
+          value: {{ .Values.reputation.scoring.decayRate | quote }}
+        - name: REPUTATION_DECAY_INTERVAL
+          value: {{ .Values.reputation.scoring.decayInterval | quote }}
+        - name: MIN_REPUTATION_SCORE
+          value: {{ .Values.reputation.scoring.minScore | quote }}
+        - name: MAX_REPUTATION_SCORE
+          value: {{ .Values.reputation.scoring.maxScore | quote }}
+        - name: INITIAL_REPUTATION_SCORE
+          value: {{ .Values.reputation.scoring.initialScore | quote }}
+        - name: SUCCESSFUL_VOTE_REWARD
+          value: {{ .Values.reputation.scoring.successfulVoteReward | quote }}
+        - name: FAILED_VOTE_PENALTY
+          value: {{ .Values.reputation.scoring.failedVotePenalty | quote }}
+        - name: BYZANTINE_BEHAVIOR_PENALTY
+          value: {{ .Values.reputation.scoring.byzantineBehaviorPenalty | quote }}
+        resources:
+          {{- toYaml .Values.reputation.resources | nindent 10 }}
+        volumeMounts:
+        - name: reputation-data
+          mountPath: /data/reputation
+        {{- if .Values.consensus.tls.enabled }}
+        - name: tls
+          mountPath: /etc/tls
+          readOnly: true
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      volumes:
+      - name: reputation-data
+        {{- if .Values.reputation.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "cretoai.fullname" . }}-reputation
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- if .Values.consensus.tls.enabled }}
+      - name: tls
+        secret:
+          secretName: {{ .Values.consensus.tls.secretName }}
+      {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cretoai.fullname" . }}-reputation
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cretoai.labels" . | nindent 4 }}
+    component: reputation
+spec:
+  type: {{ .Values.reputation.service.type }}
+  ports:
+  - port: {{ .Values.reputation.service.port }}
+    targetPort: 8081
+    protocol: TCP
+    name: api
+  - port: 9091
+    targetPort: 9091
+    protocol: TCP
+    name: metrics
+  selector:
+    {{- include "cretoai.selectorLabels" . | nindent 4 }}
+    component: reputation
+
+---
+{{- if .Values.reputation.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cretoai.fullname" . }}-reputation
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cretoai.labels" . | nindent 4 }}
+    component: reputation
+spec:
+  accessModes:
+    {{- toYaml .Values.reputation.persistence.accessModes | nindent 4 }}
+  storageClassName: {{ .Values.reputation.persistence.storageClass | default .Values.global.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.reputation.persistence.size }}
+{{- end }}

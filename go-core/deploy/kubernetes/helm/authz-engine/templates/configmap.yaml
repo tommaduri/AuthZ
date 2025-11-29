@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "authz-engine.fullname" . }}
+  labels:
+    {{- include "authz-engine.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    log:
+      level: {{ .Values.config.logLevel }}
+      format: {{ .Values.config.logFormat }}
+
+    server:
+      grpc_port: {{ .Values.config.grpcPort }}
+      http_port: {{ .Values.config.httpPort }}
+      metrics_port: {{ .Values.config.metricsPort }}
+
+    cache:
+      enabled: {{ .Values.config.cache.enabled }}
+      {{- if .Values.config.cache.enabled }}
+      size: {{ .Values.config.cache.size }}
+      ttl: {{ .Values.config.cache.ttl }}
+      {{- end }}
+
+    metrics:
+      enabled: {{ .Values.config.metrics.enabled }}
+      port: {{ .Values.config.metrics.port }}
+
+    jwt:
+      enabled: {{ .Values.config.jwt.enabled }}
+      {{- if .Values.config.jwt.enabled }}
+      issuer: {{ .Values.config.jwt.issuer | quote }}
+      audience: {{ .Values.config.jwt.audience | quote }}
+      {{- end }}
+
+    {{- if .Values.config.redis.enabled }}
+    redis:
+      enabled: true
+      addr: {{ .Values.config.redis.addr | quote }}
+      db: {{ .Values.config.redis.db }}
+    {{- end }}

@@ -1,0 +1,98 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+metadata:
+  name: authz-engine-base
+  namespace: authz-system
+
+# Namespace
+namespace: authz-system
+
+# Resources to include in all variants
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+  - hpa.yaml
+  - pdb.yaml
+  - ingress.yaml
+
+# Common labels applied to all resources
+commonLabels:
+  app: authz-engine
+  managed-by: kustomize
+  version: v1
+
+# Common annotations applied to all resources
+commonAnnotations:
+  organization: authz-engine
+  managed-by: kustomize
+
+# Name prefix for all resources
+namePrefix: authz-
+
+# Images to use
+images:
+  - name: authz-engine
+    newName: authz-engine
+    newTag: v1.0.0
+
+# Replicas configuration
+replicas:
+  - name: authz-engine
+    count: 3
+
+# ConfigMap generator
+configMapGenerator:
+  - name: authz-config
+    behavior: create
+    files:
+      - config/server.yaml
+      - config/policies.yaml
+
+# Vars for template substitution
+vars:
+  - name: AUTHZ_NAMESPACE
+    objref:
+      kind: Namespace
+      name: authz-system
+    fieldref:
+      fieldpath: metadata.name
+  - name: GRPC_SERVICE_HOST
+    objref:
+      kind: Service
+      name: authz-grpc
+    fieldref:
+      fieldpath: metadata.name
+  - name: HTTP_SERVICE_HOST
+    objref:
+      kind: Service
+      name: authz-http
+    fieldref:
+      fieldpath: metadata.name
+
+---
+# Base configuration file (to be placed in deploy/kubernetes/base/)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kustomization-meta
+  namespace: authz-system
+data:
+  base-description: |
+    AuthZ Engine Base Kustomization
+
+    This is the base configuration for the AuthZ Engine deployment.
+    It includes all core resources needed for a production deployment.
+
+    Resources:
+    - Namespace with resource quotas and network policies
+    - Deployment with 3 replicas, resource limits, and probes
+    - Services (gRPC, HTTP, API, Headless)
+    - ConfigMaps for configuration management
+    - HorizontalPodAutoscaler for dynamic scaling
+    - PodDisruptionBudget for high availability
+    - Ingress for external access with TLS
+
+    Usage:
+    kubectl apply -k ./base/

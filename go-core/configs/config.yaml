@@ -1,0 +1,80 @@
+# AuthZ Engine Go Core Configuration
+
+server:
+  grpc:
+    # gRPC server address
+    address: ":9090"
+    # Maximum concurrent streams per connection
+    max_concurrent_streams: 1000
+    # Keepalive settings
+    keepalive:
+      time: 30s
+      timeout: 10s
+      min_time: 10s
+  http:
+    # HTTP server for health/metrics
+    address: ":8080"
+
+engine:
+  # Default effect when no policy matches
+  default_effect: deny
+  # Number of parallel workers for policy evaluation
+  parallel_workers: 16
+  # Maximum policies to evaluate per request
+  max_policies_per_request: 100
+
+cache:
+  # Enable caching
+  enabled: true
+  # Cache type (lru, arc)
+  type: lru
+  # Maximum cache entries
+  size: 100000
+  # Time-to-live for cache entries
+  ttl: 5m
+  # Cleanup interval for expired entries
+  cleanup_interval: 1m
+
+policy:
+  store:
+    # Store type (file, memory, etcd)
+    type: file
+    # Path to policies directory
+    path: ./policies
+    # Watch for file changes
+    watch: true
+    # Reload interval
+    reload_interval: 30s
+
+consensus:
+  # Enable distributed consensus
+  enabled: false
+  # Protocol (raft, pbft, gossip)
+  protocol: raft
+  # Peer addresses
+  peers: []
+  # Consensus timeout
+  timeout: 5s
+
+observability:
+  logging:
+    # Log level (debug, info, warn, error)
+    level: info
+    # Log format (json, text)
+    format: json
+    # Output (stdout, file)
+    output: stdout
+  metrics:
+    # Enable Prometheus metrics
+    enabled: true
+    # Metrics endpoint path
+    endpoint: /metrics
+  tracing:
+    # Enable OpenTelemetry tracing
+    enabled: false
+    # OTLP endpoint
+    endpoint: localhost:4317
+    # Service name
+    service_name: authz-engine
+    # Sample rate (0.0 - 1.0)
+    sample_rate: 0.1

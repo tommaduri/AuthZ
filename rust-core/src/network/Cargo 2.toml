@@ -1,0 +1,86 @@
+[package]
+name = "cretoai-network"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Internal dependencies
+cretoai-core = { path = "../core" }
+cretoai-crypto = { path = "../crypto" }
+# Note: cretoai-mcp removed to break circular dependency (mcp -> dag -> network -> mcp)
+
+# Workspace dependencies
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+
+# Networking - LibP2P with full features
+libp2p = { workspace = true }
+libp2p-quic = { workspace = true }
+quinn = "0.10"
+rustls = { version = "0.21", features = ["dangerous_configuration"] }
+rustls-pemfile = "2.0"
+rcgen = "0.11"
+webpki = { workspace = true }
+ring = { workspace = true }
+x509-parser = "0.16"
+parking_lot = "0.12"
+bytes = "1.5"
+
+# NAT traversal
+stun_codec = "0.3"
+bytecodec = "0.4"
+# Note: TURN support to be implemented with custom protocol
+
+# Peer discovery
+mdns-sd = "0.11"
+
+# Utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+bincode = { workspace = true }
+blake3 = { workspace = true }
+rand = { workspace = true }
+dashmap = "5.5"
+once_cell = "1.19"
+
+# WASM support
+wasm-bindgen = { workspace = true, optional = true }
+wasm-bindgen-futures = { workspace = true, optional = true }
+web-sys = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+criterion = { workspace = true }
+rand = { workspace = true }
+
+[features]
+default = ["experimental-quic"]
+wasm = ["wasm-bindgen", "wasm-bindgen-futures", "web-sys"]
+# mcp-integration removed to break circular dependency
+legacy-libp2p = []
+experimental-quic = []
+
+[[bench]]
+name = "network_bench"
+harness = false
+
+[[bench]]
+name = "connection_pool_bench"
+harness = false
+
+[[test]]
+name = "connection_pool_tests"
+path = "tests/connection_pool_tests.rs"

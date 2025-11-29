@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cretoai.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cretoai.labels" . | nindent 4 }}
+    app: cretoai
+data:
+  node.toml: |
+    [node]
+    log_level = "{{ .Values.node.config.logLevel }}"
+    data_dir = "/data"
+
+    [consensus]
+    algorithm = "{{ .Values.node.config.consensus.algorithm }}"
+    quorum_threshold = {{ .Values.node.config.consensus.quorumThreshold }}
+    finality_timeout_ms = {{ .Values.node.config.consensus.finalityTimeoutMs }}
+    max_pending_vertices = {{ .Values.node.config.consensus.maxPendingVertices }}
+
+    [network]
+    listen_addr = "{{ .Values.node.config.network.listenAddr }}"
+    quic_port = {{ .Values.node.config.network.quicPort }}
+    max_connections = {{ .Values.node.config.network.maxConnections }}
+
+    [storage]
+    backend = "{{ .Values.node.config.storage.backend }}"
+    path = "/data/db"
+    cache_size_mb = {{ .Values.node.config.storage.cacheSizeMb }}
+    write_buffer_mb = {{ .Values.node.config.storage.writeBufferMb }}
+    enable_compression = {{ .Values.node.config.storage.enableCompression }}
+
+    [crypto]
+    signature_algorithm = "{{ .Values.node.config.crypto.signatureAlgorithm }}"
+    hash_algorithm = "{{ .Values.node.config.crypto.hashAlgorithm }}"
+    key_path = "/data/keys"
+
+    [metrics]
+    enabled = {{ .Values.node.config.metrics.enabled }}
+    port = {{ .Values.node.config.metrics.port }}
+    endpoint = "{{ .Values.node.config.metrics.endpoint }}"

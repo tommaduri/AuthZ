@@ -1,0 +1,76 @@
+[package]
+name = "cretoai-crypto"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Workspace dependencies
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Post-Quantum Cryptography
+pqcrypto = { workspace = true }
+pqcrypto-dilithium = { workspace = true }
+pqcrypto-kyber = { workspace = true }
+pqcrypto-sphincsplus = { workspace = true }
+pqcrypto-traits = { workspace = true }
+
+# Classical Cryptography (for hybrid schemes)
+ed25519-dalek = { workspace = true }
+x25519-dalek = { workspace = true }
+
+# Hashing
+sha3 = { workspace = true }
+blake3 = { workspace = true, features = ["rayon", "std", "mmap"] }
+
+# Random number generation
+rand = { workspace = true }
+rand_core = { workspace = true }
+getrandom = { workspace = true }
+
+# Parallel processing
+rayon = { workspace = true }
+
+# WASM support
+wasm-bindgen = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+proptest = { workspace = true }
+criterion = { workspace = true }
+hex = "0.4"
+
+[features]
+default = []
+wasm = ["wasm-bindgen", "getrandom/js"]
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+blake3 = { workspace = true, features = ["rayon", "std", "mmap"] }
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+blake3 = { workspace = true, features = ["rayon", "std", "mmap"] }
+
+[[bench]]
+name = "crypto_bench"
+harness = false
+
+[[bench]]
+name = "simd_hash_bench"
+harness = false
+
+[[bench]]
+name = "simd_intrinsics_bench"
+harness = false
+
+[[bench]]
+name = "batch_verify_bench"
+harness = false

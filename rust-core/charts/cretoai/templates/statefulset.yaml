@@ -1,0 +1,180 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "cretoai.fullname" . }}-node
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cretoai.labels" . | nindent 4 }}
+    app: cretoai-node
+    component: consensus
+spec:
+  serviceName: {{ include "cretoai.fullname" . }}-nodes
+  replicas: {{ .Values.node.replicaCount }}
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "cretoai.node.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cretoai.node.selectorLabels" . | nindent 8 }}
+        component: consensus
+      annotations:
+        prometheus.io/scrape: "{{ .Values.monitoring.enabled }}"
+        prometheus.io/port: "{{ .Values.node.config.metrics.port }}"
+        prometheus.io/path: "{{ .Values.node.config.metrics.endpoint }}"
+        {{- with .Values.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "cretoai.imagePullSecrets" . | nindent 6 }}
+      {{- if .Values.node.affinity.podAntiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          {{- if eq .Values.node.affinity.podAntiAffinity.type "required" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values: [cretoai-node]
+              topologyKey: kubernetes.io/hostname
+          {{- else }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values: [cretoai-node]
+                topologyKey: kubernetes.io/hostname
+          {{- end }}
+      {{- end }}
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        {{- toYaml .Values.security.podSecurityContext | nindent 8 }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      initContainers:
+        - name: init-config
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              set -ex
+              mkdir -p /data/db /data/keys
+              NODE_ID=$(echo $POD_NAME | sed 's/.*-//')
+              echo "NODE_ID=$NODE_ID" > /data/node-id
+              chmod -R 755 /data
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: node
+          image: "{{ .Values.global.imageRegistry }}{{ .Values.node.image.repository }}:{{ .Values.node.image.tag }}"
+          imagePullPolicy: {{ .Values.node.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.node.service.p2pPort }}
+              name: p2p
+              protocol: TCP
+            - containerPort: {{ .Values.node.service.quicPort }}
+              name: quic
+              protocol: UDP
+            - containerPort: {{ .Values.node.service.metricsPort }}
+              name: metrics
+              protocol: TCP
+          env:
+            - name: RUST_LOG
+              value: "{{ .Values.node.config.logLevel }},cretoai=debug"
+            - name: RUST_BACKTRACE
+              value: "1"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: BOOTSTRAP_PEERS
+              value: {{ range $i := until (int .Values.node.replicaCount) }}/dns4/{{ include "cretoai.fullname" $ }}-node-{{ $i }}.{{ include "cretoai.fullname" $ }}-nodes.{{ $.Release.Namespace }}.svc.cluster.local/udp/{{ $.Values.node.service.quicPort }}/quic{{ if lt $i (sub (int $.Values.node.replicaCount) 1) }},{{ end }}{{ end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/cretoai
+              readOnly: true
+          resources:
+            {{- toYaml .Values.node.resources | nindent 12 }}
+          {{- if .Values.node.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: liveness
+            initialDelaySeconds: {{ .Values.node.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.node.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.node.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.node.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.node.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: readiness
+            initialDelaySeconds: {{ .Values.node.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.node.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.node.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.node.readinessProbe.failureThreshold }}
+          {{- end }}
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    echo "Initiating graceful shutdown..."
+                    kill -TERM 1
+                    sleep 30
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "cretoai.fullname" . }}-config
+  {{- if .Values.node.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "cretoai.labels" . | nindent 10 }}
+      spec:
+        accessModes:
+          - {{ .Values.node.persistence.accessMode }}
+        {{- if or .Values.node.persistence.storageClass (include "cretoai.storageClass" .) }}
+        storageClassName: {{ include "cretoai.storageClass" . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.node.persistence.size }}
+  {{- end }}

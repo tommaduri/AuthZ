@@ -1,0 +1,272 @@
+{
+  "dashboard": {
+    "title": "CretoAI Distributed Consensus Cluster",
+    "tags": ["cretoai", "consensus", "dag", "blockchain"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Consensus Metrics",
+        "type": "row",
+        "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1}
+      },
+      {
+        "id": 2,
+        "title": "Vertices Finalized per Second",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 1, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(cretoai_vertices_finalized_total[1m])",
+            "legendFormat": "{{pod}}"
+          }
+        ],
+        "yaxes": [
+          {"label": "Vertices/sec", "format": "short"},
+          {"show": false}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Finality Time (P50, P95, P99)",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 1, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(cretoai_finality_time_seconds_bucket[5m]))",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(cretoai_finality_time_seconds_bucket[5m]))",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(cretoai_finality_time_seconds_bucket[5m]))",
+            "legendFormat": "P99"
+          }
+        ],
+        "yaxes": [
+          {"label": "Latency (seconds)", "format": "s"},
+          {"show": false}
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Quorum Participation Rate",
+        "type": "gauge",
+        "gridPos": {"x": 0, "y": 9, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "cretoai_quorum_participation_ratio",
+            "legendFormat": "{{pod}}"
+          }
+        ],
+        "gauge": {
+          "maxValue": 1,
+          "minValue": 0,
+          "show": true,
+          "thresholds": [
+            {"value": 0.67, "color": "green"},
+            {"value": 0.5, "color": "yellow"},
+            {"value": 0.33, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "title": "Active Consensus Nodes",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 9, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "count(up{app=\"cretoai-node\"} == 1)"
+          }
+        ],
+        "thresholds": [
+          {"value": 3, "color": "green"},
+          {"value": 2, "color": "yellow"},
+          {"value": 1, "color": "red"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Total DAG Vertices",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 9, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(cretoai_dag_vertices_total)"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Byzantine Violations",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 9, "w": 6, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(increase(cretoai_byzantine_violations_total[24h]))"
+          }
+        ],
+        "thresholds": [
+          {"value": 0, "color": "green"},
+          {"value": 1, "color": "yellow"},
+          {"value": 5, "color": "red"}
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Network Metrics",
+        "type": "row",
+        "gridPos": {"x": 0, "y": 15, "w": 24, "h": 1}
+      },
+      {
+        "id": 9,
+        "title": "QUIC Connection Count",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 16, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "cretoai_connected_peers",
+            "legendFormat": "{{pod}}"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Network Bandwidth (In/Out)",
+        "type": "graph",
+        "gridPos": {"x": 8, "y": 16, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(cretoai_network_bytes_received_total[1m])",
+            "legendFormat": "{{pod}} (in)"
+          },
+          {
+            "expr": "rate(cretoai_network_bytes_sent_total[1m])",
+            "legendFormat": "{{pod}} (out)"
+          }
+        ],
+        "yaxes": [
+          {"label": "Bytes/sec", "format": "Bps"},
+          {"show": false}
+        ]
+      },
+      {
+        "id": 11,
+        "title": "QUIC Latency (P99)",
+        "type": "graph",
+        "gridPos": {"x": 16, "y": 16, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(cretoai_quic_latency_seconds_bucket[5m]))",
+            "legendFormat": "{{pod}}"
+          }
+        ],
+        "yaxes": [
+          {"label": "Latency (ms)", "format": "ms"},
+          {"show": false}
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Storage Metrics",
+        "type": "row",
+        "gridPos": {"x": 0, "y": 24, "w": 24, "h": 1}
+      },
+      {
+        "id": 13,
+        "title": "RocksDB Write Latency (P99)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 25, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, rate(cretoai_storage_write_seconds_bucket[5m]))",
+            "legendFormat": "{{pod}}"
+          }
+        ],
+        "yaxes": [
+          {"label": "Latency (ms)", "format": "ms"},
+          {"show": false}
+        ]
+      },
+      {
+        "id": 14,
+        "title": "Persistent Volume Usage",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 25, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/data\"} / node_filesystem_size_bytes{mountpoint=\"/data\"})) * 100",
+            "legendFormat": "{{pod}}"
+          }
+        ],
+        "yaxes": [
+          {"label": "Disk Usage (%)", "format": "percent", "max": 100},
+          {"show": false}
+        ]
+      },
+      {
+        "id": 15,
+        "title": "API Metrics",
+        "type": "row",
+        "gridPos": {"x": 0, "y": 33, "w": 24, "h": 1}
+      },
+      {
+        "id": 16,
+        "title": "API Requests per Second",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 34, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(cretoai_api_requests_total[1m])",
+            "legendFormat": "{{pod}} - {{method}} {{path}}"
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "title": "API Latency (P50, P95, P99)",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 34, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(cretoai_api_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(cretoai_api_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(cretoai_api_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "P99"
+          }
+        ],
+        "yaxes": [
+          {"label": "Latency (ms)", "format": "ms"},
+          {"show": false}
+        ]
+      },
+      {
+        "id": 18,
+        "title": "API Error Rate",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 42, "w": 24, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(cretoai_api_requests_total{status=~\"5..\"}[5m])",
+            "legendFormat": "5xx - {{pod}}"
+          },
+          {
+            "expr": "rate(cretoai_api_requests_total{status=~\"4..\"}[5m])",
+            "legendFormat": "4xx - {{pod}}"
+          }
+        ]
+      }
+    ],
+    "refresh": "10s",
+    "time": {"from": "now-1h", "to": "now"}
+  }
+}

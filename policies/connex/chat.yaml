@@ -1,0 +1,76 @@
+# Avatar Connex - Chat Resource Policy
+#
+# This policy governs access to chat rooms and messages.
+# Chat happens between fans and influencer avatars.
+
+apiVersion: authz.engine/v1
+kind: ResourcePolicy
+metadata:
+  name: chat-policy
+  description: Authorization policy for chat resources
+  version: "1.0.0"
+  labels:
+    service: chat-service
+    domain: interaction
+
+spec:
+  resource: chat
+
+  rules:
+    # Users can view chat rooms they are a participant in
+    - name: participant-view
+      actions: [view, list_messages]
+      effect: allow
+      roles: [user, fan, influencer]
+      condition:
+        expression: principal.id in resource.participants
+
+    # Fans can create chat rooms (initiate conversation with avatar)
+    - name: fan-create-chat
+      actions: [create]
+      effect: allow
+      roles: [fan, user]
+
+    # Participants can send messages
+    - name: participant-send-message
+      actions: [send_message]
+      effect: allow
+      roles: [user, fan, influencer]
+      condition:
+        expression: principal.id in resource.participants && resource.status == "active"
+
+    # Only message sender can delete their own messages
+    - name: delete-own-message
+      actions: [delete_message]
+      effect: allow
+      roles: [user, fan, influencer]
+      condition:
+        expression: resource.messageAuthorId == principal.id
+
+    # Influencers can close/archive chats for their avatars
+    - name: influencer-manage-chat
+      actions: [close, archive]
+      effect: allow
+      roles: [influencer]
+      condition:
+        expression: resource.influencerId == principal.id
+
+    # Admins can moderate any chat
+    - name: admin-moderate
+      actions: ["*"]
+      effect: allow
+      roles: [admin, super_admin]
+
+    # Deny sending to closed chats
+    - name: deny-closed-chat
+      actions: [send_message]
+      effect: deny
+      condition:
+        expression: resource.status == "closed" || resource.status == "archived"
+
+    # Deny access to blocked users
+    - name: deny-blocked-users
+      actions: [view, send_message, list_messages]
+      effect: deny
+      condition:
+        expression: principal.id in resource.blockedUsers

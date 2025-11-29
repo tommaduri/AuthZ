@@ -1,0 +1,40 @@
+# Build artifacts
+target/
+**/target/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation (not needed in container)
+*.md
+docs/
+README.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Development files
+.env
+.env.local
+*.log
+
+# Test coverage
+coverage/
+*.profdata
+*.profraw
+
+# Claude Flow coordination (not needed in container)
+.claude-flow/
+.swarm/
+CLAUDE.md

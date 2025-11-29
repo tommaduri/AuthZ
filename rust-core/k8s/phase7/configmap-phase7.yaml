@@ -1,0 +1,196 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: phase7-config
+  namespace: cretoai-system
+  labels:
+    app: cretoai
+    phase: "7"
+data:
+  # Weighted Voting Configuration
+  weighted_voting.enabled: "true"
+  weighted_voting.base_weight: "1.0"
+  weighted_voting.reputation_multiplier: "2.0"
+  weighted_voting.min_weight: "0.1"
+  weighted_voting.max_weight: "5.0"
+
+  # Adaptive Quorum Configuration
+  adaptive_quorum.enabled: "true"
+  adaptive_quorum.base_threshold: "0.67"
+  adaptive_quorum.min_threshold: "0.51"
+  adaptive_quorum.max_threshold: "0.82"
+  adaptive_quorum.adjustment_rate: "0.01"
+  adaptive_quorum.high_trust_threshold: "0.8"
+  adaptive_quorum.low_trust_threshold: "0.5"
+
+  # Multi-Signature Configuration
+  multi_signature.enabled: "true"
+  multi_signature.aggregation_method: "bls"
+  multi_signature.verification_batch_size: "100"
+  multi_signature.signature_threshold: "0.67"
+
+  # Fork Detection Configuration
+  fork_detection.enabled: "true"
+  fork_detection.detection_window: "300"
+  fork_detection.max_divergence: "10"
+  fork_detection.auto_rollback: "true"
+  fork_detection.alert_threshold: "5"
+
+  # Reputation System Configuration
+  reputation.decay_rate: "0.95"
+  reputation.decay_interval: "86400"
+  reputation.min_score: "0.3"
+  reputation.max_score: "1.0"
+  reputation.initial_score: "0.7"
+  reputation.successful_vote_reward: "0.05"
+  reputation.failed_vote_penalty: "-0.1"
+  reputation.byzantine_behavior_penalty: "-0.5"
+
+  # Storage Configuration
+  storage.backend: "rocksdb"
+  storage.data_dir: "/data/consensus"
+  storage.max_open_files: "10000"
+  storage.write_buffer_size: "67108864"
+  storage.max_write_buffer_number: "3"
+  storage.compression: "snappy"
+  storage.block_cache_size: "536870912"
+
+  # Multi-Cloud Storage Configuration
+  storage.multi_cloud.enabled: "true"
+  storage.multi_cloud.primary: "aws-s3"
+  storage.multi_cloud.secondary: "azure-blob"
+  storage.multi_cloud.replication_delay: "60"
+  storage.multi_cloud.consistency_check_interval: "3600"
+
+  # Performance Configuration
+  performance.max_agents: "1000000"
+  performance.max_concurrent_votes: "10000"
+  performance.vote_timeout_ms: "5000"
+  performance.batch_size: "1000"
+  performance.worker_threads: "8"
+
+  # Compliance Configuration
+  compliance.mode: "cmmc-level2,fedramp-moderate"
+  compliance.audit_logging: "true"
+  compliance.real_time_monitoring: "true"
+  compliance.alert_on_violation: "true"
+  compliance.retention_days: "2555"
+  compliance.encryption_at_rest: "true"
+  compliance.encryption_in_transit: "true"
+
+  # Monitoring Configuration
+  monitoring.metrics_enabled: "true"
+  monitoring.metrics_port: "9090"
+  monitoring.metrics_path: "/metrics"
+  monitoring.tracing_enabled: "true"
+  monitoring.tracing_sample_rate: "0.1"
+  monitoring.log_level: "info"
+
+  # Network Configuration
+  network.gossip_port: "7946"
+  network.api_port: "8080"
+  network.tls_enabled: "true"
+  network.tls_cert_path: "/etc/tls/tls.crt"
+  network.tls_key_path: "/etc/tls/tls.key"
+  network.peer_discovery: "kubernetes"
+
+  # High Availability Configuration
+  ha.enabled: "true"
+  ha.replica_count: "7"
+  ha.leader_election: "true"
+  ha.failover_timeout: "30"
+  ha.health_check_interval: "10"
+
+  # Security Configuration
+  security.authentication: "mtls"
+  security.authorization: "rbac"
+  security.rate_limiting: "true"
+  security.rate_limit_requests_per_second: "1000"
+  security.ddos_protection: "true"
+
+  # Feature Flags
+  features.phase7_enhanced_consensus: "true"
+  features.reputation_weighted_voting: "true"
+  features.adaptive_quorum: "true"
+  features.multi_signature_aggregation: "true"
+  features.fork_detection: "true"
+  features.multi_cloud_storage: "true"
+  features.compliance_monitoring: "true"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: phase7-scripts
+  namespace: cretoai-system
+  labels:
+    app: cretoai
+    phase: "7"
+data:
+  health-check.sh: |
+    #!/bin/bash
+    set -e
+
+    # Check consensus API
+    curl -f -k https://localhost:8080/health || exit 1
+
+    # Check reputation service
+    curl -f http://localhost:8081/health || exit 1
+
+    # Check compliance service
+    curl -f http://localhost:8082/health || exit 1
+
+    echo "All services healthy"
+    exit 0
+
+  backup.sh: |
+    #!/bin/bash
+    set -e
+
+    BACKUP_DIR="/backup/$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$BACKUP_DIR"
+
+    # Backup consensus data
+    cp -r /data/consensus "$BACKUP_DIR/"
+
+    # Backup reputation data
+    cp -r /data/reputation "$BACKUP_DIR/"
+
+    # Compress backup
+    tar -czf "$BACKUP_DIR.tar.gz" "$BACKUP_DIR"
+    rm -rf "$BACKUP_DIR"
+
+    # Upload to S3
+    aws s3 cp "$BACKUP_DIR.tar.gz" "s3://cretoai-backups/phase7/"
+
+    echo "Backup completed: $BACKUP_DIR.tar.gz"
+
+  restore.sh: |
+    #!/bin/bash
+    set -e
+
+    if [ -z "$1" ]; then
+      echo "Usage: $0 <backup-timestamp>"
+      exit 1
+    fi
+
+    BACKUP_FILE="$1.tar.gz"
+
+    # Download from S3
+    aws s3 cp "s3://cretoai-backups/phase7/$BACKUP_FILE" "/tmp/"
+
+    # Extract backup
+    tar -xzf "/tmp/$BACKUP_FILE" -C /tmp/
+
+    # Stop services
+    killall -SIGTERM consensus reputation compliance
+
+    # Restore data
+    rm -rf /data/consensus /data/reputation
+    mv "/tmp/$1/consensus" /data/
+    mv "/tmp/$1/reputation" /data/
+
+    # Cleanup
+    rm -rf "/tmp/$1" "/tmp/$BACKUP_FILE"
+
+    echo "Restore completed. Please restart services."

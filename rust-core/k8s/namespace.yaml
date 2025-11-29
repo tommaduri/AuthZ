@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cretoai
+  labels:
+    name: cretoai
+    app.kubernetes.io/name: cretoai
+    app.kubernetes.io/part-of: cretoai-cluster

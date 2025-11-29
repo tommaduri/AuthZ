@@ -1,0 +1,108 @@
+version: '3.8'
+
+# Simple 3-node Vigilia AI quantum-resistant QUIC network
+# Each node uses ML-KEM-768 + X25519 hybrid handshake
+
+services:
+  # Bootstrap node (Node 1)
+  quic-node-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.quic
+    container_name: vigilia-quic-1
+    hostname: quic-node-1
+    ports:
+      - "9001:9001/udp"  # QUIC
+    volumes:
+      - ./docker-data/quic-1:/data
+    environment:
+      - RUST_LOG=info,vigilia_network=debug,vigilia_crypto=info
+      - VIGILIA_NODE_ID=bootstrap-node
+    command: ["/usr/local/bin/quic_node", "--mode", "server", "--port", "9001", "--agent-id", "vigilia-bootstrap"]
+    networks:
+      vigilia-quic:
+        ipv4_address: 172.21.0.10
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "quic_node"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Peer node 2
+  quic-node-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.quic
+    container_name: vigilia-quic-2
+    hostname: quic-node-2
+    ports:
+      - "9002:9001/udp"
+    volumes:
+      - ./docker-data/quic-2:/data
+    environment:
+      - RUST_LOG=info,vigilia_network=debug,vigilia_crypto=info
+      - VIGILIA_NODE_ID=peer-node-2
+    command: ["/usr/local/bin/quic_node", "--mode", "server", "--port", "9001", "--agent-id", "vigilia-peer-2"]
+    networks:
+      vigilia-quic:
+        ipv4_address: 172.21.0.11
+    depends_on:
+      - quic-node-1
+    restart: unless-stopped
+
+  # Peer node 3
+  quic-node-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.quic
+    container_name: vigilia-quic-3
+    hostname: quic-node-3
+    ports:
+      - "9003:9001/udp"
+    volumes:
+      - ./docker-data/quic-3:/data
+    environment:
+      - RUST_LOG=info,vigilia_network=debug,vigilia_crypto=info
+      - VIGILIA_NODE_ID=peer-node-3
+    command: ["/usr/local/bin/quic_node", "--mode", "server", "--port", "9001", "--agent-id", "vigilia-peer-3"]
+    networks:
+      vigilia-quic:
+        ipv4_address: 172.21.0.12
+    depends_on:
+      - quic-node-1
+    restart: unless-stopped
+
+  # Test client (connects to bootstrap node)
+  quic-client:
+    build:
+      context: .
+      dockerfile: Dockerfile.quic
+    container_name: vigilia-quic-client
+    hostname: quic-client
+    volumes:
+      - ./docker-data/quic-client:/data
+    environment:
+      - RUST_LOG=info,vigilia_network=debug,vigilia_crypto=info
+      - VIGILIA_NODE_ID=test-client
+    command: ["/usr/local/bin/quic_node", "--mode", "client", "--server", "172.21.0.10:9001", "--agent-id", "vigilia-test-client"]
+    networks:
+      vigilia-quic:
+        ipv4_address: 172.21.0.20
+    depends_on:
+      - quic-node-1
+    restart: "no"  # Client runs once and exits
+
+networks:
+  vigilia-quic:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+volumes:
+  quic-1-data:
+  quic-2-data:
+  quic-3-data:
+  quic-client-data:

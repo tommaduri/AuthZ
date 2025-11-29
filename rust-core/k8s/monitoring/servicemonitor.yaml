@@ -1,0 +1,58 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cretoai-nodes
+  namespace: cretoai
+  labels:
+    app: cretoai-node
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: cretoai-node
+  namespaceSelector:
+    matchNames:
+      - cretoai
+  endpoints:
+    - port: metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      path: /metrics
+      scheme: http
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cretoai-api
+  namespace: cretoai
+  labels:
+    app: cretoai-api
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: cretoai-api
+  namespaceSelector:
+    matchNames:
+      - cretoai
+  endpoints:
+    - port: http
+      interval: 15s
+      scrapeTimeout: 10s
+      path: /metrics
+      scheme: http
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace

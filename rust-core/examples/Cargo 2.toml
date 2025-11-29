@@ -1,0 +1,87 @@
+[package]
+name = "cretoai-examples"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[example]]
+name = "agent_authorization"
+path = "agent_authorization.rs"
+
+[[example]]
+name = "mcp_server_demo"
+path = "mcp_server_demo.rs"
+
+[[example]]
+name = "distributed_consensus"
+path = "distributed_consensus.rs"
+
+[[example]]
+name = "distributed_marketplace"
+path = "distributed_marketplace.rs"
+
+[[example]]
+name = "vault_crypto"
+path = "vault_crypto.rs"
+
+[[example]]
+name = "distributed_mcp"
+path = "distributed_mcp.rs"
+
+[[example]]
+name = "multinode_test"
+path = "multinode_test.rs"
+
+[[example]]
+name = "byzantine_test"
+path = "byzantine_test.rs"
+
+[[example]]
+name = "partition_test"
+path = "partition_test.rs"
+
+[[example]]
+name = "quic_node"
+path = "quic_node.rs"
+
+[[example]]
+name = "debug_cert"
+path = "debug_cert.rs"
+
+[[example]]
+name = "consensus_demo"
+path = "consensus_demo.rs"
+
+[[example]]
+name = "authz_integration"
+path = "authz_integration.rs"
+
+[dependencies]
+# Internal dependencies
+cretoai-crypto = { path = "../src/crypto" }
+cretoai-dag = { path = "../src/dag" }
+cretoai-network = { path = "../src/network" }
+cretoai-mcp = { path = "../src/mcp" }
+cretoai-vault = { path = "../src/vault" }
+
+# Workspace dependencies
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Additional dependencies for multinode test
+md5 = "0.7"
+uuid = { version = "1.6", features = ["v4"] }
+quinn = { workspace = true }
+clap = { version = "4.4", features = ["derive"] }
+
+# AuthZ integration dependencies
+hmac = "0.12"
+sha2 = "0.10"

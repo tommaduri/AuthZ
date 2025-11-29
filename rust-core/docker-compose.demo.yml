@@ -1,0 +1,150 @@
+version: '3.8'
+
+# CretoAI Demo Environment with AuthZ Integration
+# One-command quantum-resistant security demo: docker-compose -f docker-compose.demo.yml up
+
+services:
+  # AuthZ Engine with Hybrid Signature Support (Classical + Quantum-Safe)
+  authz-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: authz-hybrid-demo
+    hostname: authz-engine
+    ports:
+      - "8081:8080"   # AuthZ API
+      - "9191:9090"   # Metrics
+    environment:
+      # Hybrid mode configuration
+      - RUST_LOG=info,authz=debug
+      - AUTHZ_SIGNATURE_MODE=hybrid
+      - AUTHZ_CLASSICAL_ALGORITHM=hmac-sha256
+      - AUTHZ_QUANTUM_ALGORITHM=ml-dsa-87
+      - AUTHZ_PRIMARY_SIGNATURE=quantum_safe
+      # Performance settings
+      - AUTHZ_SIGNATURE_CACHE_SIZE=10000
+      - AUTHZ_COMPRESS_SIGNATURES=true
+      - METRICS_ENABLED=true
+    networks:
+      cretoai-demo:
+        ipv4_address: 172.21.0.20
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - authz-keys:/etc/authz/pqc-keys
+  # REST API Server - Main entry point
+  api-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: cretoai-api
+    hostname: api-server
+    ports:
+      - "8080:8080"   # REST API + Swagger UI
+    environment:
+      - RUST_LOG=info,cretoai_api=debug
+      - CRETOAI_API_HOST=0.0.0.0
+      - CRETOAI_API_PORT=8080
+      - CRETOAI_CONSENSUS_NODES=node-1:9000,node-2:9000,node-3:9000
+    networks:
+      cretoai-demo:
+        ipv4_address: 172.21.0.10
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      - node-1
+      - node-2
+      - node-3
+
+  # Consensus Node 1 (Bootstrap)
+  node-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cretoai-node-1
+    hostname: node-1
+    ports:
+      - "9010:9000"   # P2P
+      - "9011:9001/udp" # QUIC
+    volumes:
+      - node-1-data:/data
+      - ./config/node.toml:/etc/cretoai/node.toml:ro
+    environment:
+      - RUST_LOG=info,cretoai_dag=debug
+      - CRETOAI_NODE_ID=node-1
+      - CRETOAI_BOOTSTRAP=true
+    networks:
+      cretoai-demo:
+        ipv4_address: 172.21.0.11
+    restart: unless-stopped
+
+  # Consensus Node 2
+  node-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cretoai-node-2
+    hostname: node-2
+    ports:
+      - "9020:9000"
+      - "9021:9001/udp"
+    volumes:
+      - node-2-data:/data
+      - ./config/node.toml:/etc/cretoai/node.toml:ro
+    environment:
+      - RUST_LOG=info,cretoai_dag=debug
+      - CRETOAI_NODE_ID=node-2
+      - CRETOAI_BOOTSTRAP_PEER=/ip4/172.21.0.11/tcp/9000
+    networks:
+      cretoai-demo:
+        ipv4_address: 172.21.0.12
+    depends_on:
+      - node-1
+    restart: unless-stopped
+
+  # Consensus Node 3
+  node-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cretoai-node-3
+    hostname: node-3
+    ports:
+      - "9030:9000"
+      - "9031:9001/udp"
+    volumes:
+      - node-3-data:/data
+      - ./config/node.toml:/etc/cretoai/node.toml:ro
+    environment:
+      - RUST_LOG=info,cretoai_dag=debug
+      - CRETOAI_NODE_ID=node-3
+      - CRETOAI_BOOTSTRAP_PEER=/ip4/172.21.0.11/tcp/9000
+    networks:
+      cretoai-demo:
+        ipv4_address: 172.21.0.13
+    depends_on:
+      - node-1
+    restart: unless-stopped
+
+networks:
+  cretoai-demo:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+volumes:
+  node-1-data:
+  node-2-data:
+  node-3-data:
+  authz-keys:

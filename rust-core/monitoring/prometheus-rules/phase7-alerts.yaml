@@ -1,0 +1,291 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cretoai-phase7-alerts
+  namespace: cretoai-system
+  labels:
+    app: cretoai
+    phase: "7"
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: consensus_alerts
+    interval: 30s
+    rules:
+    - alert: HighForkDetectionRate
+      expr: sum(rate(cretoai_fork_detections_total[5m])) > 0.08
+      for: 5m
+      labels:
+        severity: critical
+        component: consensus
+      annotations:
+        summary: "High fork detection rate detected"
+        description: "Fork detection rate is {{ $value | humanize }} forks/sec, exceeding threshold of 5 forks per hour"
+
+    - alert: AdaptiveQuorumStuck
+      expr: stddev_over_time(cretoai_adaptive_quorum_threshold[15m]) < 0.001
+      for: 15m
+      labels:
+        severity: warning
+        component: consensus
+      annotations:
+        summary: "Adaptive quorum threshold not adjusting"
+        description: "Quorum threshold has been static at {{ $value | humanize }} for 15+ minutes"
+
+    - alert: LowReputationScores
+      expr: avg(cretoai_reputation_score) < 0.5
+      for: 10m
+      labels:
+        severity: warning
+        component: reputation
+      annotations:
+        summary: "Average reputation score is low"
+        description: "Average reputation score is {{ $value | humanizePercentage }}, indicating potential validator issues"
+
+    - alert: ConsensusLatencyHigh
+      expr: histogram_quantile(0.95, sum(rate(cretoai_consensus_duration_seconds_bucket[5m])) by (le)) > 10
+      for: 5m
+      labels:
+        severity: warning
+        component: consensus
+      annotations:
+        summary: "High consensus latency detected"
+        description: "95th percentile consensus latency is {{ $value | humanizeDuration }}, exceeding 10s threshold"
+
+    - alert: ConsensusFailed
+      expr: rate(cretoai_consensus_failures_total[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: critical
+        component: consensus
+      annotations:
+        summary: "Consensus failures detected"
+        description: "Consensus failure rate is {{ $value | humanize }} failures/sec"
+
+  - name: reputation_alerts
+    interval: 30s
+    rules:
+    - alert: ReputationServiceDown
+      expr: up{job="cretoai-reputation"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        component: reputation
+      annotations:
+        summary: "Reputation service is down"
+        description: "Reputation service has been down for 2+ minutes"
+
+    - alert: ReputationDecayAnomalous
+      expr: abs(rate(cretoai_reputation_decay_events_total[5m]) - avg_over_time(rate(cretoai_reputation_decay_events_total[5m])[1h:5m])) > 0.5
+      for: 10m
+      labels:
+        severity: warning
+        component: reputation
+      annotations:
+        summary: "Anomalous reputation decay pattern"
+        description: "Reputation decay rate deviates significantly from normal: {{ $value | humanize }}"
+
+    - alert: MassReputationPenalty
+      expr: sum(rate(cretoai_reputation_penalties_total[5m])) > 10
+      for: 5m
+      labels:
+        severity: warning
+        component: reputation
+      annotations:
+        summary: "High rate of reputation penalties"
+        description: "Reputation penalties occurring at {{ $value | humanize }} penalties/sec"
+
+  - name: compliance_alerts
+    interval: 30s
+    rules:
+    - alert: ComplianceViolationDetected
+      expr: increase(cretoai_compliance_violations_total[5m]) > 0
+      for: 0m
+      labels:
+        severity: critical
+        component: compliance
+      annotations:
+        summary: "Compliance violation detected"
+        description: "{{ $value }} compliance violation(s) detected in the last 5 minutes"
+
+    - alert: AuditLogMissing
+      expr: time() - cretoai_audit_log_last_write_timestamp > 300
+      for: 2m
+      labels:
+        severity: critical
+        component: compliance
+      annotations:
+        summary: "Audit logging has stopped"
+        description: "No audit logs written in the last {{ $value | humanizeDuration }}"
+
+    - alert: LowAuditLogCompleteness
+      expr: cretoai_compliance_audit_log_completeness_percent < 95
+      for: 5m
+      labels:
+        severity: warning
+        component: compliance
+      annotations:
+        summary: "Audit log completeness below threshold"
+        description: "Audit log completeness is {{ $value | humanizePercentage }}, below 95% threshold"
+
+    - alert: CMMCLevel2NonCompliant
+      expr: cretoai_compliance_cmmc_level2_status == 0
+      for: 0m
+      labels:
+        severity: critical
+        component: compliance
+      annotations:
+        summary: "CMMC Level 2 compliance check failed"
+        description: "System is not compliant with CMMC 2.0 Level 2 requirements"
+
+    - alert: FedRAMPControlsFailing
+      expr: (cretoai_compliance_fedramp_moderate_controls_passing / cretoai_compliance_fedramp_moderate_controls_total) < 0.95
+      for: 5m
+      labels:
+        severity: critical
+        component: compliance
+      annotations:
+        summary: "FedRAMP Moderate controls failing"
+        description: "Only {{ $value | humanizePercentage }} of FedRAMP controls are passing"
+
+  - name: performance_alerts
+    interval: 30s
+    rules:
+    - alert: HighAgentCapacityUtilization
+      expr: (cretoai_active_agents / cretoai_max_agents) > 0.90
+      for: 10m
+      labels:
+        severity: warning
+        component: consensus
+      annotations:
+        summary: "Agent capacity utilization high"
+        description: "{{ $value | humanizePercentage }} of maximum agent capacity is utilized"
+
+    - alert: CriticalAgentCapacity
+      expr: (cretoai_active_agents / cretoai_max_agents) > 0.95
+      for: 5m
+      labels:
+        severity: critical
+        component: consensus
+      annotations:
+        summary: "Critical agent capacity reached"
+        description: "{{ $value | humanizePercentage }} of maximum agent capacity (1M agents) is utilized"
+
+    - alert: HighMemoryUsage
+      expr: (container_memory_usage_bytes{namespace="cretoai-system", pod=~"cretoai-consensus-.*"} / container_spec_memory_limit_bytes) > 0.85
+      for: 5m
+      labels:
+        severity: warning
+        component: infrastructure
+      annotations:
+        summary: "High memory usage on {{ $labels.pod }}"
+        description: "Memory usage is {{ $value | humanizePercentage }} on {{ $labels.pod }}"
+
+    - alert: HighCPUUsage
+      expr: rate(container_cpu_usage_seconds_total{namespace="cretoai-system", pod=~"cretoai-consensus-.*"}[5m]) > 0.80
+      for: 10m
+      labels:
+        severity: warning
+        component: infrastructure
+      annotations:
+        summary: "High CPU usage on {{ $labels.pod }}"
+        description: "CPU usage is {{ $value | humanizePercentage }} on {{ $labels.pod }}"
+
+  - name: storage_alerts
+    interval: 30s
+    rules:
+    - alert: MultiCloudStorageReplicationLag
+      expr: cretoai_storage_replication_lag_seconds > 180
+      for: 5m
+      labels:
+        severity: warning
+        component: storage
+      annotations:
+        summary: "Multi-cloud storage replication lag"
+        description: "Storage replication lag is {{ $value | humanizeDuration }}"
+
+    - alert: StorageBackendDown
+      expr: cretoai_storage_backend_status{backend=~"aws-s3|azure-blob"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        component: storage
+      annotations:
+        summary: "Storage backend {{ $labels.backend }} is down"
+        description: "Storage backend {{ $labels.backend }} has been unavailable for 2+ minutes"
+
+    - alert: HighDiskUsage
+      expr: (kubelet_volume_stats_used_bytes{namespace="cretoai-system"} / kubelet_volume_stats_capacity_bytes) > 0.85
+      for: 10m
+      labels:
+        severity: warning
+        component: storage
+      annotations:
+        summary: "High disk usage on {{ $labels.persistentvolumeclaim }}"
+        description: "Disk usage is {{ $value | humanizePercentage }} on {{ $labels.persistentvolumeclaim }}"
+
+  - name: security_alerts
+    interval: 30s
+    rules:
+    - alert: ByzantineFaultDetected
+      expr: increase(cretoai_byzantine_faults_detected_total[5m]) > 0
+      for: 0m
+      labels:
+        severity: critical
+        component: security
+      annotations:
+        summary: "Byzantine fault detected"
+        description: "{{ $value }} Byzantine fault(s) of type {{ $labels.fault_type }} detected"
+
+    - alert: UnauthorizedAccessAttempt
+      expr: increase(cretoai_authorization_denied_total[5m]) > 10
+      for: 2m
+      labels:
+        severity: warning
+        component: security
+      annotations:
+        summary: "High rate of unauthorized access attempts"
+        description: "{{ $value }} unauthorized access attempts in the last 5 minutes"
+
+    - alert: TLSCertificateExpiringSoon
+      expr: (cretoai_tls_certificate_expiry_timestamp - time()) / 86400 < 30
+      for: 1h
+      labels:
+        severity: warning
+        component: security
+      annotations:
+        summary: "TLS certificate expiring soon"
+        description: "TLS certificate for {{ $labels.common_name }} expires in {{ $value | humanizeDuration }}"
+
+  - name: availability_alerts
+    interval: 30s
+    rules:
+    - alert: PodCrashLooping
+      expr: rate(kube_pod_container_status_restarts_total{namespace="cretoai-system"}[15m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        component: infrastructure
+      annotations:
+        summary: "Pod {{ $labels.pod }} is crash looping"
+        description: "Pod {{ $labels.pod }} has restarted {{ $value | humanize }} times in the last 15 minutes"
+
+    - alert: HighPodMemoryOOM
+      expr: sum(kube_pod_container_status_terminated_reason{namespace="cretoai-system", reason="OOMKilled"}) > 0
+      for: 0m
+      labels:
+        severity: critical
+        component: infrastructure
+      annotations:
+        summary: "Pod OOM killed"
+        description: "Pod {{ $labels.pod }} was killed due to out of memory"
+
+    - alert: ServiceEndpointDown
+      expr: kube_endpoint_address_available{namespace="cretoai-system", endpoint=~"cretoai-consensus|cretoai-reputation"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        component: infrastructure
+      annotations:
+        summary: "Service {{ $labels.endpoint }} has no available endpoints"
+        description: "Service {{ $labels.endpoint }} has been unavailable for 2+ minutes"

@@ -1,0 +1,59 @@
+# Example authorization policy
+# This policy can be validated with: authz policy validate examples/policy.yaml
+# And tested with: authz policy test examples/policy.yaml --fixtures examples/fixtures.yaml
+
+name: Document Access Policy
+version: 1.0.0
+description: Policy for controlling access to documents
+
+rules:
+  - name: Allow admin read
+    effect: allow
+    principal: user:alice
+    action: read
+    resource: document:*
+    description: Administrators can read any document
+
+  - name: Allow admin write
+    effect: allow
+    principal: user:alice
+    action: write
+    resource: document:*
+    description: Administrators can write to any document
+
+  - name: Allow admin delete
+    effect: allow
+    principal: user:alice
+    action: delete
+    resource: document:*
+    description: Administrators can delete any document
+
+  - name: Allow user read
+    effect: allow
+    principal: user:bob
+    action: read
+    resource: document:*
+    description: Regular users can read documents
+
+  - name: Deny user write
+    effect: deny
+    principal: user:bob
+    action: write
+    resource: document:*
+    description: Regular users cannot write to documents
+
+  - name: Deny user delete
+    effect: deny
+    principal: user:bob
+    action: delete
+    resource: document:*
+    description: Regular users cannot delete documents
+
+  - name: Allow service account system operations
+    effect: allow
+    principal: service:api
+    action:
+      - reload
+      - restart
+    resource: system:*
+    description: Service accounts can perform system operations

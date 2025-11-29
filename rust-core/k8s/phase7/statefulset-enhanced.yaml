@@ -1,0 +1,402 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cretoai-consensus-phase7
+  namespace: cretoai-system
+  labels:
+    app: cretoai
+    component: consensus
+    phase: "7"
+    version: v1.7.0
+spec:
+  serviceName: cretoai-consensus
+  replicas: 7
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: cretoai
+      component: consensus
+  volumeClaimTemplates:
+  - metadata:
+      name: consensus-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 500Gi
+  - metadata:
+      name: reputation-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 200Gi
+  template:
+    metadata:
+      labels:
+        app: cretoai
+        component: consensus
+        phase: "7"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Anti-affinity for Byzantine fault tolerance
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - cretoai
+            topologyKey: "kubernetes.io/hostname"
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - cretoai
+              topologyKey: "topology.kubernetes.io/zone"
+
+      # Security context for compliance
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+        seccompProfile:
+          type: RuntimeDefault
+
+      initContainers:
+      - name: init-storage
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          chown -R 1000:2000 /data/consensus
+          chown -R 1000:2000 /data/reputation
+          chmod 700 /data/consensus
+          chmod 700 /data/reputation
+        volumeMounts:
+        - name: consensus-data
+          mountPath: /data/consensus
+        - name: reputation-data
+          mountPath: /data/reputation
+        securityContext:
+          runAsUser: 0
+
+      containers:
+      # Main consensus container
+      - name: consensus
+        image: cretoai/consensus:v1.7.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: api
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        - containerPort: 7946
+          name: gossip
+          protocol: TCP
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: RUST_LOG
+          value: "info,cretoai=debug"
+        - name: CONSENSUS_MODE
+          value: "phase7-enhanced"
+        - name: MAX_AGENTS
+          value: "1000000"
+        - name: WEIGHTED_VOTING_ENABLED
+          value: "true"
+        - name: ADAPTIVE_QUORUM_ENABLED
+          value: "true"
+        - name: MULTI_SIG_ENABLED
+          value: "true"
+        - name: FORK_DETECTION_ENABLED
+          value: "true"
+        - name: REPUTATION_SERVICE_URL
+          value: "http://localhost:8081"
+        - name: COMPLIANCE_SERVICE_URL
+          value: "http://localhost:8082"
+        envFrom:
+        - configMapRef:
+            name: phase7-config
+        - secretRef:
+            name: cretoai-secrets
+        resources:
+          requests:
+            memory: "8Gi"
+            cpu: "4000m"
+            ephemeral-storage: "10Gi"
+          limits:
+            memory: "16Gi"
+            cpu: "8000m"
+            ephemeral-storage: "20Gi"
+        volumeMounts:
+        - name: consensus-data
+          mountPath: /data/consensus
+        - name: config
+          mountPath: /etc/cretoai
+        - name: tls
+          mountPath: /etc/tls
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+
+      # Reputation system sidecar
+      - name: reputation
+        image: cretoai/reputation:v1.7.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+          name: reputation-api
+          protocol: TCP
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: RUST_LOG
+          value: "info,reputation=debug"
+        - name: REPUTATION_DECAY_RATE
+          value: "0.95"
+        - name: MIN_REPUTATION_SCORE
+          value: "0.3"
+        - name: MAX_REPUTATION_SCORE
+          value: "1.0"
+        - name: REPUTATION_UPDATE_INTERVAL
+          value: "300"
+        envFrom:
+        - configMapRef:
+            name: phase7-config
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: reputation-data
+          mountPath: /data/reputation
+        - name: tls
+          mountPath: /etc/tls
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+
+      # Compliance monitoring sidecar
+      - name: compliance
+        image: cretoai/compliance:v1.7.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8082
+          name: compliance-api
+          protocol: TCP
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: RUST_LOG
+          value: "info,compliance=debug"
+        - name: COMPLIANCE_MODE
+          value: "cmmc-level2,fedramp-moderate"
+        - name: AUDIT_LOG_RETENTION_DAYS
+          value: "2555"
+        - name: REAL_TIME_MONITORING
+          value: "true"
+        - name: ALERT_ON_VIOLATION
+          value: "true"
+        envFrom:
+        - configMapRef:
+            name: phase7-config
+        - secretRef:
+            name: compliance-secrets
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: consensus-data
+          mountPath: /data/consensus
+          readOnly: true
+        - name: audit-logs
+          mountPath: /var/log/audit
+        - name: tls
+          mountPath: /etc/tls
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8082
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8082
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+
+      volumes:
+      - name: config
+        configMap:
+          name: phase7-config
+      - name: tls
+        secret:
+          secretName: cretoai-tls
+      - name: audit-logs
+        persistentVolumeClaim:
+          claimName: audit-logs-pvc
+
+      # Topology spread for multi-zone deployment
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: cretoai
+            component: consensus
+      - maxSkew: 2
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: cretoai
+            component: consensus
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cretoai-consensus
+  namespace: cretoai-system
+  labels:
+    app: cretoai
+    component: consensus
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: api
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics
+  - port: 7946
+    targetPort: 7946
+    protocol: TCP
+    name: gossip
+  selector:
+    app: cretoai
+    component: consensus
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cretoai-consensus-lb
+  namespace: cretoai-system
+  labels:
+    app: cretoai
+    component: consensus
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 443
+    targetPort: 8080
+    protocol: TCP
+    name: https
+  selector:
+    app: cretoai
+    component: consensus
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audit-logs-pvc
+  namespace: cretoai-system
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: efs
+  resources:
+    requests:
+      storage: 1Ti

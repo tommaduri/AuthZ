@@ -1,0 +1,71 @@
+[package]
+name = "cretoai-mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "cretoai-mcp-server"
+path = "src/bin/server.rs"
+
+[dependencies]
+# Internal dependencies - circular dependency resolved via cretoai-core
+cretoai-core = { path = "../core" }
+cretoai-crypto = { path = "../crypto" }
+cretoai-network = { path = "../network" }
+cretoai-dag = { path = "../dag", optional = true }
+
+# Workspace dependencies
+tokio = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# MCP Protocol
+schemars = { workspace = true }
+jsonrpc-core = { workspace = true }
+
+# Networking
+libp2p = { workspace = true }
+quinn = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+bincode = { workspace = true }
+
+# Cryptography
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+aes-gcm = "0.10"
+blake3 = { workspace = true }
+
+# WASM support
+wasm-bindgen = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+
+[[test]]
+name = "mcp_integration"
+path = "tests/mcp_integration.rs"
+
+[[test]]
+name = "quic_integration_tests"
+path = "tests/quic_integration_tests.rs"
+
+[features]
+default = ["dag-integration"]
+dag-integration = ["cretoai-dag"]
+wasm = ["wasm-bindgen"]

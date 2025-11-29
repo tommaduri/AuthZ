@@ -1,0 +1,100 @@
+# Vigilia AI Protocol Node Configuration
+
+[node]
+id = "vigilia-node-default"
+data_dir = "/data"
+log_level = "info"
+
+[network]
+# P2P listening addresses
+listen_addresses = [
+    "/ip4/0.0.0.0/tcp/9000",
+    "/ip4/0.0.0.0/udp/9001/quic-v1"
+]
+
+# Bootstrap peers (for non-bootstrap nodes)
+bootstrap_peers = []
+
+# Maximum number of peers
+max_peers = 50
+
+# Enable mDNS discovery on local network
+mdns_enabled = true
+
+[dark_domain]
+# Enable dark domain support
+enabled = true
+
+# Dark domain routing strategy
+routing_strategy = "onion"
+
+# Number of hops for dark domain routing
+routing_hops = 3
+
+[consensus]
+# DAG consensus parameters
+vertex_timeout_ms = 5000
+max_vertices_per_round = 1000
+finality_depth = 10
+
+# Byzantine fault tolerance
+bft_threshold = 0.67
+
+[storage]
+# Database backend (rocksdb or sled)
+backend = "rocksdb"
+
+# Database path
+db_path = "/data/db"
+
+# Enable compression
+compression = true
+
+# Cache size in MB
+cache_size_mb = 512
+
+[api]
+# HTTP API configuration
+http_enabled = true
+http_host = "0.0.0.0"
+http_port = 8080
+
+# WebSocket configuration
+ws_enabled = true
+ws_host = "0.0.0.0"
+ws_port = 8081
+
+# Enable CORS
+cors_enabled = true
+cors_origins = ["*"]
+
+[crypto]
+# Signature algorithm (dilithium or sphincs)
+signature_algorithm = "dilithium"
+
+# Key encapsulation mechanism
+kem_algorithm = "kyber"
+
+# Enable hybrid classical+quantum crypto
+hybrid_mode = true
+
+[exchange]
+# Resource exchange configuration
+enabled = true
+
+# Marketplace discovery
+discovery_enabled = true
+
+# Reputation threshold for trading
+min_reputation = 0.5
+
+[telemetry]
+# Enable telemetry
+enabled = true
+
+# Metrics export interval
+export_interval_secs = 60
+
+# Prometheus metrics endpoint
+prometheus_enabled = true
+prometheus_port = 9090

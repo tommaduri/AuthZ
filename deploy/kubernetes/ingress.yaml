@@ -1,0 +1,230 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: authz-engine-ingress
+  namespace: authz-system
+  labels:
+    app: authz-engine
+  annotations:
+    # Ingress class
+    kubernetes.io/ingress.class: nginx
+
+    # TLS configuration
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+
+    # Rate limiting (nginx-ingress)
+    nginx.ingress.kubernetes.io/limit-rps: "1000"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains";
+      more_set_headers "Content-Security-Policy: default-src 'self'";
+
+    # CORS configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+
+    # Buffering
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers: "4 256k"
+
+    # gRPC support
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+
+    # Logging
+    nginx.ingress.kubernetes.io/enable-access-log: "true"
+    nginx.ingress.kubernetes.io/enable-modsecurity: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - authz.example.com
+        - api.authz.example.com
+      secretName: authz-tls
+  rules:
+    # REST API endpoint
+    - host: api.authz.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: authz-http
+                port:
+                  number: 8080
+
+    # gRPC endpoint
+    - host: grpc.authz.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: authz-grpc
+                port:
+                  number: 50051
+
+    # Main domain
+    - host: authz.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: authz-http
+                port:
+                  number: 8080
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: authz-http
+                port:
+                  number: 8080
+          - path: /metrics
+            pathType: Exact
+            backend:
+              service:
+                name: authz-http
+                port:
+                  number: 8080
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: authz-tls
+  namespace: authz-system
+  labels:
+    app: authz-engine
+spec:
+  secretName: authz-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - authz.example.com
+    - api.authz.example.com
+    - grpc.authz.example.com
+
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    app: authz-engine
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authz-ingress-config
+  namespace: authz-system
+  labels:
+    app: authz-engine
+    config: ingress
+data:
+  rate-limiting-policy.yaml: |
+    # Rate Limiting Configuration
+    # Per client IP basis
+
+    limits:
+      # General API rate limit
+      api_rps: 1000          # Requests per second
+      connections_per_ip: 50 # Concurrent connections per IP
+
+      # Endpoint-specific limits
+      decision_endpoint:
+        rps: 5000            # Higher limit for decision endpoint
+        burst: 100           # Burst allowance
+
+      metrics_endpoint:
+        rps: 100             # Lower limit for metrics
+        burst: 10
+
+      health_endpoint:
+        rps: 500             # Health checks
+        burst: 50
+
+    whitelist:
+      - 10.0.0.0/8          # Internal network
+      - 192.168.0.0/16      # Private networks
+
+    blacklist: []
+
+  ssl-config.yaml: |
+    # SSL/TLS Configuration
+
+    protocols:
+      - TLSv1.2
+      - TLSv1.3
+
+    ciphers:
+      - ECDHE-ECDSA-AES128-GCM-SHA256
+      - ECDHE-RSA-AES128-GCM-SHA256
+      - ECDHE-ECDSA-CHACHA20-POLY1305
+      - ECDHE-RSA-CHACHA20-POLY1305
+
+    certificateExpiry: 90days
+    renewalBuffer: 30days
+
+  cors-policy.yaml: |
+    # CORS Policy Configuration
+
+    allowedOrigins:
+      - "https://example.com"
+      - "https://app.example.com"
+
+    allowedMethods:
+      - GET
+      - POST
+      - OPTIONS
+
+    allowedHeaders:
+      - Authorization
+      - Content-Type
+      - Accept
+
+    exposedHeaders:
+      - X-Total-Count
+      - X-Page-Number
+
+    maxAge: 3600
+    allowCredentials: true
+
+  security-headers.yaml: |
+    # Security Headers Configuration
+
+    headers:
+      X-Content-Type-Options: "nosniff"
+      X-Frame-Options: "DENY"
+      X-XSS-Protection: "1; mode=block"
+      Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+      Content-Security-Policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+      Referrer-Policy: "strict-origin-when-cross-origin"
+      Permissions-Policy: "geolocation=(), microphone=(), camera=()"
